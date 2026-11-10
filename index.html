@@ -86,6 +86,19 @@ nav#tabs button.on{color:var(--acc);font-weight:700}
 .setlist{display:flex;flex-direction:column;gap:10px;margin-bottom:12px}
 .setc{display:flex;gap:10px;align-items:flex-start;border:1px solid var(--line);border-radius:10px;padding:8px;background:#fff}
 .setc canvas{flex:0 0 auto;width:88px;height:auto;border-radius:6px}
+.sw{display:flex;flex-wrap:wrap;gap:7px;align-items:center}
+.sw button{width:30px;height:30px;border-radius:50%;border:2px solid #d3d6db;padding:0;flex:0 0 30px}
+.sw button.on,.sw label.on{outline:2px solid var(--acc);outline-offset:2px}
+.sw button.nn{width:auto;flex:0 0 auto;border-radius:999px;padding:0 12px;font-size:12px;background:#fff;color:var(--ink)}
+.sw label.cc{display:flex;align-items:center;gap:4px;border:1px solid #d3d6db;border-radius:999px;padding:2px 10px 2px 3px;font-size:12px;background:#fff}
+.sw label.cc input{width:26px;height:26px;border:0;padding:0;background:none;border-radius:50%}
+.stgrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-bottom:12px}
+.stc{border:1px solid var(--line);border-radius:10px;background:#fff;padding:6px;display:flex;flex-direction:column;gap:4px;min-width:0}
+.stc .pick{aspect-ratio:1;width:100%;border:0;border-radius:6px;padding:6px;background:repeating-conic-gradient(#e6e8ec 0 25%,#fff 0 50%) 0 0/14px 14px}
+.stc .pick img{width:100%;height:100%;object-fit:contain;display:block}
+.stc small{font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.stc .acts{display:flex;gap:4px}.stc .acts button{flex:1;font-size:11px;padding:3px 0;border-radius:6px;border:1px solid var(--line);background:#fff}
+.stc .acts button.d{color:var(--warn)}
 .setb{flex:1;min-width:0}
 .setb b{display:block;font-size:14px}
 .setb small{color:var(--sub);font-size:11px}
@@ -280,8 +293,8 @@ const FMT={
 
 /* ========== データベース（IndexedDB） ========== */
 let db=null;
-const STORES=['parts','scenes','works','images','meta','fonts'];
-function openDB(){return new Promise((res,rej)=>{const r=indexedDB.open('manga4koma',2);r.onupgradeneeded=()=>{const d=r.result;for(const s of STORES)if(!d.objectStoreNames.contains(s))d.createObjectStore(s,{keyPath:'id'});};r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error);});}
+const STORES=['parts','scenes','works','images','meta','fonts','stamps'];
+function openDB(){return new Promise((res,rej)=>{const r=indexedDB.open('manga4koma',3);r.onupgradeneeded=()=>{const d=r.result;for(const s of STORES)if(!d.objectStoreNames.contains(s))d.createObjectStore(s,{keyPath:'id'});};r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error);});}
 function tx(store,mode,fn){return new Promise((res,rej)=>{if(!db)return res(undefined);const t=db.transaction(store,mode);const req=fn(t.objectStore(store));let out;if(req)req.onsuccess=()=>{out=req.result;};t.oncomplete=()=>res(out);t.onerror=()=>rej(t.error);t.onabort=()=>rej(t.error);});}
 const dbAll=s=>tx(s,'readonly',st=>st.getAll()).then(r=>r||[]);
 const dbGet=(s,id)=>tx(s,'readonly',st=>st.get(id));
@@ -782,6 +795,77 @@ async function addFont(file){
   const rec={id,name:file.name.replace(/\.(ttf|otf|woff2?)$/i,''),file:file.name,blob,size:blob.size,created:Date.now()};
   await dbPut('fonts',rec);rec.loaded=true;FONTS.push(rec);return rec;
 }
+/* ========== セリフ画像（文字を書いた画像を取り込み、吹き出しの代わりにコマへ置く） ==========
+   スマホの中（stamps）に保存。コマに置いたものは type:'img' の吹き出しとして扱う */
+let STAMPS=[];const stampImg={},stampCv={},stampUrl={};let stampRedraw=null;
+async function loadStamps(){STAMPS=(await dbAll('stamps')).sort((a,b)=>(a.created||0)-(b.created||0));}
+function loadStamp(id){if(!id)return Promise.resolve(null);if(stampImg[id])return stampImg[id].p;
+  const o={im:null};const rec=STAMPS.find(x=>x.id===id);
+  o.p=(rec?Promise.resolve(rec):dbGet('stamps',id)).then(r=>new Promise(res=>{if(!r||!r.blob)return res(null);const im=new Image();im.onload=()=>{o.im=im;res(im);};im.onerror=()=>res(null);im.src=URL.createObjectURL(r.blob);})).catch(()=>null);
+  stampImg[id]=o;return o.p;}
+const preloadStamps=bs=>Promise.all((bs||[]).filter(b=>b.type==='img').map(b=>loadStamp(b.stamp)));
+function stampSrc(r){return stampUrl[r.id]||(stampUrl[r.id]=URL.createObjectURL(r.blob));}
+async function addStamp(file,white){
+  if(!/^image\//.test(file.type||'')&&!/\.(png|jpe?g|webp|gif|bmp)$/i.test(file.name||''))throw new Error('type');
+  const u=URL.createObjectURL(file);
+  const im=await new Promise((res,rej)=>{const i=new Image();i.onload=()=>res(i);i.onerror=rej;i.src=u;}).finally(()=>URL.revokeObjectURL(u));
+  const sc=Math.min(1,1600/Math.max(im.naturalWidth,im.naturalHeight));
+  let c=document.createElement('canvas');c.width=Math.max(1,Math.round(im.naturalWidth*sc));c.height=Math.max(1,Math.round(im.naturalHeight*sc));
+  let x=c.getContext('2d',{willReadFrequently:true});x.drawImage(im,0,0,c.width,c.height);
+  const d=x.getImageData(0,0,c.width,c.height),p=d.data;
+  if(white){/* 白に近いところを透明に。うすい灰色（文字のふち）は、白から外した色に戻して半透明にする */
+    for(let k=0;k<p.length;k+=4){const v=Math.min(p[k],p[k+1],p[k+2]);if(v>=242){p[k+3]=0;continue;}if(v>150){const a=(242-v)/92;for(let j=0;j<3;j++)p[k+j]=Math.max(0,Math.min(255,Math.round((p[k+j]-255*(1-a))/a)));p[k+3]=Math.round(p[k+3]*a);}}
+    x.putImageData(d,0,0);}
+  /* まわりの透明なところを切り取る */
+  let x0=c.width,y0=c.height,x1=-1,y1=-1;
+  for(let y=0;y<c.height;y++)for(let xx=0;xx<c.width;xx++)if(p[(y*c.width+xx)*4+3]>10){if(xx<x0)x0=xx;if(xx>x1)x1=xx;if(y<y0)y0=y;if(y>y1)y1=y;}
+  if(x1<0)throw new Error('empty');
+  const m=4;x0=Math.max(0,x0-m);y0=Math.max(0,y0-m);x1=Math.min(c.width-1,x1+m);y1=Math.min(c.height-1,y1+m);
+  if(x0>0||y0>0||x1<c.width-1||y1<c.height-1){const c2=document.createElement('canvas');c2.width=x1-x0+1;c2.height=y1-y0+1;c2.getContext('2d').drawImage(c,x0,y0,c2.width,c2.height,0,0,c2.width,c2.height);c=c2;}
+  const blob=await new Promise(r=>c.toBlob(r,'image/png'));
+  const rec={id:uid(),name:(file.name||'').replace(/\.[^.]+$/,'')||'セリフ画像',blob,w:c.width,h:c.height,created:Date.now()};
+  await dbPut('stamps',rec);STAMPS.push(rec);return rec;
+}
+/* 色・外枠を付けた絵を作っておく（同じ組み合わせは使い回す） */
+function stampCanvas(b,im){
+  const tint=b.color||'',oc=b.oc||'',ow=b.ow||1;const key=`${b.stamp}|${tint}|${oc}|${ow}`;if(stampCv[key])return stampCv[key];
+  const iw=im.naturalWidth,ih=im.naturalHeight;const pd=oc?Math.max(1,Math.round(Math.min(iw,ih)*0.06*ow)):0;
+  const solid=col=>{const c=document.createElement('canvas');c.width=iw;c.height=ih;const x=c.getContext('2d');x.drawImage(im,0,0);x.globalCompositeOperation='source-in';x.fillStyle=col;x.fillRect(0,0,iw,ih);return c;};
+  const c=document.createElement('canvas');c.width=iw+pd*2;c.height=ih+pd*2;const x=c.getContext('2d');
+  if(oc){const sl=solid(oc);const n=28;for(const r of[pd,pd*0.66,pd*0.33])for(let k=0;k<n;k++){const a=k/n*Math.PI*2;x.drawImage(sl,pd+Math.cos(a)*r,pd+Math.sin(a)*r);}}
+  x.drawImage(tint?solid(tint):im,pd,pd);
+  const ks=Object.keys(stampCv);if(ks.length>40)delete stampCv[ks[0]];
+  return stampCv[key]={c,pd};
+}
+function newStampB(id,k){k=k||0;return{id:uid(),type:'img',stamp:id,sz:0.16,rot:0,color:'',oc:'',ow:1,text:'',tail:false,fs:0.034,wrap:6,vertical:true,x:k%2?0.3:0.7,y:Math.min(0.85,0.22+k*0.15),tx:0.5,ty:0.5};}
+const stampUses=id=>{let n=0;for(const w of S.works)for(const c of w.comps||[])for(const x of(c&&c.bubbles)||[])if(x.type==='img'&&x.stamp===id)n++;return n;};
+function openStamps(onPick){
+  openSheet(`<h2>セリフ画像</h2>
+  <p class="hint" style="margin:-6px 0 12px">文字を書いた画像（手書きのセリフ・ロゴ・効果音など）を取り込んでおくと、あとから押すだけでコマに置けます。${onPick?'<b>押すとこのコマに置きます。</b>':'コマに置くときは、仕上げの画面の「セリフ画像」から選びます。'}</p>
+  <label class="switch" style="margin-bottom:10px"><input type="checkbox" id="stWhite" ${S.meta.stWhite!==false?'checked':''}><span>白い背景を透明にする<span class="hint">白い紙に書いた文字・白地の画像に。もともと背景が透明な PNG なら、オフでも大丈夫です。</span></span></label>
+  <div class="row"><label class="btn">＋ 画像を取り込む<input type="file" accept="image/*" multiple hidden id="stAdd"></label></div>
+  ${STAMPS.length?`<div class="stgrid">${STAMPS.map(r=>`<div class="stc"><button class="pick" data-stp="${r.id}" aria-label="${esc(r.name)}"><img src="${stampSrc(r)}" alt=""></button><small>${esc(r.name)}</small><div class="acts"><button data-stren="${r.id}">名前</button><button class="d" data-stdel="${r.id}">削除</button></div></div>`).join('')}</div>`:'<p class="hint">まだありません。</p>'}
+  <div class="row"><button class="btn ghost" id="stClose">閉じる</button></div>`);
+  $('#stWhite').onchange=e=>{S.meta.stWhite=e.target.checked;dbPut('meta',S.meta);};
+  $('#stAdd').onchange=async e=>{const fs=[...e.target.files];e.target.value='';const white=$('#stWhite').checked;let n=0,last=null;
+    for(const f of fs){try{last=await addStamp(f,white);n++;}catch(_){toast((f.name||'画像')+' は取り込めませんでした');}}
+    if(n){toast(n+'枚取り込みました');if(onPick&&n===1&&fs.length===1){closeSheet();onPick(last.id);return;}openStamps(onPick);}};
+  $$('[data-stp]').forEach(b=>b.onclick=()=>{if(!onPick)return toast('仕上げの画面で選ぶと、コマに置けます');closeSheet();onPick(b.dataset.stp);});
+  $$('[data-stren]').forEach(b=>b.onclick=async()=>{const r=STAMPS.find(x=>x.id===b.dataset.stren);const nm=prompt('新しい名前',r.name);if(nm===null)return;r.name=nm.trim()||r.name;await dbPut('stamps',r);openStamps(onPick);});
+  $$('[data-stdel]').forEach(b=>b.onclick=async()=>{const id=b.dataset.stdel;const r=STAMPS.find(x=>x.id===id);const n=stampUses(id);
+    if(!confirm(n?`「${r.name}」は ${n} か所のコマに置いてあります。削除すると、コマからも消えます。削除しますか？`:`「${r.name}」を削除しますか？`))return;
+    await dbDel('stamps',id);STAMPS=STAMPS.filter(x=>x.id!==id);delete stampImg[id];if(stampUrl[id]){URL.revokeObjectURL(stampUrl[id]);delete stampUrl[id];}
+    for(const w of S.works){let ch=false;for(const c of w.comps||[]){if(!c||!c.bubbles)continue;const before=c.bubbles.length;c.bubbles=c.bubbles.filter(x=>!(x.type==='img'&&x.stamp===id));if(c.bubbles.length!==before)ch=true;}if(ch)await saveNow('works',w);}
+    if(Array.isArray(S.meta.bsets)){S.meta.bsets=S.meta.bsets.map(s=>Object.assign(s,{bubbles:s.bubbles.filter(x=>!(x.type==='img'&&x.stamp===id))})).filter(s=>s.bubbles.length);dbPut('meta',S.meta);}
+    if(onPick&&typeof cSel!=='undefined')cSel=null;openStamps(onPick);});
+  $('#stClose').onclick=()=>{closeSheet();if(onPick&&stampRedraw)render(true);};
+}
+/* 色えらび（よく使う色＋好きな色） */
+const SWATCH=['#111111','#ffffff','#e53935','#ff7a00','#ffd400','#2e9e44','#1e88e5','#7b3fc4','#ff5fa2'];
+function colorRow(label,key,val,none){val=(val||'').toLowerCase();const custom=val&&!SWATCH.includes(val);
+  return `<div class="f"><span>${label}</span><div class="sw">${none?`<button type="button" class="nn ${!val?'on':''}" data-ck="${key}" data-cv="">${none}</button>`:''}${SWATCH.map(c=>`<button type="button" class="${val===c?'on':''}" style="background:${c}" data-ck="${key}" data-cv="${c}" aria-label="色 ${c}"></button>`).join('')}<label class="cc ${custom?'on':''}"><input type="color" data-ck="${key}" value="${custom?val:'#888888'}">ほかの色</label></div></div>`;}
+/* 文字の外枠：決めていなければ「文字だけ」の形のときだけ白 */
+const textOC=b=>b.oc!==undefined?b.oc:(b.type==='none'?'#ffffff':'');
 const expWH=()=>EXP_SIZES[S.meta.expSize]||EXP_SIZES['1600x1824'];
 const imgCache={};
 function loadImg(id){if(!id)return Promise.resolve(null);if(imgCache[id])return imgCache[id];
@@ -860,21 +944,31 @@ function brushStroke(ctx,sh,lw,seed,idx){
 }
 function drawText(ctx,b,L,cx,cy){
   ctx.save();ctx.font=`${fontWeight(b)} ${L.fs}px ${fontStack(b)}`;ctx.textAlign='center';ctx.textBaseline='middle';
-  const outline=b.type==='none';if(outline){ctx.lineJoin='round';ctx.strokeStyle='#fff';ctx.lineWidth=L.fs*0.24;}
-  ctx.fillStyle='#111';
-  const put=(ch,x,y)=>{if(outline)ctx.strokeText(ch,x,y);ctx.fillText(ch,x,y);};
+  /* 文字の置き場所を先に決め、外枠を全部描いてから文字を塗る（となりの字の外枠が上に重ならないように） */
+  const gl=[];const put=(ch,x,y,r)=>gl.push([ch,x,y,r]);
   if(b.vertical){
     const x0=cx+L.w/2-L.fs/2,y0=cy-L.h/2+L.fs/2;
     L.lines.forEach((line,ci)=>{const x=x0-ci*L.colW;[...line].forEach((ch,j)=>{const y=y0+j*L.step;
-      if(V_ROT.includes(ch)){ctx.save();ctx.translate(x,y);ctx.rotate(Math.PI/2);put(ch,0,0);ctx.restore();}
+      if(V_ROT.includes(ch))put(ch,x,y,true);
       else if(V_PUNC.includes(ch))put(ch,x+L.fs*0.55,y-L.fs*0.55);
       else put(ch,x,y);});});
   }else{
     const y0=cy-L.h/2+L.fs/2;L.lines.forEach((line,k)=>put(line,cx,y0+k*L.lh));
   }
+  const each=fn=>{for(const[ch,x,y,r]of gl){if(r){ctx.save();ctx.translate(x,y);ctx.rotate(Math.PI/2);fn(ch,0,0);ctx.restore();}else fn(ch,x,y);}};
+  const oc=textOC(b);
+  if(oc){ctx.lineJoin='round';ctx.miterLimit=2;ctx.strokeStyle=oc;ctx.lineWidth=L.fs*0.24*(b.ow||1);each((ch,x,y)=>ctx.strokeText(ch,x,y));}
+  ctx.fillStyle=b.color||'#111';each((ch,x,y)=>ctx.fillText(ch,x,y));
   ctx.restore();
 }
 function drawBubble(ctx,b,W,H){
+  if(b.type==='img'){
+    const o=stampImg[b.stamp],im=o&&o.im,cx=b.x*W,cy=b.y*H;
+    if(!im){if(!o)loadStamp(b.stamp).then(()=>{if(stampRedraw)stampRedraw();});const r=H*0.05;ctx.save();ctx.strokeStyle='#9aa1ab';ctx.lineWidth=Math.max(1,H*0.003);ctx.setLineDash([r*0.3,r*0.2]);ctx.strokeRect(cx-r,cy-r,r*2,r*2);ctx.restore();return{cx,cy,rx:r,ry:r,rect:true};}
+    const s=(b.sz||0.16)*H/im.naturalHeight;const{c}=stampCanvas(b,im);const dw=c.width*s,dh=c.height*s;
+    ctx.save();ctx.translate(cx,cy);ctx.rotate((b.rot||0)*Math.PI/180);ctx.drawImage(c,-dw/2,-dh/2,dw,dh);ctx.restore();
+    return{cx,cy,rx:dw/2,ry:dh/2,rect:true};
+  }
   const L=bLayout(ctx,b,H),g=bGeom(b,L,W,H);
   if(b.type!=='none'){
     const sh=bShapes(b,g,W,H);const lw=Math.max(1,H*0.0032)*(b.lw||1);
@@ -907,7 +1001,7 @@ function drawPanel(ctx,W,H,w,i,img,opt){
 }
 async function renderFull(w,i){
   const[W,H]=expWH();const cv=document.createElement('canvas');cv.width=W;cv.height=H;
-  const img=await loadImg(compImg(w,i));drawPanel(cv.getContext('2d'),W,H,w,i,img);
+  const img=await loadImg(compImg(w,i));await preloadStamps(getComp(w,i).bubbles);drawPanel(cv.getContext('2d'),W,H,w,i,img);
   const type=S.meta.expType==='png'?'image/png':'image/jpeg';
   return new Promise(res=>cv.toBlob(b=>res(b),type,0.92));
 }
@@ -915,7 +1009,7 @@ const fileName=(w,i)=>`${(w.title||'4koma').replace(/[\\/:*?"<>|\s]+/g,'_')}_${i
 function newBubble(text,k){return{id:uid(),type:'round',font:S.meta.lastFont||'',line:S.meta.lastLine||'pen',lw:S.meta.lastLw||1,text:text||'セリフ',vertical:true,fs:0.034,wrap:6,x:k%2?0.3:0.72,y:Math.min(0.8,0.26+(k||0)*0.19),tail:true,tx:k%2?0.4:0.62,ty:Math.min(0.95,0.36+(k||0)*0.19)};}
 /* ========== よく使う吹き出しのセット ==========
    セット＝吹き出し1つ以上の「見た目と位置」（セリフの文字は保存するかを選べる）。S.meta.bsets に入る */
-const STYLE_KEYS=['type','font','line','lw','fs','wrap','vertical','tail'];
+const STYLE_KEYS=['type','font','line','lw','fs','wrap','vertical','tail','color','oc','ow'];
 function defaultSets(){
   const B=o=>Object.assign(newBubble('',0),{font:'',line:'pen',lw:1,x:.5,y:.4,tx:.42,ty:.62},o);
   return[
@@ -950,11 +1044,12 @@ function openSets(w,i,comp,getSel,onDone){
   <div class="setlist">${sets.map(s=>`<div class="setc">
     <canvas width="${Math.round(160*EW/EH)}" height="160" data-sp="${s.id}"></canvas>
     <div class="setb"><b>${esc(s.name)}</b><small>吹き出し ${s.bubbles.length} 個${s.withText?'・セリフも保存':''}</small>
-      <div class="row" style="margin:6px 0 0"><button class="btn sm" data-sadd="${s.id}">足す</button>${selB&&s.bubbles.length===1?`<button class="btn sm ghost" data-sapply="${s.id}">見た目だけ当てる</button>`:''}<button class="btn sm ghost" data-sren="${s.id}">名前</button><button class="btn sm danger" data-sdel="${s.id}">削除</button></div></div>
+      <div class="row" style="margin:6px 0 0"><button class="btn sm" data-sadd="${s.id}">足す</button>${selB&&s.bubbles.length===1&&selB.type!=='img'&&s.bubbles[0].type!=='img'?`<button class="btn sm ghost" data-sapply="${s.id}">見た目だけ当てる</button>`:''}<button class="btn sm ghost" data-sren="${s.id}">名前</button><button class="btn sm danger" data-sdel="${s.id}">削除</button></div></div>
   </div>`).join('')||'<p class="hint">セットはまだありません。</p>'}</div>
   <div class="row"><button class="btn ghost sm" id="setReset">はじめのセットを足す</button><button class="btn ghost" id="setClose">閉じる</button></div>
   <p class="hint">「見た目だけ当てる」は、選んでいる吹き出しのセリフと位置はそのままで、形・字体・線・大きさだけを変えます。</p>`);
-  $$('canvas[data-sp]').forEach(cv=>{const s=sets.find(x=>x.id===cv.dataset.sp);if(s)drawSetPreview(cv,s);});
+  const drawSP=()=>$$('canvas[data-sp]').forEach(cv=>{const s=sets.find(x=>x.id===cv.dataset.sp);if(s)drawSetPreview(cv,s);});
+  drawSP();preloadStamps(sets.flatMap(s=>s.bubbles)).then(drawSP);
   const reg=(bs,name)=>{
     const nm=prompt('セットの名前を付けてください',name);if(nm===null)return;
     const withText=confirm('セリフの文字も一緒に保存しますか？\n（効果音など、いつも同じ文字を使うときは「OK」。セリフは毎回変えるなら「キャンセル」）');
@@ -977,7 +1072,7 @@ function openSets(w,i,comp,getSel,onDone){
 function linesToTexts(s){const m=[...String(s||'').matchAll(/[「『]([^」』]*)[」』]/g)].map(x=>x[1].trim()).filter(Boolean);
   return m.length?m:String(s||'').split('\n').map(x=>x.trim()).filter(Boolean);}
 
-let cSel=null,panMode=false;
+let cSel=null,panMode=false,stampPickReplace=false;
 function vComic(c){
   const w=byId('works',c.id);if(!w){stack.pop();return render();}
   const i=c.i,comp=getComp(w,i),sc=byId('scenes',w.panels[i]);
@@ -987,7 +1082,7 @@ function vComic(c){
   view.innerHTML=`
   <div class="ptabs">${ROLE.map((r,k)=>`<button data-pi="${k}" class="${k===i?'on':''}"><span class="role r${k}">${r}</span>${(getComp(w,k).bubbles||[]).length?`<small>${getComp(w,k).bubbles.length}</small>`:''}</button>`).join('')}</div>
   <div class="cwrap" id="cwrap" style="aspect-ratio:${EW}/${EH};max-width:calc(62vh * ${EW} / ${EH})"><canvas id="cv"></canvas></div>
-  <div class="ctool"><button class="btn sm" id="addB">＋ 吹き出し</button><button class="btn sm ghost" id="fromSet">セットから</button><button class="btn sm ghost" id="fromLine">セリフから作る</button><button class="btn sm ghost ${panMode?'onb':''}" id="panB">${panMode?'✓ 絵を動かす':'絵を動かす'}</button></div>
+  <div class="ctool"><button class="btn sm" id="addB">＋ 吹き出し</button><button class="btn sm ghost" id="stampB">セリフ画像</button><button class="btn sm ghost" id="fromSet">セットから</button><button class="btn sm ghost" id="fromLine">セリフから作る</button><button class="btn sm ghost ${panMode?'onb':''}" id="panB">${panMode?'✓ 絵を動かす':'絵を動かす'}</button></div>
   <div id="cctl"></div>
   ${w.lines[i]?`<div class="sec"><h2>セリフ・メモ <small>作品の画面で書いたもの</small></h2><p class="memo">${esc(w.lines[i])}</p></div>`:''}
   <div class="row"><button class="btn ghost" id="saveOne">この1枚を保存</button><button class="btn" id="expAll">4枚を書き出す</button></div>
@@ -999,8 +1094,9 @@ function vComic(c){
   const W=cv.width,H=cv.height,unit=W/cssW;
   const draw=()=>{raf=0;geoms=drawPanel(ctx,W,H,w,i,img,{sel:cSel,unit});};
   const redraw=()=>{if(!raf)raf=requestAnimationFrame(draw);};
-  draw();
+  draw();stampRedraw=redraw;
   loadImg(compImg(w,i)).then(im=>{img=im;draw();});
+  preloadStamps(comp.bubbles).then(redraw);
   /* 操作 */
   $$('.ptabs button',view).forEach(b=>b.onclick=()=>{flush();cSel=null;cur().i=+b.dataset.pi;render();});
   $('#addB').onclick=()=>{const b=newBubble('セリフ',comp.bubbles.length);comp.bubbles.push(b);cSel=comp.bubbles.length-1;save('works',w);draw();ctl();setTimeout(()=>{const t=$('#bText');if(t){t.focus();t.select();}},50);};
@@ -1008,6 +1104,10 @@ function vComic(c){
     if(comp.bubbles.length&&!confirm(`セリフ・メモから ${ts.length} 個の吹き出しを足します。今の吹き出しは残ります。よろしいですか？`))return;
     const n=comp.bubbles.length;ts.forEach((t,k)=>comp.bubbles.push(newBubble(t,n+k)));cSel=comp.bubbles.length-1;save('works',w);draw();ctl();toast(ts.length+'個の吹き出しを作りました');};
   $('#fromSet').onclick=()=>openSets(w,i,comp,()=>cSel,(sel,focus)=>{cSel=sel;panMode=false;render(true);if(focus)setTimeout(()=>{const t=$('#bText');if(t){t.focus();t.select();}},80);});
+  const placeStamp=id=>{loadStamp(id).then(()=>{const sb=cSel!=null?comp.bubbles[cSel]:null;
+      if(sb&&sb.type==='img'&&stampPickReplace){sb.stamp=id;}else{const nb=newStampB(id,comp.bubbles.length);const o=stampImg[id];if(o&&o.im){const[EW,EH]=expWH();nb.sz=Math.min(0.2,0.6*(EW/EH)*o.im.naturalHeight/o.im.naturalWidth);nb.x=0.5;}comp.bubbles.push(nb);cSel=comp.bubbles.length-1;}
+      stampPickReplace=false;panMode=false;save('works',w);render(true);});};
+  $('#stampB').onclick=()=>{stampPickReplace=false;openStamps(placeStamp);};
   $('#panB').onclick=()=>{panMode=!panMode;if(panMode)cSel=null;render(true);};
   $('#saveOne').onclick=async()=>{flush();const b=await renderFull(w,i);downloadBlob(b,fileName(w,i));};
   $('#expAll').onclick=()=>{flush();openExport(w);};
@@ -1037,7 +1137,34 @@ function vComic(c){
   /* 下の操作欄 */
   function ctl(){
     const box=$('#cctl');const b=cSel!=null?comp.bubbles[cSel]:null;
-    if(b){
+    const common=()=>{
+      $$('[data-ck]',box).forEach(x=>{const k=x.dataset.ck;
+        if(x.tagName==='INPUT'){x.oninput=e=>{b[k]=e.target.value;save('works',w);redraw();};x.onchange=()=>{draw();ctl();};}
+        else x.onclick=()=>{b[k]=x.dataset.cv;save('works',w);draw();ctl();};});
+      const owr=$('#bOw');if(owr)owr.oninput=e=>{b.ow=+e.target.value;$('#owv').textContent=b.ow.toFixed(1);save('works',w);redraw();};
+      $('#bSet').onclick=()=>$('#fromSet').click();
+      $('#bDup').onclick=()=>{const n=JSON.parse(JSON.stringify(b));n.id=uid();n.x=Math.min(1,n.x+0.05);n.y=Math.min(1,n.y+0.05);n.tx+=0.05;n.ty+=0.05;comp.bubbles.push(n);cSel=comp.bubbles.length-1;save('works',w);draw();ctl();};
+      $('#bFront').onclick=()=>{comp.bubbles.splice(cSel,1);comp.bubbles.push(b);cSel=comp.bubbles.length-1;save('works',w);draw();ctl();};
+      $('#bDel').onclick=()=>{comp.bubbles.splice(cSel,1);cSel=null;save('works',w);draw();ctl();};
+      $('#bDone').onclick=()=>{cSel=null;draw();ctl();};
+    };
+    const owRow=v=>v?`<label class="f"><span>外枠の太さ <b id="owv">${(b.ow||1).toFixed(1)}</b></span><input type="range" id="bOw" min="0.3" max="3" step="0.1" value="${b.ow||1}"></label>`:'';
+    const btns=`<div class="row" style="margin-bottom:0"><button class="btn ghost sm" id="bSet">セットに登録</button><button class="btn ghost sm" id="bDup">複製</button><button class="btn ghost sm" id="bFront">いちばん前へ</button><button class="btn danger sm" id="bDel">削除</button><button class="btn ghost sm" id="bDone">選ぶのをやめる</button></div>`;
+    if(b&&b.type==='img'){
+      const r=STAMPS.find(x=>x.id===b.stamp);
+      box.innerHTML=`<div class="sec"><h2>セリフ画像 <small>${esc(r?r.name:'見つかりません')}・${cSel+1}／${comp.bubbles.length}</small></h2>
+      <label class="f"><span>大きさ <b id="szv">${Math.round((b.sz||.16)*100)}</b></span><input type="range" id="bSz" min="3" max="90" step="1" value="${Math.round((b.sz||.16)*100)}"></label>
+      <label class="f"><span>傾き <b id="rtv">${b.rot||0}°</b></span><input type="range" id="bRot" min="-45" max="45" step="1" value="${b.rot||0}"></label>
+      ${colorRow('色（文字の部分を塗りかえる）','color',b.color,'元の色')}
+      ${colorRow('外枠の色','oc',b.oc,'なし')}
+      ${owRow(b.oc)}
+      <div class="row"><button class="btn ghost sm" id="bSwap">ほかの画像に替える</button></div>
+      ${btns}</div>`;
+      $('#bSz').oninput=e=>{b.sz=+e.target.value/100;$('#szv').textContent=e.target.value;save('works',w);redraw();};
+      $('#bRot').oninput=e=>{b.rot=+e.target.value;$('#rtv').textContent=b.rot+'°';save('works',w);redraw();};
+      $('#bSwap').onclick=()=>{stampPickReplace=true;openStamps(placeStamp);};
+      common();
+    }else if(b){
       box.innerHTML=`<div class="sec"><h2>吹き出し ${cSel+1} <small>${comp.bubbles.length}個中</small></h2>
       <label class="f"><span>セリフ（改行で行を分けられます）</span><textarea id="bText" rows="2">${esc(b.text)}</textarea></label>
       <div class="f"><span>形</span><div class="tgs">${BTYPES.map(([k,l])=>`<button type="button" class="tg ${b.type===k?'on':''}" data-bt="${k}">${l}</button>`).join('')}</div></div>
@@ -1045,10 +1172,13 @@ function vComic(c){
       <div class="f"><span>字体</span><div class="tgs"><button type="button" class="tg ${!b.font?'on':''}" data-bf="">基本${S.meta.jpFont?'':'（スマホの字体）'}</button>${FONTS.filter(f=>f.loaded).map(f=>`<button type="button" class="tg ${b.font===f.id?'on':''}" data-bf="${f.id}" style="font-family:'${fontFam(f.id)}',${FONT}">${esc(f.name)}</button>`).join('')}</div>${FONTS.length?'':'<span class="hint">字体は「保存・設定」の「字体」で取り込めます。<button type="button" class="linkb" id="bFontHelp">入れ方を見る</button></span>'}</div>
       ${b.type!=='none'?`<div class="f"><span>輪郭の線</span><div class="tgs"><button type="button" class="tg ${b.line!=='brush'?'on':''}" data-bl="pen">ふつう</button><button type="button" class="tg ${b.line==='brush'?'on':''}" data-bl="brush">筆</button></div></div>
       <label class="f"><span>線の太さ <b id="lwv">${(b.lw||1).toFixed(1)}</b></span><input type="range" id="bLw" min="0.4" max="3" step="0.1" value="${b.lw||1}"></label>`:''}
+      ${colorRow('文字の色','color',b.color||'#111111')}
+      ${colorRow('文字の外枠','oc',textOC(b),'なし')}
+      ${owRow(textOC(b))}
       <label class="f"><span>文字の大きさ <b id="fsv">${Math.round(b.fs*1000)}</b></span><input type="range" id="bFs" min="18" max="70" step="1" value="${Math.round(b.fs*1000)}"></label>
       <label class="f"><span>1行の文字数 <b id="wrv">${b.wrap}</b></span><input type="range" id="bWrap" min="2" max="20" step="1" value="${b.wrap}"></label>
       ${b.type!=='box'&&b.type!=='none'?`<label class="switch" style="margin-bottom:12px"><input type="checkbox" id="bTail" ${b.tail?'checked':''}><span>しっぽを付ける</span></label>`:''}
-      <div class="row" style="margin-bottom:0"><button class="btn ghost sm" id="bSet">セットに登録</button><button class="btn ghost sm" id="bDup">複製</button><button class="btn ghost sm" id="bFront">いちばん前へ</button><button class="btn danger sm" id="bDel">削除</button><button class="btn ghost sm" id="bDone">選ぶのをやめる</button></div></div>`;
+      ${btns}</div>`;
       $('#bText').oninput=e=>{b.text=e.target.value;save('works',w);redraw();};
       $$('[data-bt]',box).forEach(x=>x.onclick=()=>{b.type=x.dataset.bt;save('works',w);draw();ctl();});
       $$('[data-bv]',box).forEach(x=>x.onclick=()=>{b.vertical=x.dataset.bv==='1';save('works',w);draw();ctl();});
@@ -1059,11 +1189,7 @@ function vComic(c){
       $('#bFs').oninput=e=>{b.fs=+e.target.value/1000;$('#fsv').textContent=e.target.value;save('works',w);redraw();};
       $('#bWrap').oninput=e=>{b.wrap=+e.target.value;$('#wrv').textContent=e.target.value;save('works',w);redraw();};
       const bt=$('#bTail');if(bt)bt.onchange=e=>{b.tail=e.target.checked;save('works',w);draw();};
-      $('#bSet').onclick=()=>$('#fromSet').click();
-      $('#bDup').onclick=()=>{const n=JSON.parse(JSON.stringify(b));n.id=uid();n.x=Math.min(1,n.x+0.05);n.y=Math.min(1,n.y+0.05);n.tx+=0.05;n.ty+=0.05;comp.bubbles.push(n);cSel=comp.bubbles.length-1;save('works',w);draw();ctl();};
-      $('#bFront').onclick=()=>{comp.bubbles.splice(cSel,1);comp.bubbles.push(b);cSel=comp.bubbles.length-1;save('works',w);draw();ctl();};
-      $('#bDel').onclick=()=>{comp.bubbles.splice(cSel,1);cSel=null;save('works',w);draw();ctl();};
-      $('#bDone').onclick=()=>{cSel=null;draw();ctl();};
+      common();
     }else{
       const imgs=sc?(sc.images||[]):[];const curI=compImg(w,i);
       box.innerHTML=`<div class="sec"><h2>絵</h2>
@@ -1193,6 +1319,10 @@ function vSettings(){
     <div class="row" style="margin-top:10px"><button class="btn" id="fontHelp">字体の入れ方（くわしく）</button><label class="btn ghost">＋ 字体を取り込む<input type="file" accept=".ttf,.otf,.woff,.woff2,font/ttf,font/otf,font/woff,font/woff2,application/octet-stream" multiple hidden id="fontAdd"></label></div>
     <span class="hint">「基本の字体」は、字体を選んでいない吹き出しで使います。英字だけの字体（あんバタフォントなど）を吹き出しで選んだときも、日本語の文字はこの基本の字体で出ます。</span>
   </div>
+  <div class="sec"><h2>セリフ画像</h2>
+    <p class="hint" style="margin:0 0 10px">文字を書いた画像を取り込んで、吹き出しの代わりにコマへ置けます。今 ${STAMPS.length} 枚あります。</p>
+    <div class="row"><button class="btn ghost" id="stMng">セリフ画像を見る・取り込む</button></div>
+  </div>
   <div class="sec"><h2>サンプル</h2><p class="hint" style="margin:0 0 10px">使い方を試すための部品・シーン・作品を足します（今のデータは消えません）。</p><button class="btn ghost" id="sample">サンプルを入れる</button></div>
   <p class="hint">投稿（4コマ漫画づくりのアプリ）。外部のサービスにはつながず、この端末の中だけで動きます。</p>`;
   dbAll('images').then(a=>{$('#imgN').textContent=a.length;});
@@ -1206,6 +1336,7 @@ function vSettings(){
   $$('input[name=fmt]',view).forEach(r=>r.onchange=()=>{S.meta.fmt=r.value;dbPut('meta',S.meta);toast('プロンプトの形を変えました');});
   $('#sample').onclick=insertSample;
   $('#fontHelp').onclick=openFontHelp;
+  $('#stMng').onclick=()=>openStamps(null);
   $('#fontAdd').onchange=async e=>{const fs=[...e.target.files];e.target.value='';let n=0;for(const f of fs){try{const r=await addFont(f);n++;if(!S.meta.jpFont&&/[ぁ-んァ-ン一-龥]|shippori|しっぽり|antique|アンチック/i.test(r.name)){S.meta.jpFont=r.id;await dbPut('meta',S.meta);}}catch(_){toast(f.name+' は取り込めませんでした');}}if(n){toast(n+'個の字体を取り込みました');render(true);}};
   $$('[data-fdef]',view).forEach(b=>b.onclick=async()=>{S.meta.jpFont=S.meta.jpFont===b.dataset.fdef?'':b.dataset.fdef;await dbPut('meta',S.meta);render(true);});
   $$('[data-fdel]',view).forEach(b=>b.onclick=async()=>{const id=b.dataset.fdel;const used=S.works.reduce((n,w)=>n+(w.comps||[]).reduce((m,c)=>m+((c&&c.bubbles)||[]).filter(x=>x.font===id).length,0),0);
@@ -1269,7 +1400,8 @@ async function exportAll(){
   try{
     const images=[];for(const r of await dbAll('images'))images.push({id:r.id,name:r.name,type:r.type,data:await b64(r.blob),thumb:r.thumb?await b64(r.thumb):null});
     const fonts=[];for(const f of await dbAll('fonts'))fonts.push({id:f.id,name:f.name,file:f.file,size:f.size,created:f.created,data:await b64(f.blob)});
-    const data={app:'4koma-kobo',version:1,exported:new Date().toISOString(),meta:S.meta,parts:S.parts,scenes:S.scenes,works:S.works,images,fonts};
+    const stamps=[];for(const r of await dbAll('stamps'))stamps.push({id:r.id,name:r.name,w:r.w,h:r.h,created:r.created,data:await b64(r.blob)});
+    const data={app:'4koma-kobo',version:1,exported:new Date().toISOString(),meta:S.meta,parts:S.parts,scenes:S.scenes,works:S.works,images,fonts,stamps};
     const blob=new Blob([JSON.stringify(data)],{type:'application/json'});
     const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`4koma-backup-${ymd()}.json`;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},10000);
     S.meta.lastBackup=Date.now();await dbPut('meta',S.meta);toast('書き出しました（ダウンロードのフォルダ）');render(true);
@@ -1282,14 +1414,15 @@ async function importAll(file,replace){
   toast('読み込んでいます…');
   try{
     flush();
-    if(replace)for(const s of['parts','scenes','works','images','fonts'])await tx(s,'readwrite',st=>st.clear());
+    if(replace)for(const s of['parts','scenes','works','images','fonts','stamps'])await tx(s,'readwrite',st=>st.clear());
     for(const r of data.images||[])await dbPut('images',{id:r.id,name:r.name,type:r.type,blob:await unb64(r.data),thumb:r.thumb?await unb64(r.thumb):null});
+    for(const r of data.stamps||[])await dbPut('stamps',{id:r.id,name:r.name,w:r.w,h:r.h,created:r.created,blob:await unb64(r.data)});
     for(const r of data.fonts||[])await dbPut('fonts',{id:r.id,name:r.name,file:r.file,size:r.size,created:r.created,blob:await unb64(r.data)});
     if(data.meta&&Array.isArray(data.meta.bsets)){const have=new Set((S.meta.bsets||[]).map(s=>s.id));S.meta.bsets=replace?data.meta.bsets:[...(S.meta.bsets||[]),...data.meta.bsets.filter(s=>!have.has(s.id))];}
     if(data.meta){for(const k of['jpFont','expSize','expType','fmt','loraInPrompt'])if(data.meta[k]!==undefined&&(replace||S.meta[k]===undefined))S.meta[k]=data.meta[k];await dbPut('meta',S.meta);}
     for(const k of['parts','scenes','works'])for(const o of data[k]||[])await dbPut(k,o);
     for(const k in urlCache){URL.revokeObjectURL(urlCache[k]);delete urlCache[k];}
-    await loadAll();for(const k in imgCache)delete imgCache[k];await loadFonts().catch(()=>{});toast('読み込みました');render();
+    await loadAll();for(const k in imgCache)delete imgCache[k];for(const k in stampImg)delete stampImg[k];for(const k in stampCv)delete stampCv[k];await loadStamps().catch(()=>{});await loadFonts().catch(()=>{});toast('読み込みました');render();
   }catch(e){toast('読み込みの途中で失敗しました');}
 }
 
@@ -1334,7 +1467,7 @@ async function insertSample(){
   history.replaceState({n:1},'');
   /* オフラインで動かす仕組み（https か localhost のときだけ使える） */
   if('serviceWorker' in navigator&&(location.protocol==='https:'||location.hostname==='localhost'||location.hostname==='127.0.0.1'))navigator.serviceWorker.register('sw.js').catch(()=>{});
-  try{db=await openDB();await loadAll();await loadFonts().catch(()=>{});}
+  try{db=await openDB();await loadAll();await loadStamps().catch(()=>{});await loadFonts().catch(()=>{});}
   catch(e){db=null;view.innerHTML='<div class="banner">このブラウザではデータを保存できません（プライベートモードなど）。閉じると内容が消えます。</div>';}
   render();
   if(db&&navigator.storage&&navigator.storage.persist)navigator.storage.persisted().then(v=>{if(!v)navigator.storage.persist().catch(()=>{});}).catch(()=>{});
