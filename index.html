@@ -251,6 +251,10 @@ body.editing #toast{bottom:calc(24px + env(safe-area-inset-bottom))}
 .seg::-webkit-scrollbar{display:none}
 .seg button{flex:0 0 auto;border:1px solid #d3d6db;background:#fff;border-radius:999px;padding:5px 13px;font-size:13px}
 .seg button.on{background:var(--ink);border-color:var(--ink);color:#fff}
+.pcat{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.pcat button{display:flex;flex-wrap:wrap;align-items:baseline;gap:2px 8px;text-align:left;background:#fff;border:1px solid var(--line);border-radius:12px;padding:12px;min-height:72px}
+.pcat b{font-size:15px}.pcat .n{margin-left:auto;font-size:13px;color:var(--sub);font-weight:700}
+.pcat small{flex-basis:100%;font-size:11px;color:var(--sub);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .pitem{display:block;width:100%;text-align:left;background:#fff;border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-bottom:8px}
 .pitem b{font-size:14px}
 .pitem small{float:right;color:var(--sub);font-size:11px;margin-top:2px}
@@ -303,27 +307,30 @@ function ymd(){const d=new Date();return `${d.getFullYear()}${String(d.getMonth(
 
 /* 部品の種類 */
 const PT={
-  chara:{label:'人物',hint:'変わらない特徴（髪・目・体型など）。服や表情は別の部品にすると使い回しやすい',ph:'black hair, short hair, brown eyes',namePh:'例：ミカ'},
+  chara:{label:'人物',hint:'その人の変わらない特徴（髪・目など）。体つきは「身体の特徴」、服や表情は別の部品にすると使い回しやすい',ph:'black hair, short hair, brown eyes',namePh:'例：ミカ'},
+  phys:{label:'身体の特徴',hint:'体型・身長・肌の色・胸の大きさなど、体のつくり。1人にいくつでも付けられます',ph:'slender, tall, fair skin',namePh:'例：細身'},
   outfit:{label:'服装',hint:'服・小物のタグ',ph:'bikini',namePh:'例：水着（黒）'},
   action:{label:'ポーズ',hint:'ポーズ・動き・視線など',ph:'standing, looking at viewer',namePh:'例：立つ'},
   face:{label:'表情',hint:'表情',ph:'smile',namePh:'例：笑顔'},
   body:{label:'体の状態',hint:'汗・赤面・濡れ・涙など。1人にいくつでも付けられます',ph:'sweat',namePh:'例：汗'},
   inter:{label:'絡み',hint:'ハグ・キス・手をつなぐなど、人物どうしの関わり。シーンにいくつでも付けられます',ph:'hug',namePh:'例：ハグ'},
   bg:{label:'背景',hint:'場所・時間帯・天気など',ph:'beach, blue sky, daytime',namePh:'例：昼のビーチ'},
+  angle:{label:'カメラ位置',hint:'どこから見るか（横から・後ろから・見上げなど）。シーンにいくつでも付けられます',ph:'from side',namePh:'例：横から'},
   camera:{label:'構図・光',hint:'カメラの距離・角度、光の当たり方',ph:'full body, soft lighting',namePh:'例：全身・やわらかい光'},
   style:{label:'画風',hint:'画質・画風のタグ。タグの形では最後に入ります',ph:'masterpiece, best quality',namePh:'例：いつもの画風'},
   lora:{label:'LoRA',hint:'LoRA を使うときにプロンプトへ足すタグ（なければ空のまま）。LoRA は作られたモデルの系統（SDXL 系・Tsubaki 系）でしか使えません',ph:'トリガーワード',namePh:'例：水彩風'}
 };
-const PT_ORDER=['chara','outfit','action','face','body','inter','bg','camera','style','lora'];
+const PT_ORDER=['chara','phys','outfit','action','face','body','inter','bg','angle','camera','style','lora'];
 /* プロンプトの形（PixAI 公式ブログの勧めに合わせる） */
 const FMT={
-  tag:{label:'タグ（SDXL 系：Haruka・Hoshino など）',hint:'人数 → 人物の特徴 → 服 → ポーズ → 表情 → 体の状態 → 絡み → 背景 → 構図・光 → 画風 の順に、タグを並べます。'},
-  prose:{label:'文章（Tsubaki 系）',hint:'人物（2人以上なら人数と絡みを先に）→ 一人ずつの説明 → 背景 → 構図・光 → 画風 の順の英語の文章にします。部品に「文章」を書いておくと、タグの代わりにそれを使います。'},
+  tag:{label:'タグ（SDXL 系：Haruka・Hoshino など）',hint:'人数 → 人物の特徴 → 身体の特徴 → 服 → ポーズ → 表情 → 体の状態 → 絡み → 背景 → カメラ位置 → 構図・光 → 画風 の順に、タグを並べます。'},
+  prose:{label:'文章（Tsubaki 系）',hint:'人物（2人以上なら人数と絡みを先に）→ 一人ずつの説明 → 背景 → カメラ位置 → 構図・光 → 画風 の順の英語の文章にします。部品に「文章」を書いておくと、タグの代わりにそれを使います。'},
   group:{label:'かっこでまとめる（girl(…) の形）',hint:'人物ごとに girl(…) の形でまとめます（今までの書き方）。'}
 };
 
 /* ========== データベース（IndexedDB） ========== */
 let db=null;
+const APP_VER='v11';/* sw.js の VERSION と同じにする */
 const STORES=['parts','scenes','works','images','meta','fonts','stamps'];
 function openDB(){return new Promise((res,rej)=>{const r=indexedDB.open('manga4koma',3);r.onupgradeneeded=()=>{const d=r.result;for(const s of STORES)if(!d.objectStoreNames.contains(s))d.createObjectStore(s,{keyPath:'id'});};r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error);});}
 function tx(store,mode,fn){return new Promise((res,rej)=>{if(!db)return res(undefined);const t=db.transaction(store,mode);const req=fn(t.objectStore(store));let out;if(req)req.onsuccess=()=>{out=req.result;};t.oncomplete=()=>res(out);t.onerror=()=>rej(t.error);t.onabort=()=>rej(t.error);});}
@@ -337,6 +344,28 @@ const byId=(k,id)=>id?S[k].find(x=>x.id===id):undefined;
 async function loadAll(){
   S.parts=await dbAll('parts');S.scenes=await dbAll('scenes');S.works=await dbAll('works');
   S.meta=Object.assign({id:'settings',loraInPrompt:false,lastBackup:0},await dbGet('meta','settings')||{});
+  await seedAngles();
+}
+/* カメラ位置のよく使う部品を、最初の1回だけ入れておく（消しても、もう一度は入らない） */
+const ANGLE_PRESETS=[
+  ['正面','straight-on','真正面から'],
+  ['斜め前から','three-quarter view','顔と体が少し斜めを向いて見える'],
+  ['横から','from side','横から見る'],
+  ['真横（横顔）','from side, profile','顔も真横を向いた横顔'],
+  ['後ろから','from behind','背中側から'],
+  ['上から（見下ろし）','from above','高いところから見下ろす'],
+  ['下から（見上げ・あおり）','from below','低いところから見上げる'],
+  ['真上から','from above, high angle','かなり高い位置から見下ろす'],
+  ['真下から','from below, low angle','かなり低い位置から見上げる'],
+  ['傾ける（ダッチアングル）','dutch angle','画面を斜めに傾けて動きや不安を出す'],
+  ['主観（POV）','pov','見ている人の目線']
+];
+async function seedAngles(){
+  if(S.meta.seedAngle)return;
+  if(!S.parts.some(p=>p.type==='angle')){
+    for(const[name,tags,memo]of ANGLE_PRESETS){const p={id:uid(),type:'angle',name,tags,memo,created:Date.now(),updated:Date.now()};S.parts.push(p);await dbPut('parts',p);}
+  }
+  S.meta.seedAngle=1;await dbPut('meta',S.meta);
 }
 /* 入力のたびに保存（少し待ってまとめて保存） */
 const pending=new Map();let flushT;
@@ -383,7 +412,7 @@ function countTags(subs){const g=subs.filter(s=>subjKind(s)==='girl').length,b=s
 function slotInfo(sl){
   const c=P_(sl.chara),rm=splitTags(sl.remove);
   const subj=(((c&&c.subject)||'girl').trim()||'girl').replace(/^\d+\s*/,'');
-  return{sl,c,subj,rm,feat:uniq(T_(sl.chara),rm),out:uniq(T_(sl.outfit),rm),pose:uniq(T_(sl.action),rm),face:uniq(T_(sl.face),rm),
+  return{sl,c,subj,rm,feat:uniq(T_(sl.chara),rm),phys:uniq((sl.phys||[]).flatMap(T_),rm),out:uniq(T_(sl.outfit),rm),pose:uniq(T_(sl.action),rm),face:uniq(T_(sl.face),rm),
     body:uniq((sl.body||[]).flatMap(T_),rm),add:uniq(splitTags(sl.add),rm)};
 }
 const NUMW=['','One','Two','Three','Four','Five','Six'];
@@ -394,7 +423,7 @@ function buildPrompt(sc){
   const fmt=S.meta.fmt||'tag';
   const slots=(sc.chars||[]).map(slotInfo);
   const srm=splitTags(sc.remove);
-  const inter=uniq((sc.inter||[]).flatMap(T_),srm),bg=uniq(T_(sc.bg),srm),cam=uniq(T_(sc.camera),srm),add=uniq(splitTags(sc.add),srm),style=uniq(T_(sc.style),srm);
+  const inter=uniq((sc.inter||[]).flatMap(T_),srm),bg=uniq(T_(sc.bg),srm),ang=uniq((sc.angle||[]).flatMap(T_),srm),cam=uniq(T_(sc.camera),srm),add=uniq(splitTags(sc.add),srm),style=uniq(T_(sc.style),srm);
   const loras=[],trig=[];
   for(const l of sc.loras||[]){
     const p=P_(l.id);if(!p)continue;
@@ -405,28 +434,28 @@ function buildPrompt(sc){
   const loraTxt=S.meta.loraInPrompt?loras.map(l=>`<lora:${l.name}:${l.weight===''?1:l.weight}>`):[];
   let pos;
   /* 重みを付けられるタグの一覧（並びはタグの形と同じ） */
-  const all=[...trig];for(const s of slots)all.push(...s.feat,...s.out,...s.pose,...s.face,...s.body,...s.add);all.push(...inter,...bg,...add,...cam,...style);
+  const all=[...trig];for(const s of slots)all.push(...s.feat,...s.phys,...s.out,...s.pose,...s.face,...s.body,...s.add);all.push(...inter,...bg,...ang,...add,...cam,...style);
   const tagList=uniq(all).map(t=>({base:baseOf(t),key:norm(t),own:parseTag(t).w}));
   const W=t=>weigh(t,sc);
   if(fmt==='group'){
-    const out=slots.map(s=>{const t=uniq([...s.feat,...s.out,...s.pose,...s.face,...s.body,...s.add]).map(W);return t.length?`${s.subj}(${t.join(', ')})`:s.subj;});
-    pos=[...out,...uniq([...inter,...bg,...add,...cam,...style,...trig]).map(W),...loraTxt].join(', ');
+    const out=slots.map(s=>{const t=uniq([...s.feat,...s.phys,...s.out,...s.pose,...s.face,...s.body,...s.add]).map(W);return t.length?`${s.subj}(${t.join(', ')})`:s.subj;});
+    pos=[...out,...uniq([...inter,...bg,...ang,...add,...cam,...style,...trig]).map(W),...loraTxt].join(', ');
   }else if(fmt==='tag'){
     const t=[...trig];
-    for(const s of slots)t.push(...s.feat,...s.out,...s.pose,...s.face,...s.body,...s.add);
-    t.push(...inter,...bg,...add,...cam,...style);
+    for(const s of slots)t.push(...s.feat,...s.phys,...s.out,...s.pose,...s.face,...s.body,...s.add);
+    t.push(...inter,...bg,...ang,...add,...cam,...style);
     pos=[...countTags(slots.map(s=>s.subj)),...uniq(t).map(W),...loraTxt].join(', ');
   }else{
     /* 文章の形では重みを使わない（PixAI の DiT ガイドで、(tag:1.2) は効かないとされているため） */
     const B=a=>a.map(baseOf);
-    for(const s of slots)for(const k of['feat','out','pose','face','body','add'])s[k]=B(s[k]);
+    for(const s of slots)for(const k of['feat','phys','out','pose','face','body','add'])s[k]=B(s[k]);
     trig.splice(0,trig.length,...B(trig));
-    for(const a of[inter,bg,cam,add,style])a.splice(0,a.length,...B(a));
+    for(const a of[inter,bg,ang,cam,add,style])a.splice(0,a.length,...B(a));
     /* 文章（Tsubaki 系） */
     const S2=[];
     if(trig.length)S2.push(uniq(trig).join(', ')+',');
     const head=s=>TX_(s.sl.chara)||`${art(s.subj)} ${s.subj}${s.feat.length?' with '+s.feat.join(', '):''}`;
-    const details=s=>{const d=[];const o=TX_(s.sl.outfit)||s.out.join(', ');if(o)d.push(/^wear/i.test(o)?o:'wearing '+o);
+    const details=s=>{const d=[];const ph=(s.sl.phys||[]).map(id=>TX_(id)||uniq(T_(id),s.rm).map(baseOf).join(', ')).filter(Boolean).join(', ');if(ph)d.push(ph);const o=TX_(s.sl.outfit)||s.out.join(', ');if(o)d.push(/^wear/i.test(o)?o:'wearing '+o);
       const pz=TX_(s.sl.action)||s.pose.join(', ');if(pz)d.push(pz);const fc=TX_(s.sl.face)||s.face.join(', ');if(fc)d.push(fc);
       const bd=(s.sl.body||[]).map(id=>TX_(id)||uniq(T_(id),s.rm).join(', ')).filter(Boolean).join(', ');if(bd)d.push(bd);if(s.add.length)d.push(s.add.join(', '));return d;};
     if(slots.length===1){const s=slots[0];S2.push(sent([head(s),...details(s)].join(', ')));}
@@ -439,6 +468,8 @@ function buildPrompt(sc){
     if(slots.length>1)slots.forEach((s,i)=>S2.push(sent([`The ${ORD[i]||(i+1)+'th'} is ${head(s)}`,...details(s)].join(', '))));
     const bgt=TX_(sc.bg)||bg.join(', ');if(bgt)S2.push(sent(TX_(sc.bg)?bgt:'Background: '+bgt));
     if(add.length)S2.push(sent(add.join(', ')));
+    const at=(sc.angle||[]).map(id=>TX_(id)).filter(Boolean),atTags=(sc.angle||[]).filter(id=>!TX_(id)).flatMap(id=>uniq(T_(id),srm).map(baseOf));
+    for(const x of at)S2.push(sent(x));if(atTags.length)S2.push(sent('Viewed '+uniq(atTags).join(', ')));
     const ct=TX_(sc.camera)||cam.join(', ');if(ct)S2.push(sent(TX_(sc.camera)?ct:'Framing and light: '+ct));
     const sty=TX_(sc.style)||style.join(', ');if(sty)S2.push(sent(TX_(sc.style)?sty:'Style: '+sty));
     pos=[S2.join(' '),...loraTxt].filter(Boolean).join(' ');
@@ -470,7 +501,7 @@ $$('#tabs button').forEach(b=>b.onclick=()=>setTab(b.dataset.tab));
 function setHead(t){$('#ttl').textContent=t;$('#back').hidden=stack.length<=1;}
 function render(keep){
   const y=keep?scrollY:0;const c=cur();document.body.classList.remove('editing','typing');
-  ({works:vWorks,work:vWork,comic:vComic,scenes:vScenes,scene:vScene,parts:vParts,settings:vSettings})[c.v](c);
+  ({works:vWorks,work:vWork,comic:vComic,scenes:vScenes,scene:vScene,parts:vParts,plist:vPList,settings:vSettings})[c.v](c);
   $$('#tabs button').forEach(b=>b.classList.toggle('on',b.dataset.tab===tab));
   hydrate(view);
   scrollTo(0,y);
@@ -483,9 +514,9 @@ $('#sheet .bk').onclick=closeSheet;
 
 /* ========== 使われている場所 ========== */
 function usedIn(sceneId){const r=[];for(const w of S.works)(w.panels||[]).forEach((p,i)=>{if(p===sceneId)r.push({w,i});});return r;}
-function partUsage(pid){return S.scenes.filter(s=>s.bg===pid||s.style===pid||s.camera===pid||(s.inter||[]).includes(pid)||(s.chars||[]).some(c=>c.chara===pid||c.outfit===pid||c.action===pid||c.face===pid||(c.body||[]).includes(pid))||(s.loras||[]).some(l=>l.id===pid)).length;}
-const newSlot=()=>({chara:'',outfit:'',action:'',face:'',body:[],add:'',remove:''});
-function newScene(){const s={id:uid(),title:'',roles:[],chars:[newSlot()],inter:[],bg:'',camera:'',style:defaultStyle(),loras:[],add:'',remove:'',neg:'',memo:'',images:[],created:Date.now(),updated:Date.now()};S.scenes.push(s);return s;}
+function partUsage(pid){return S.scenes.filter(s=>s.bg===pid||s.style===pid||s.camera===pid||(s.inter||[]).includes(pid)||(s.angle||[]).includes(pid)||(s.chars||[]).some(c=>c.chara===pid||c.outfit===pid||c.action===pid||c.face===pid||(c.body||[]).includes(pid)||(c.phys||[]).includes(pid))||(s.loras||[]).some(l=>l.id===pid)).length;}
+const newSlot=()=>({chara:'',phys:[],outfit:'',action:'',face:'',body:[],add:'',remove:''});
+function newScene(){const s={id:uid(),title:'',roles:[],chars:[newSlot()],inter:[],angle:[],bg:'',camera:'',style:defaultStyle(),loras:[],add:'',remove:'',neg:'',memo:'',images:[],created:Date.now(),updated:Date.now()};S.scenes.push(s);return s;}
 function defaultStyle(){const st=S.parts.filter(p=>p.type==='style');return st.length===1?st[0].id:'';}
 
 /* ========== 作品一覧 ========== */
@@ -607,8 +638,8 @@ function chipSel(label,type,arr,attrs){const ps=S.parts.filter(p=>p.type===type)
 let wSel=null;
 function vScene(c){
   const sc=byId('scenes',c.id);if(!sc){stack.pop();return render();}
-  sc.chars=sc.chars||[];sc.loras=sc.loras||[];sc.images=sc.images||[];sc.roles=sc.roles||[];sc.inter=sc.inter||[];
-  sc.chars.forEach(c=>{c.body=c.body||[];});
+  sc.chars=sc.chars||[];sc.loras=sc.loras||[];sc.images=sc.images||[];sc.roles=sc.roles||[];sc.inter=sc.inter||[];sc.angle=sc.angle||[];
+  sc.chars.forEach(c=>{c.body=c.body||[];c.phys=c.phys||[];});
   setHead(sc.title||'無題のシーン');
   const loraParts=S.parts.filter(p=>p.type==='lora');
   const u=usedIn(sc.id);
@@ -630,6 +661,7 @@ function vScene(c){
   <div class="sec"><h2>人物 <small>人数のタグ（1girl・2girls など）は自動で付きます</small></h2>
     ${sc.chars.map((sl,i)=>`<div class="slot"><div class="sh">人物 ${i+1}<button class="btn sm danger" data-delslot="${i}">外す</button></div>
       ${partSel('人物','chara',sl.chara,`data-slot="${i}" data-f="chara"`)}
+      ${chipSel('身体の特徴','phys',sl.phys,`data-chip="phys" data-slot="${i}"`)}
       ${partSel('服装','outfit',sl.outfit,`data-slot="${i}" data-f="outfit"`)}
       ${partSel('ポーズ','action',sl.action,`data-slot="${i}" data-f="action"`)}
       ${partSel('表情','face',sl.face,`data-slot="${i}" data-f="face"`)}
@@ -648,8 +680,9 @@ function vScene(c){
     ${sc.inter.length&&sc.chars.length<2?'<p class="hint" style="margin:-6px 0 0">絡みは、人物が2人以上のときに使います。</p>':''}
   </div>
 
-  <div class="sec"><h2>背景・構図・画風</h2>
+  <div class="sec"><h2>背景・カメラ・画風</h2>
     ${partSel('背景','bg',sc.bg,'data-scf="bg"')}
+    ${chipSel('カメラ位置','angle',sc.angle,'data-chip="angle"')}
     ${partSel('構図・光','camera',sc.camera,'data-scf="camera"')}
     ${partSel('画風','style',sc.style,'data-scf="style"')}
     <div class="two">
@@ -734,8 +767,9 @@ function vScene(c){
   /* 体の状態・絡み（いくつでも） */
   $$('[data-chip]',view).forEach(b=>b.onclick=()=>{
     const kind=b.dataset.chip,slot=b.dataset.slot;
-    const arr=()=>kind==='body'?sc.chars[+slot].body:sc.inter;
-    const setArr=a=>{if(kind==='body')sc.chars[+slot].body=a;else sc.inter=a;};
+    const per=kind==='body'||kind==='phys';/* 人物ごと */
+    const arr=()=>per?(sc.chars[+slot][kind]||[]):(sc[kind]||[]);
+    const setArr=a=>{if(per)sc.chars[+slot][kind]=a;else sc[kind]=a;};
     if(b.dataset.pid==='__new'){openPart(null,kind,p=>{if(p){setArr([...arr(),p.id]);saveNow('scenes',sc);}render(true);});return;}
     const id=b.dataset.pid,a=arr();setArr(a.includes(id)?a.filter(x=>x!==id):[...a,id]);save('scenes',sc);render(true);
   });
@@ -754,16 +788,17 @@ function vScene(c){
     const imgs=sc.images;S.scenes=S.scenes.filter(x=>x.id!==sc.id);await dbDel('scenes',sc.id);for(const id of imgs)await deleteImageIfUnused(id);goBack();};
 }
 /* 画像ごとに、そのときのプロンプトの設定を記録する */
-const SNAP_KEYS=['chars','inter','bg','camera','style','loras','add','remove','neg','weights'];
-const snapDef=k=>(k==='chars'||k==='inter'||k==='loras')?[]:k==='weights'?{}:'';
+const SNAP_KEYS=['chars','inter','angle','bg','camera','style','loras','add','remove','neg','weights'];
+const snapDef=k=>(k==='chars'||k==='inter'||k==='angle'||k==='loras')?[]:k==='weights'?{}:'';
 const snapVal=(o,k)=>JSON.parse(JSON.stringify(o[k]??snapDef(k)));
 function recordSnap(sc,id){sc.imgMeta=sc.imgMeta||{};const snap={};for(const k of SNAP_KEYS)snap[k]=snapVal(sc,k);const p=buildPrompt(sc);sc.imgMeta[id]={snap,pos:p.pos,neg:p.neg,loras:p.loras,fmt:p.fmt,at:Date.now()};}
 function snapSame(sc,snap){return SNAP_KEYS.every(k=>JSON.stringify(snapVal(sc,k))===JSON.stringify(snapVal(snap,k)));}
 function snapSummary(snap){
   const nm=id=>{const p=byId('parts',id);return p?esc(p.name||'名前なし'):(id?'<span class="gone">（削除された部品）</span>':'');};
   const rows=[];
-  (snap.chars||[]).forEach((c,i)=>{const b=[nm(c.chara),nm(c.outfit),nm(c.action),nm(c.face),...(c.body||[]).map(nm)].filter(Boolean).join('・');rows.push(`<tr><th>人物 ${i+1}</th><td>${b||'—'}${c.add?`<br><small>足す：${esc(c.add)}</small>`:''}${c.remove?`<br><small>外す：${esc(c.remove)}</small>`:''}</td></tr>`);});
+  (snap.chars||[]).forEach((c,i)=>{const b=[nm(c.chara),...(c.phys||[]).map(nm),nm(c.outfit),nm(c.action),nm(c.face),...(c.body||[]).map(nm)].filter(Boolean).join('・');rows.push(`<tr><th>人物 ${i+1}</th><td>${b||'—'}${c.add?`<br><small>足す：${esc(c.add)}</small>`:''}${c.remove?`<br><small>外す：${esc(c.remove)}</small>`:''}</td></tr>`);});
   if((snap.inter||[]).length)rows.push(`<tr><th>絡み</th><td>${snap.inter.map(nm).join('・')}</td></tr>`);
+  if((snap.angle||[]).length)rows.push(`<tr><th>カメラ位置</th><td>${snap.angle.map(nm).join('・')}</td></tr>`);
   const rest=[['背景',snap.bg],['構図・光',snap.camera],['画風',snap.style]].filter(x=>x[1]).map(([l,id])=>`<tr><th>${l}</th><td>${nm(id)}</td></tr>`);
   rows.push(...rest);
   if((snap.loras||[]).length)rows.push(`<tr><th>LoRA</th><td>${snap.loras.map(l=>nm(l.id)+(l.weight!==''&&l.weight!=null?`（${esc(l.weight)}）`:'')).join('・')}</td></tr>`);
@@ -1320,18 +1355,23 @@ async function openExport(w){
 let partTab='chara';
 const TEXT_PH={chara:'a petite girl with short black hair and brown eyes',outfit:'wearing a black bikini',action:'standing and looking back over her shoulder',face:'smiling brightly',body:'sweating a little',inter:'the girl hugs the boy from behind',bg:'on a sunny beach with a clear blue sky',camera:'full body shot, soft afternoon light',style:'anime illustration with clean lines'};
 function vParts(){
+  /* 部品の種類を1画面に並べ、押すとその種類の一覧へ */
   setHead('部品');
-  const T=PT[partTab];
-  const list=S.parts.filter(p=>p.type===partTab).sort((a,b)=>(a.name||'').localeCompare(b.name||'','ja'));
+  view.innerHTML=`<p class="hint" style="margin:0 0 10px">種類を選ぶと、その部品の一覧が出ます。</p>
+  <div class="pcat">${PT_ORDER.map(t=>{const n=S.parts.filter(p=>p.type===t).length;return `<button data-t="${t}"><b>${PT[t].label}</b><span class="n">${n}</span><small>${esc(PT[t].namePh.replace(/^例：/,'例：'))}</small></button>`;}).join('')}</div>`;
+  $$('.pcat button',view).forEach(b=>b.onclick=()=>{partTab=b.dataset.t;go('plist',{t:b.dataset.t});});
+}
+function vPList(c){
+  const t=c.t||partTab;partTab=t;const T=PT[t];
+  setHead(T.label);
+  const list=S.parts.filter(p=>p.type===t).sort((a,b)=>(a.name||'').localeCompare(b.name||'','ja'));
   view.innerHTML=`
-  <div class="seg">${PT_ORDER.map(t=>`<button data-t="${t}" class="${t===partTab?'on':''}">${PT[t].label} ${S.parts.filter(p=>p.type===t).length}</button>`).join('')}</div>
-  <p class="hint" style="margin:-4px 0 12px">${esc(T.hint)}</p>
+  <p class="hint" style="margin:0 0 12px">${esc(T.hint)}</p>
   ${list.length?list.map(p=>{const n=partUsage(p.id);return `<button class="pitem" data-id="${p.id}"><small>${n?n+'シーン':'未使用'}</small><b>${esc(p.name||'名前なし')}</b>${p.type==='chara'?` <span class="chip">${esc(p.subject||'girl')}</span>`:''}${p.type==='lora'?` <span class="chip">重み ${esc(p.weight??'')}</span>`:''}<div class="ptags">${esc(p.tags)||'<span class="muted">タグなし</span>'}</div></button>`;}).join('')
   :`<div class="empty"><b>${T.label}はまだありません</b>「＋ 新しい${T.label}」で登録します。</div>`}
   <button class="fab" id="newPart">＋ 新しい${T.label}</button>`;
-  $$('.seg button',view).forEach(b=>b.onclick=()=>{partTab=b.dataset.t;render();});
   $$('.pitem',view).forEach(b=>b.onclick=()=>openPart(b.dataset.id,null,()=>render(true)));
-  $('#newPart').onclick=()=>openPart(null,partTab,()=>render(true));
+  $('#newPart').onclick=()=>openPart(null,t,()=>render(true));
 }
 function openPart(id,type,onSave){
   const src=id?byId('parts',id):null;
@@ -1355,9 +1395,9 @@ function openPart(id,type,onSave){
   const dp=$('#pDup');if(dp)dp.onclick=async()=>{const n=read(JSON.parse(JSON.stringify(p)));n.id=uid();n.name+='（コピー）';S.parts.push(n);await saveNow('parts',n);closeSheet();setTimeout(()=>openPart(n.id,null,onSave),30);};
   const dl=$('#pDel');if(dl)dl.onclick=async()=>{if(!confirm(used?`この部品は ${used} 件のシーンで使っています。削除すると、そのシーンからも外れます。削除しますか？`:'この部品を削除しますか？'))return;
     for(const s of S.scenes){let ch=false;for(const c of s.chars||[]){for(const f of['chara','outfit','action','face'])if(c[f]===p.id){c[f]='';ch=true;}
-        if((c.body||[]).includes(p.id)){c.body=c.body.filter(x=>x!==p.id);ch=true;}}
+        for(const f of['body','phys'])if((c[f]||[]).includes(p.id)){c[f]=c[f].filter(x=>x!==p.id);ch=true;}}
       for(const f of['bg','style','camera'])if(s[f]===p.id){s[f]='';ch=true;}
-      if((s.inter||[]).includes(p.id)){s.inter=s.inter.filter(x=>x!==p.id);ch=true;}
+      for(const f of['inter','angle'])if((s[f]||[]).includes(p.id)){s[f]=s[f].filter(x=>x!==p.id);ch=true;}
       if((s.loras||[]).some(l=>l.id===p.id)){s.loras=s.loras.filter(l=>l.id!==p.id);ch=true;}
       if(ch)await saveNow('scenes',s);}
     S.parts=S.parts.filter(x=>x.id!==p.id);await dbDel('parts',p.id);closeSheet();onSave&&onSave(null);};
@@ -1400,6 +1440,7 @@ function vSettings(){
     <div class="row"><button class="btn ghost" id="stMng">セリフ画像を見る・取り込む</button></div>
   </div>
   <div class="sec"><h2>サンプル</h2><p class="hint" style="margin:0 0 10px">使い方を試すための部品・シーン・作品を足します（今のデータは消えません）。</p><button class="btn ghost" id="sample">サンプルを入れる</button></div>
+  <p class="hint" style="text-align:center;margin:4px 0 0">アプリの版：${APP_VER}</p>
   <p class="hint">投稿（4コマ漫画づくりのアプリ）。外部のサービスにはつながず、この端末の中だけで動きます。</p>`;
   dbAll('images').then(a=>{$('#imgN').textContent=a.length;});
   if(navigator.storage&&navigator.storage.estimate)navigator.storage.estimate().then(e=>{$('#usage').textContent=`使っている容量：約 ${(e.usage/1048576).toFixed(1)} MB`;});
@@ -1526,7 +1567,7 @@ async function insertSample(){
   const st=P('style','いつもの画風','masterpiece, best quality, anime style',{neg:'lowres, bad anatomy, bad hands, text, watermark'});
   const lo=P('lora','水彩風（例）','watercolor',{weight:0.6,memo:'サンプルです。実際の LoRA 名に直してください'});
   const parts=[mika,sen,uni,swim,casual,stand,run,smile,surp,sweat,blush,wet,hug,hand,kiss,beach,cls,cam,st,lo];
-  const SC=(title,roles,chars,bg,extra)=>Object.assign({id:uid(),title,roles,chars:chars.map(c=>Object.assign(newSlot(),c)),inter:[],bg,camera:'',style:st.id,loras:[],add:'',remove:'',neg:'',memo:'',images:[],created:Date.now(),updated:Date.now()},extra||{});
+  const SC=(title,roles,chars,bg,extra)=>Object.assign({id:uid(),title,roles,chars:chars.map(c=>Object.assign(newSlot(),c)),inter:[],bg,angle:[],camera:'',style:st.id,loras:[],add:'',remove:'',neg:'',memo:'',images:[],created:Date.now(),updated:Date.now()},extra||{});
   const s1=SC('ビーチで笑顔のミカ',['起'],[{chara:mika.id,outfit:swim.id,action:stand.id,face:smile.id,body:[wet.id]}],beach.id,{camera:cam.id});
   const s2=SC('先輩が走ってくる',['承'],[{chara:sen.id,outfit:uni.id,action:run.id,face:smile.id,body:[sweat.id]}],beach.id);
   const s3=SC('驚くミカ（夕方）',['転'],[{chara:mika.id,outfit:swim.id,action:stand.id,face:surp.id,body:[sweat.id,blush.id],add:'looking back'}],beach.id,{add:'sunset, orange sky',remove:'daytime, blue sky'});
@@ -1542,7 +1583,13 @@ async function insertSample(){
 (async()=>{
   history.replaceState({n:1},'');
   /* オフラインで動かす仕組み（https か localhost のときだけ使える） */
-  if('serviceWorker' in navigator&&(location.protocol==='https:'||location.hostname==='localhost'||location.hostname==='127.0.0.1'))navigator.serviceWorker.register('sw.js').catch(()=>{});
+  if('serviceWorker' in navigator&&(location.protocol==='https:'||location.hostname==='localhost'||location.hostname==='127.0.0.1')){
+    /* 新しい版が入ったら、1回だけ自動で読み込み直す（はじめて入れたときは読み込み直さない） */
+    const had=!!navigator.serviceWorker.controller;let reloaded=false;
+    navigator.serviceWorker.addEventListener('controllerchange',()=>{if(!had||reloaded)return;reloaded=true;try{sessionStorage.setItem('updated','1');}catch(_){}location.reload();});
+    navigator.serviceWorker.register('sw.js',{updateViaCache:'none'}).then(reg=>{document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')reg.update().catch(()=>{});});}).catch(()=>{});
+    try{if(sessionStorage.getItem('updated')){sessionStorage.removeItem('updated');setTimeout(()=>toast('新しい版になりました'),600);}}catch(_){}
+  }
   try{db=await openDB();await loadAll();await loadStamps().catch(()=>{});await loadFonts().catch(()=>{});}
   catch(e){db=null;view.innerHTML='<div class="banner">このブラウザではデータを保存できません（プライベートモードなど）。閉じると内容が消えます。</div>';}
   render();
