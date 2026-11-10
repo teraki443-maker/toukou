@@ -2,7 +2,7 @@
    ・最初に開いたとき、アプリのファイルをスマホの中に保存する
    ・次からは保存したものをすぐに出し、ネットにつながっていれば裏で新しい版に入れ替える
    ・アプリを直したら、下の VERSION の数字を1つ上げる */
-const VERSION = 'v7';
+const VERSION = 'v8';
 const CACHE = 'toukou-' + VERSION;
 const FILES = ['./', './index.html', './manifest.webmanifest', './icon-192.png', './icon-512.png', './icon-maskable-512.png', './apple-touch-icon.png'];
 

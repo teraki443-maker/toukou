@@ -83,6 +83,11 @@ body.editing .cwrap{max-height:44dvh}
 .ebar .btn.sm{padding:5px 9px}
 .etabs{display:flex;margin:0 -14px 12px;border-bottom:1px solid var(--line)}
 .etabs button{flex:1;border:0;background:none;padding:9px 0;font-size:14px;color:var(--sub);border-bottom:2px solid transparent;margin-bottom:-1px}
+.rg{display:flex;align-items:center;gap:10px;margin:0 0 6px}
+.rg>span{flex:0 0 8.6em;font-size:12px;color:var(--sub);line-height:1.3}
+.rg>span b{color:var(--ink)}
+.rg input{flex:1;min-width:0}
+.rg .btn.sm{flex:0 0 auto;padding:4px 8px;min-height:30px;font-size:12px}
 .etabs button.on{color:var(--acc);border-color:var(--acc);font-weight:700}
 #cctl .sec .f:last-child{margin-bottom:0}
 .ctool{display:flex;gap:6px;flex-wrap:wrap;justify-content:center;margin-bottom:12px}
@@ -915,8 +920,16 @@ function bLayout(ctx,b,H){
   const lh=fs*(1+0.35*g);const lw=l=>{const cs2=[...l];return cs?cs2.reduce((a,c)=>a+ctx.measureText(c).width,0)+cs*Math.max(0,cs2.length-1):ctx.measureText(l).width;};const w=Math.max(fs,...lines.map(lw));return{fs,lines,lh,w,h:lines.length*lh-(lh-fs),cs,lw};
 }
 function bGeom(b,L,W,H){const cx=b.x*W,cy=b.y*H,pad=L.fs*0.55;
-  if(b.type==='box'||b.type==='none')return{cx,cy,rx:L.w/2+pad,ry:L.h/2+pad,rect:true};
-  const k=b.type==='shout'?1.6:1.42;return{cx,cy,rx:L.w/2*k+pad,ry:L.h/2*k+pad};}
+  if(b.type==='none')return{cx,cy,rx:L.w/2+pad,ry:L.h/2+pad,rect:true};
+  /* 吹き出しの横幅・高さ（1がふつう） */
+  const sx=b.bsx||1,sy=b.bsy||1;
+  if(b.type==='box')return{cx,cy,rx:(L.w/2+pad)*sx,ry:(L.h/2+pad)*sy,rect:true};
+  const k=b.type==='shout'?1.6:1.42;return{cx,cy,rx:(L.w/2*k+pad)*sx,ry:(L.h/2*k+pad)*sy};}
+const DEG=Math.PI/180;
+/* 回したときに、まわりを囲む四角の半分の幅・高さ */
+function rotBox(g,deg){if(!deg)return g;const c=Math.abs(Math.cos(deg*DEG)),s=Math.abs(Math.sin(deg*DEG));
+  const hx=g.rect?g.rx*c+g.ry*s:Math.sqrt((g.rx*c)**2+(g.ry*s)**2),hy=g.rect?g.rx*s+g.ry*c:Math.sqrt((g.rx*s)**2+(g.ry*c)**2);
+  return{cx:g.cx,cy:g.cy,rx:hx,ry:hy,rect:true};}
 const hasTail=b=>b.tail&&b.type!=='box'&&b.type!=='none';
 /* 吹き出しの形を、点の並び（閉じた線）で作る。{pts, tail:しっぽの先の点か} */
 function hashStr(s){let h=2166136261;for(const ch of String(s))h=Math.imul(h^ch.charCodeAt(0),16777619);return(h>>>0)/4294967295;}
@@ -936,7 +949,9 @@ function bShapes(b,g,W,H){
     for(let t=0;t<n;t++){const a=t*2*Math.PI/n;const px=cx+rx*0.86*Math.cos(a),py=cy+ry*0.86*Math.sin(a);const r=Math.min(rx,ry)*(0.2+0.04*Math.sin(t*2.3));S2.push({pts:ellPts(px,py,r,r,40,wob,seed+t)});}
   }else S2.push({pts:ellPts(cx,cy,rx,ry,240,wob,seed)});
   if(hasTail(b)){
-    const tx=b.tx*W,ty=b.ty*H;const inside=((tx-cx)/rx)**2+((ty-cy)/ry)**2<=1;
+    /* 吹き出しを回しているときは、しっぽの先を回す前の向きに直して作る（描くときに回すと、先がちゃんと元の場所に来る） */
+    let tx=b.tx*W,ty=b.ty*H;if(b.brot){const a=-b.brot*DEG,dx=tx-cx,dy=ty-cy;tx=cx+dx*Math.cos(a)-dy*Math.sin(a);ty=cy+dx*Math.sin(a)+dy*Math.cos(a);}
+    const inside=((tx-cx)/rx)**2+((ty-cy)/ry)**2<=1;
     if(!inside){
       const th=Math.atan2((ty-cy)/ry,(tx-cx)/rx);
       if(b.type==='think'){
@@ -971,6 +986,7 @@ function brushStroke(ctx,sh,lw,seed,idx){
 }
 function drawText(ctx,b,L,cx,cy){
   ctx.save();ctx.font=`${fontWeight(b)} ${L.fs}px ${fontStack(b)}`;ctx.textAlign='center';ctx.textBaseline='middle';
+  if(b.trot){ctx.translate(cx,cy);ctx.rotate(b.trot*DEG);ctx.translate(-cx,-cy);}/* 文字の角度 */
   /* 文字の置き場所を先に決め、外枠を全部描いてから文字を塗る（となりの字の外枠が上に重ならないように） */
   const gl=[];const put=(ch,x,y,r)=>gl.push([ch,x,y,r]);
   if(b.vertical){
@@ -1004,6 +1020,7 @@ function drawBubble(ctx,b,W,H){
   if(b.type!=='none'){
     const sh=bShapes(b,g,W,H);const lw=Math.max(1,H*0.0032)*(b.lw||1);
     ctx.save();ctx.lineJoin='round';ctx.strokeStyle='#111';
+    if(b.brot){ctx.translate(g.cx,g.cy);ctx.rotate(b.brot*DEG);ctx.translate(-g.cx,-g.cy);}/* 吹き出しの角度 */
     /* 線を描いてから白で塗ると、重なったところの線が消えて1つの形になる */
     /* 中の色：決めていなければ白。''は透明（線だけ） */
     const bg=b.bg===undefined?'#ffffff':b.bg;
@@ -1013,7 +1030,7 @@ function drawBubble(ctx,b,W,H){
     ctx.restore();
   }
   drawText(ctx,b,L,g.cx,g.cy);
-  return g;
+  return rotBox(g,b.type==='none'?b.trot:b.brot);
 }
 /* 1コマ分を描く（プレビューと書き出しで同じものを使う） */
 function drawPanel(ctx,W,H,w,i,img,opt){
@@ -1042,7 +1059,7 @@ const fileName=(w,i)=>`${(w.title||'4koma').replace(/[\\/:*?"<>|\s]+/g,'_')}_${i
 function newBubble(text,k){return{id:uid(),type:'round',font:'',/* 新しい吹き出しは「いつもの字体」 */line:S.meta.lastLine||'pen',lw:S.meta.lastLw||1,text:text||'セリフ',vertical:true,fs:0.034,wrap:6,x:k%2?0.3:0.72,y:Math.min(0.8,0.26+(k||0)*0.19),tail:true,tx:k%2?0.4:0.62,ty:Math.min(0.95,0.36+(k||0)*0.19)};}
 /* ========== よく使う吹き出しのセット ==========
    セット＝吹き出し1つ以上の「見た目と位置」（セリフの文字は保存するかを選べる）。S.meta.bsets に入る */
-const STYLE_KEYS=['type','font','line','lw','fs','wrap','vertical','tail','color','oc','ow','bg','lsp','csp'];
+const STYLE_KEYS=['type','font','line','lw','fs','wrap','vertical','tail','color','oc','ow','bg','lsp','csp','bsx','bsy','brot','trot'];
 function defaultSets(){
   const B=o=>Object.assign(newBubble('',0),{font:'',line:'pen',lw:1,x:.5,y:.4,tx:.42,ty:.62},o);
   return[
@@ -1194,22 +1211,26 @@ function vComic(c){
       on('bDel',()=>{comp.bubbles.splice(cSel,1);cSel=null;save('works',w);draw();ctl();});
       on('bDone',()=>{cSel=null;draw();ctl();});
     };
-    const rng=(id,label,v,min,max,step,shown)=>`<label class="f"><span>${label} <b id="${id}v">${shown}</b></span><input type="range" id="${id}" min="${min}" max="${max}" step="${step}" value="${v}"></label>`;
+    const rng=(id,label,v,min,max,step,shown,reset)=>`<div class="rg"><span>${label}<br><b id="${id}v">${shown}</b></span><input type="range" id="${id}" min="${min}" max="${max}" step="${step}" value="${v}" aria-label="${label}">${reset!=null?`<button type="button" class="btn ghost sm" data-rs="${id}" data-rv="${reset}">戻す</button>`:''}</div>`;
+    /* スライダーをつなぐ：k=値の名前、f=表示の形 */
+    const bindR=(id,set,show)=>{const el=$('#'+id);if(!el)return;const apply=v=>{set(v);$('#'+id+'v').textContent=show(v);save('works',w);redraw();};el.oninput=e=>apply(+e.target.value);
+      const rs=$(`[data-rs="${id}"]`);if(rs)rs.onclick=()=>{el.value=rs.dataset.rv;apply(+rs.dataset.rv);};};
+    const pct=v=>Math.round(v*100)+'%',dg=v=>Math.round(v)+'°';
     if(b&&b.type==='img'){
       const r=STAMPS.find(x=>x.id===b.stamp);
       const T=tabs([['size','大きさ・傾き'],['color','色・外枠']]);
       const body=ctlTab==='size'?`${rng('bSz','大きさ',Math.round((b.sz||.16)*100),3,90,1,Math.round((b.sz||.16)*100))}
-        ${rng('bRot','傾き',b.rot||0,-45,45,1,(b.rot||0)+'°')}
+        ${rng('bRot','傾き',b.rot||0,-180,180,1,(b.rot||0)+'°',0)}
         <div class="row" style="margin:4px 0 0"><button class="btn ghost sm" id="bSwap">ほかの画像に替える</button><button class="btn ghost sm" id="bSet">セットに登録</button><button class="btn ghost sm" id="bFront">いちばん前へ</button></div>
         <p class="hint" style="margin:8px 0 0">${esc(r?r.name:'画像が見つかりません')}</p>`
         :`${colorRow('色（文字の部分を塗りかえる）','color',b.color,'元の色')}${colorRow('外枠の色','oc',b.oc,'なし')}${owRow(b.oc)}`;
       box.innerHTML=`<div class="sec">${bar}${T}${body}</div>`;
       const sz=$('#bSz');if(sz)sz.oninput=e=>{b.sz=+e.target.value/100;$('#bSzv').textContent=e.target.value;save('works',w);redraw();};
-      const rt=$('#bRot');if(rt)rt.oninput=e=>{b.rot=+e.target.value;$('#bRotv').textContent=b.rot+'°';save('works',w);redraw();};
+      bindR('bRot',v=>b.rot=v,dg);
       const sw=$('#bSwap');if(sw)sw.onclick=()=>{stampPickReplace=true;openStamps(placeStamp);};
       common();
     }else if(b){
-      const T=tabs([['text','文字'],['color','色'],['shape','形'],['size','大きさ']]);
+      const T=tabs([['text','文字'],['color','色'],['shape','形'],['size','大きさ'],['rot','角度']]);
       let body='';
       if(ctlTab==='text')body=`<label class="f"><textarea id="bText" rows="2" placeholder="セリフ（改行で行を分けられます）">${esc(b.text)}</textarea></label>
         <div class="f"><span>書き方</span><div class="tgs"><button type="button" class="tg ${b.vertical?'on':''}" data-bv="1">縦書き</button><button type="button" class="tg ${b.vertical?'':'on'}" data-bv="0">横書き</button></div></div>
@@ -1219,7 +1240,12 @@ function vComic(c){
         ${b.type!=='none'?`<div class="f"><span>輪郭の線</span><div class="tgs"><button type="button" class="tg ${b.line!=='brush'?'on':''}" data-bl="pen">ふつう</button><button type="button" class="tg ${b.line==='brush'?'on':''}" data-bl="brush">筆</button></div></div>
         ${rng('bLw','線の太さ',b.lw||1,0.4,3,0.1,(b.lw||1).toFixed(1))}`:''}
         ${b.type!=='box'&&b.type!=='none'?`<label class="switch" style="margin-bottom:8px"><input type="checkbox" id="bTail" ${b.tail?'checked':''}><span>しっぽを付ける<span class="hint">見本の青い丸を動かすと、しっぽの向きが変わります</span></span></label>`:''}${more}`;
-      else body=`${rng('bFs','文字の大きさ',Math.round(b.fs*1000),18,70,1,Math.round(b.fs*1000))}${rng('bWrap','1行の文字数',b.wrap,2,20,1,b.wrap)}${rng('bCsp','文字の間',b.csp||0,-0.3,1,0.05,(b.csp||0).toFixed(2))}${rng('bLsp','行間',b.lsp==null?1:b.lsp,0,3,0.1,(b.lsp==null?1:b.lsp).toFixed(1))}<p class="hint" style="margin:0">文字の間は、となりの字とのすき間です（0がふつう、マイナスで詰まる）。行間は、改行したときの行と行のあいだです（1.0がふつう）。</p>`;
+      else if(ctlTab==='rot')body=`${b.type!=='none'?rng('bBrot','吹き出しの角度',b.brot||0,-180,180,1,dg(b.brot||0),0):''}${rng('bTrot','文字の角度',b.trot||0,-180,180,1,dg(b.trot||0),0)}
+        <div class="row" style="margin:2px 0 0">${[-90,-15,15,90].map(d=>`<button type="button" class="btn ghost sm" data-tr="${d}">文字 ${d>0?'+':''}${d}°</button>`).join('')}</div>
+        <p class="hint" style="margin:6px 0 0">吹き出しと文字は、別々に回せます。${b.type!=='none'?'しっぽの先は、回しても今の場所のままです。':''}</p>`;
+      else body=`${b.type!=='none'?rng('bBsx','吹き出しの横幅',b.bsx||1,0.5,2.5,0.05,pct(b.bsx||1),1)+rng('bBsy','吹き出しの高さ',b.bsy||1,0.5,2.5,0.05,pct(b.bsy||1),1):''}
+        ${rng('bFs','文字の大きさ',Math.round(b.fs*1000),18,70,1,Math.round(b.fs*1000))}${rng('bWrap','1行の文字数',b.wrap,2,20,1,b.wrap)}${rng('bCsp','文字の間',b.csp||0,-0.3,1,0.05,(b.csp||0).toFixed(2),0)}${rng('bLsp','行間',b.lsp==null?1:b.lsp,0,3,0.1,(b.lsp==null?1:b.lsp).toFixed(1),1)}
+        <p class="hint" style="margin:4px 0 0">文字の間は、となりの字とのすき間（0がふつう）。行間は、改行したときの行と行のあいだ（1.0がふつう）です。</p>`;
       box.innerHTML=`<div class="sec">${bar}${T}${body}</div>`;
       const ta=$('#bText');if(ta){ta.oninput=e=>{b.text=e.target.value;save('works',w);redraw();};
         /* キーボードが出たら、入力欄が見本の下に隠れないように画面の下へ寄せる */
@@ -1230,11 +1256,12 @@ function vComic(c){
       const bfh=$('#bFontHelp');if(bfh)bfh.onclick=openFontHelp;
       $$('[data-bf]',box).forEach(x=>x.onclick=()=>{b.font=x.dataset.bf;S.meta.lastFont=b.font;dbPut('meta',S.meta);save('works',w);draw();ctl();});
       $$('[data-bl]',box).forEach(x=>x.onclick=()=>{b.line=x.dataset.bl;S.meta.lastLine=b.line;dbPut('meta',S.meta);save('works',w);draw();ctl();});
-      const lwr=$('#bLw');if(lwr)lwr.oninput=e=>{b.lw=+e.target.value;$('#bLwv').textContent=b.lw.toFixed(1);S.meta.lastLw=b.lw;save('works',w);redraw();};
-      const fsr=$('#bFs');if(fsr)fsr.oninput=e=>{b.fs=+e.target.value/1000;$('#bFsv').textContent=e.target.value;save('works',w);redraw();};
-      const csr=$('#bCsp');if(csr)csr.oninput=e=>{b.csp=+e.target.value;$('#bCspv').textContent=b.csp.toFixed(2);save('works',w);redraw();};
-      const lsr=$('#bLsp');if(lsr)lsr.oninput=e=>{b.lsp=+e.target.value;$('#bLspv').textContent=b.lsp.toFixed(1);save('works',w);redraw();};
-      const wrr=$('#bWrap');if(wrr)wrr.oninput=e=>{b.wrap=+e.target.value;$('#bWrapv').textContent=e.target.value;save('works',w);redraw();};
+      bindR('bLw',v=>{b.lw=v;S.meta.lastLw=v;},v=>v.toFixed(1));
+      bindR('bFs',v=>b.fs=v/1000,v=>v);
+      bindR('bBsx',v=>b.bsx=v,pct);bindR('bBsy',v=>b.bsy=v,pct);
+      bindR('bBrot',v=>b.brot=v,dg);bindR('bTrot',v=>b.trot=v,dg);
+      $$('[data-tr]',box).forEach(x=>x.onclick=()=>{let v=(b.trot||0)+ +x.dataset.tr;if(v>180)v-=360;if(v<-180)v+=360;b.trot=v;$('#bTrot').value=v;$('#bTrotv').textContent=dg(v);save('works',w);redraw();});
+      bindR('bCsp',v=>b.csp=v,v=>v.toFixed(2));bindR('bLsp',v=>b.lsp=v,v=>v.toFixed(1));bindR('bWrap',v=>b.wrap=v,v=>v);
       const bt=$('#bTail');if(bt)bt.onchange=e=>{b.tail=e.target.checked;save('works',w);draw();};
       common();
     }else{
