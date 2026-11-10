@@ -910,8 +910,9 @@ function wrapText(text,max){
 function bLayout(ctx,b,H){
   const fs=b.fs*H;const lines=wrapText(b.text||'…',b.wrap||8);ctx.font=`${fontWeight(b)} ${fs}px ${fontStack(b)}`;
   const g=b.lsp==null?1:b.lsp;/* 行間（1がふつう、0で行どうしがくっつく） */
-  if(b.vertical){const step=fs*1.08,colW=fs*(1+0.3*g);const maxN=Math.max(1,...lines.map(l=>[...l].length));return{fs,lines,step,colW,w:lines.length*colW-(colW-fs),h:maxN*step-(step-fs)};}
-  const lh=fs*(1+0.35*g);const w=Math.max(fs,...lines.map(l=>ctx.measureText(l).width));return{fs,lines,lh,w,h:lines.length*lh-(lh-fs)};
+  const cs=(b.csp||0)*fs;/* 文字の間（字の大きさに対する割合。0がふつう） */
+  if(b.vertical){const step=fs*1.08+cs,colW=fs*(1+0.3*g);const maxN=Math.max(1,...lines.map(l=>[...l].length));return{fs,lines,step,colW,w:lines.length*colW-(colW-fs),h:maxN*step-(step-fs)};}
+  const lh=fs*(1+0.35*g);const lw=l=>{const cs2=[...l];return cs?cs2.reduce((a,c)=>a+ctx.measureText(c).width,0)+cs*Math.max(0,cs2.length-1):ctx.measureText(l).width;};const w=Math.max(fs,...lines.map(lw));return{fs,lines,lh,w,h:lines.length*lh-(lh-fs),cs,lw};
 }
 function bGeom(b,L,W,H){const cx=b.x*W,cy=b.y*H,pad=L.fs*0.55;
   if(b.type==='box'||b.type==='none')return{cx,cy,rx:L.w/2+pad,ry:L.h/2+pad,rect:true};
@@ -979,7 +980,11 @@ function drawText(ctx,b,L,cx,cy){
       else if(V_PUNC.includes(ch))put(ch,x+L.fs*0.55,y-L.fs*0.55);
       else put(ch,x,y);});});
   }else{
-    const y0=cy-L.h/2+L.fs/2;L.lines.forEach((line,k)=>put(line,cx,y0+k*L.lh));
+    const y0=cy-L.h/2+L.fs/2;
+    L.lines.forEach((line,k)=>{const y=y0+k*L.lh;
+      if(!L.cs)return put(line,cx,y);
+      /* 文字の間を変えたときは1字ずつ並べる */
+      let x=cx-L.lw(line)/2;for(const ch of line){const cw=ctx.measureText(ch).width;put(ch,x+cw/2,y);x+=cw+L.cs;}});
   }
   const each=fn=>{for(const[ch,x,y,r]of gl){if(r){ctx.save();ctx.translate(x,y);ctx.rotate(Math.PI/2);fn(ch,0,0);ctx.restore();}else fn(ch,x,y);}};
   const oc=textOC(b);
@@ -1034,10 +1039,10 @@ async function renderFull(w,i){
   return new Promise(res=>cv.toBlob(b=>res(b),type,0.92));
 }
 const fileName=(w,i)=>`${(w.title||'4koma').replace(/[\\/:*?"<>|\s]+/g,'_')}_${i+1}_${ROLE[i]}.${S.meta.expType==='png'?'png':'jpg'}`;
-function newBubble(text,k){return{id:uid(),type:'round',font:S.meta.lastFont||'',line:S.meta.lastLine||'pen',lw:S.meta.lastLw||1,text:text||'セリフ',vertical:true,fs:0.034,wrap:6,x:k%2?0.3:0.72,y:Math.min(0.8,0.26+(k||0)*0.19),tail:true,tx:k%2?0.4:0.62,ty:Math.min(0.95,0.36+(k||0)*0.19)};}
+function newBubble(text,k){return{id:uid(),type:'round',font:'',/* 新しい吹き出しは「いつもの字体」 */line:S.meta.lastLine||'pen',lw:S.meta.lastLw||1,text:text||'セリフ',vertical:true,fs:0.034,wrap:6,x:k%2?0.3:0.72,y:Math.min(0.8,0.26+(k||0)*0.19),tail:true,tx:k%2?0.4:0.62,ty:Math.min(0.95,0.36+(k||0)*0.19)};}
 /* ========== よく使う吹き出しのセット ==========
    セット＝吹き出し1つ以上の「見た目と位置」（セリフの文字は保存するかを選べる）。S.meta.bsets に入る */
-const STYLE_KEYS=['type','font','line','lw','fs','wrap','vertical','tail','color','oc','ow','bg','lsp'];
+const STYLE_KEYS=['type','font','line','lw','fs','wrap','vertical','tail','color','oc','ow','bg','lsp','csp'];
 function defaultSets(){
   const B=o=>Object.assign(newBubble('',0),{font:'',line:'pen',lw:1,x:.5,y:.4,tx:.42,ty:.62},o);
   return[
@@ -1208,13 +1213,13 @@ function vComic(c){
       let body='';
       if(ctlTab==='text')body=`<label class="f"><textarea id="bText" rows="2" placeholder="セリフ（改行で行を分けられます）">${esc(b.text)}</textarea></label>
         <div class="f"><span>書き方</span><div class="tgs"><button type="button" class="tg ${b.vertical?'on':''}" data-bv="1">縦書き</button><button type="button" class="tg ${b.vertical?'':'on'}" data-bv="0">横書き</button></div></div>
-        <div class="f"><span>字体</span><div class="tgs"><button type="button" class="tg ${!b.font?'on':''}" data-bf="">基本${S.meta.jpFont?'':'（スマホの字体）'}</button>${FONTS.filter(f=>f.loaded).map(f=>`<button type="button" class="tg ${b.font===f.id?'on':''}" data-bf="${f.id}" style="font-family:'${fontFam(f.id)}',${FONT}">${esc(f.name)}</button>`).join('')}</div>${FONTS.length?'':'<span class="hint">字体は「保存・設定」の「字体」で取り込めます。<button type="button" class="linkb" id="bFontHelp">入れ方を見る</button></span>'}</div>`;
+        <div class="f"><span>字体</span><div class="tgs"><button type="button" class="tg ${!b.font?'on':''}" data-bf="">いつもの字体（${esc((FONTS.find(f=>f.id===S.meta.jpFont&&f.loaded)||{name:'スマホの字体'}).name)}）</button>${FONTS.filter(f=>f.loaded&&f.id!==S.meta.jpFont).map(f=>`<button type="button" class="tg ${b.font===f.id?'on':''}" data-bf="${f.id}" style="font-family:'${fontFam(f.id)}',${FONT}">${esc(f.name)}</button>`).join('')}</div>${FONTS.length?'<span class="hint">「いつもの字体」は「保存・設定」で変えられます。変えると、ここで「いつもの字体」にしている吹き出しは全部変わります。</span>':'<span class="hint">字体は「保存・設定」の「字体」で取り込めます。<button type="button" class="linkb" id="bFontHelp">入れ方を見る</button></span>'}</div>`;
       else if(ctlTab==='color')body=`${colorRow('文字の色','color',b.color||'#111111')}${colorRow('文字の外枠','oc',textOC(b),'なし')}${owRow(textOC(b))}${b.type!=='none'?colorRow('吹き出しの中の色','bg',b.bg===undefined?'#ffffff':b.bg,'透明'):''}`;
       else if(ctlTab==='shape')body=`<div class="f"><div class="tgs">${BTYPES.map(([k,l])=>`<button type="button" class="tg ${b.type===k?'on':''}" data-bt="${k}">${l}</button>`).join('')}</div></div>
         ${b.type!=='none'?`<div class="f"><span>輪郭の線</span><div class="tgs"><button type="button" class="tg ${b.line!=='brush'?'on':''}" data-bl="pen">ふつう</button><button type="button" class="tg ${b.line==='brush'?'on':''}" data-bl="brush">筆</button></div></div>
         ${rng('bLw','線の太さ',b.lw||1,0.4,3,0.1,(b.lw||1).toFixed(1))}`:''}
         ${b.type!=='box'&&b.type!=='none'?`<label class="switch" style="margin-bottom:8px"><input type="checkbox" id="bTail" ${b.tail?'checked':''}><span>しっぽを付ける<span class="hint">見本の青い丸を動かすと、しっぽの向きが変わります</span></span></label>`:''}${more}`;
-      else body=`${rng('bFs','文字の大きさ',Math.round(b.fs*1000),18,70,1,Math.round(b.fs*1000))}${rng('bWrap','1行の文字数',b.wrap,2,20,1,b.wrap)}${rng('bLsp','行間',b.lsp==null?1:b.lsp,0,3,0.1,(b.lsp==null?1:b.lsp).toFixed(1))}<p class="hint" style="margin:0">行間は、改行したときの行と行のあいだです（1.0がふつう）。</p>`;
+      else body=`${rng('bFs','文字の大きさ',Math.round(b.fs*1000),18,70,1,Math.round(b.fs*1000))}${rng('bWrap','1行の文字数',b.wrap,2,20,1,b.wrap)}${rng('bCsp','文字の間',b.csp||0,-0.3,1,0.05,(b.csp||0).toFixed(2))}${rng('bLsp','行間',b.lsp==null?1:b.lsp,0,3,0.1,(b.lsp==null?1:b.lsp).toFixed(1))}<p class="hint" style="margin:0">文字の間は、となりの字とのすき間です（0がふつう、マイナスで詰まる）。行間は、改行したときの行と行のあいだです（1.0がふつう）。</p>`;
       box.innerHTML=`<div class="sec">${bar}${T}${body}</div>`;
       const ta=$('#bText');if(ta){ta.oninput=e=>{b.text=e.target.value;save('works',w);redraw();};
         /* キーボードが出たら、入力欄が見本の下に隠れないように画面の下へ寄せる */
@@ -1227,6 +1232,7 @@ function vComic(c){
       $$('[data-bl]',box).forEach(x=>x.onclick=()=>{b.line=x.dataset.bl;S.meta.lastLine=b.line;dbPut('meta',S.meta);save('works',w);draw();ctl();});
       const lwr=$('#bLw');if(lwr)lwr.oninput=e=>{b.lw=+e.target.value;$('#bLwv').textContent=b.lw.toFixed(1);S.meta.lastLw=b.lw;save('works',w);redraw();};
       const fsr=$('#bFs');if(fsr)fsr.oninput=e=>{b.fs=+e.target.value/1000;$('#bFsv').textContent=e.target.value;save('works',w);redraw();};
+      const csr=$('#bCsp');if(csr)csr.oninput=e=>{b.csp=+e.target.value;$('#bCspv').textContent=b.csp.toFixed(2);save('works',w);redraw();};
       const lsr=$('#bLsp');if(lsr)lsr.oninput=e=>{b.lsp=+e.target.value;$('#bLspv').textContent=b.lsp.toFixed(1);save('works',w);redraw();};
       const wrr=$('#bWrap');if(wrr)wrr.oninput=e=>{b.wrap=+e.target.value;$('#bWrapv').textContent=e.target.value;save('works',w);redraw();};
       const bt=$('#bTail');if(bt)bt.onchange=e=>{b.tail=e.target.checked;save('works',w);draw();};
@@ -1355,10 +1361,12 @@ function vSettings(){
   </div>
   <div class="sec"><h2>字体（セリフの文字）</h2>
     <p class="hint" style="margin:0 0 10px">字体のファイル（.ttf・.otf・.woff）を取り込むと、吹き出しで使えます。ファイルはこのスマホの中に保存するので、ネットにつながなくても使えます。字体の使い方の決まり（ライセンス）は、配っているところで確かめてください。</p>
-    ${FONTS.length?FONTS.map(f=>`<div class="lrow"><div class="ln"><span style="font-family:'${fontFam(f.id)}';font-size:20px">${esc(f.name)}　あいうえお 漢字 ABC</span><small>${esc(f.file||'')}・${(f.size/1024).toFixed(0)} KB${f.broken?'・<b style="color:var(--warn)">読み込めません</b>':''}${S.meta.jpFont===f.id?'・<b>基本の字体</b>':''}</small></div><button class="btn ghost sm" data-fdef="${f.id}">${S.meta.jpFont===f.id?'基本をやめる':'基本にする'}</button><button class="btn danger sm" data-fdel="${f.id}">削除</button></div>`).join('')
+    ${FONTS.length?`<div class="f"><span>いつもの字体</span><div class="tgs"><button type="button" class="tg ${!S.meta.jpFont?'on':''}" data-fdef="">スマホの字体（太字）</button>${FONTS.filter(f=>f.loaded).map(f=>`<button type="button" class="tg ${S.meta.jpFont===f.id?'on':''}" data-fdef="${f.id}" style="font-family:'${fontFam(f.id)}',${FONT}">${esc(f.name)}</button>`).join('')}</div>
+      <span class="hint">新しく作る吹き出しは、この字体になります。吹き出しの「字体」で別の字体を選んだものは、そのままです。</span></div>
+    <div class="f"><span>取り込んだ字体</span></div>`+FONTS.map(f=>`<div class="lrow"><div class="ln"><span style="font-family:'${fontFam(f.id)}';font-size:20px">${esc(f.name)}　あいうえお 漢字 ABC</span><small>${esc(f.file||'')}・${(f.size/1024).toFixed(0)} KB${f.broken?'・<b style="color:var(--warn)">読み込めません</b>':''}${S.meta.jpFont===f.id?'・<b>いつもの字体</b>':''}</small></div><button class="btn danger sm" data-fdel="${f.id}">削除</button></div>`).join('')
     :'<p class="hint">まだ字体を取り込んでいません。今は、スマホに入っている字体（太字）を使っています。</p>'}
     <div class="row" style="margin-top:10px"><button class="btn" id="fontHelp">字体の入れ方（くわしく）</button><label class="btn ghost">＋ 字体を取り込む<input type="file" accept=".ttf,.otf,.woff,.woff2,font/ttf,font/otf,font/woff,font/woff2,application/octet-stream" multiple hidden id="fontAdd"></label></div>
-    <span class="hint">「基本の字体」は、字体を選んでいない吹き出しで使います。英字だけの字体（あんバタフォントなど）を吹き出しで選んだときも、日本語の文字はこの基本の字体で出ます。</span>
+    <span class="hint">英字だけの字体（あんバタフォントなど）を吹き出しで選んだときは、日本語の文字は「いつもの字体」で出ます。</span>
   </div>
   <div class="sec"><h2>セリフ画像</h2>
     <p class="hint" style="margin:0 0 10px">文字を書いた画像を取り込んで、吹き出しの代わりにコマへ置けます。今 ${STAMPS.length} 枚あります。</p>
@@ -1379,7 +1387,7 @@ function vSettings(){
   $('#fontHelp').onclick=openFontHelp;
   $('#stMng').onclick=()=>openStamps(null);
   $('#fontAdd').onchange=async e=>{const fs=[...e.target.files];e.target.value='';let n=0;for(const f of fs){try{const r=await addFont(f);n++;if(!S.meta.jpFont&&/[ぁ-んァ-ン一-龥]|shippori|しっぽり|antique|アンチック/i.test(r.name)){S.meta.jpFont=r.id;await dbPut('meta',S.meta);}}catch(_){toast(f.name+' は取り込めませんでした');}}if(n){toast(n+'個の字体を取り込みました');render(true);}};
-  $$('[data-fdef]',view).forEach(b=>b.onclick=async()=>{S.meta.jpFont=S.meta.jpFont===b.dataset.fdef?'':b.dataset.fdef;await dbPut('meta',S.meta);render(true);});
+  $$('[data-fdef]',view).forEach(b=>b.onclick=async()=>{S.meta.jpFont=b.dataset.fdef;await dbPut('meta',S.meta);render(true);});
   $$('[data-fdel]',view).forEach(b=>b.onclick=async()=>{const id=b.dataset.fdel;const used=S.works.reduce((n,w)=>n+(w.comps||[]).reduce((m,c)=>m+((c&&c.bubbles)||[]).filter(x=>x.font===id).length,0),0);
     if(!confirm(used?`この字体は ${used} 個の吹き出しで使っています。削除すると、その吹き出しは基本の字体になります。削除しますか？`:'この字体を削除しますか？'))return;
     await dbDel('fonts',id);FONTS=FONTS.filter(f=>f.id!==id);if(S.meta.jpFont===id){S.meta.jpFont='';await dbPut('meta',S.meta);}
@@ -1414,7 +1422,7 @@ function openFontHelp(){
   ${step(1,'「＋ 字体を取り込む」を押す','<p>このアプリの下の「<b>保存・設定</b>」→「<b>字体</b>」の欄にあります。</p>')}
   ${step(2,'ファイルを選ぶ','<p>ファイルを選ぶ画面が出ます。左上の「≡」を押して「<b>ダウンロード</b>」を選び、展開してできたフォルダを開いて、<code>.ttf</code> のファイルを押します。</p><p class="hint">一度に何個か選べます（長押しで選ぶ）。</p>')}
   ${step(3,'一覧に出たら完了','<p>「字体」の欄に、字体の名前と「あいうえお 漢字 ABC」の見本が、その字体で出ます。あんバタフォントは英字だけなので、日本語の見本はふつうの字のままです。</p>')}
-  ${step(4,'「基本にする」を押す','<p>しっぽりアンチックの横の「<b>基本にする</b>」を押します。字体を選んでいない吹き出しは、すべてこの字体になります。</p>')}
+  ${step(4,'「いつもの字体」で選ぶ','<p>「保存・設定」の字体の欄にある「<b>いつもの字体</b>」で、しっぽりアンチックを押します。新しく作る吹き出しは、すべてこの字体になります。</p>')}
   </div>
 
   <div class="hsec"><h3>5. 吹き出しで使う</h3>
