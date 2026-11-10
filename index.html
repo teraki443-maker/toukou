@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,interactive-widget=resizes-content">
 <meta name="theme-color" content="#ffffff">
 <title>投稿</title>
 <link rel="manifest" href="manifest.webmanifest">
@@ -40,12 +40,12 @@ nav#tabs button.on{color:var(--acc);font-weight:700}
 
 /* 部品 */
 .sec{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:14px;margin:0 0 12px}
-.sec>h2{font-size:14px;margin:0 0 10px;display:flex;align-items:center;gap:8px}
+.sec>h2{font-size:14px;margin:0 0 10px;display:flex;align-items:baseline;flex-wrap:wrap;column-gap:8px;row-gap:0}
 .sec>h2 small{font-weight:400;color:var(--sub);font-size:12px}
 .f{display:block;margin:0 0 12px}
 .f>span{display:block;font-size:12px;color:var(--sub);margin-bottom:4px;font-weight:600}
 .tgs{display:flex;flex-wrap:wrap;gap:6px}
-.tg{border:1px solid #d3d6db;background:#fff;border-radius:999px;padding:5px 12px;font-size:13px}
+.tg{border:1px solid #d3d6db;background:#fff;border-radius:999px;padding:6px 13px;font-size:13px;min-height:34px}
 .tg.on{background:var(--acc);border-color:var(--acc);color:#fff;font-weight:700}
 .tg.new{border-style:dashed;color:var(--acc)}
 .pbox mark{border-radius:4px;padding:0 2px;font-weight:700}
@@ -67,6 +67,24 @@ nav#tabs button.on{color:var(--acc);font-weight:700}
 .ptabs small{font-size:11px;color:var(--sub)}
 .cwrap{width:100%;margin:0 auto 10px;border-radius:8px;overflow:hidden;box-shadow:0 1px 6px rgba(0,0,0,.15);background:#fff}
 .cwrap canvas{display:block;width:100%;height:100%;touch-action:none}
+.cwrap{max-width:calc(62vh * var(--arn))}
+/* 吹き出しを選んでいる間：上に見本を貼りつけ、下の操作をタブで切り替える（1画面で完結） */
+body.editing nav#tabs{display:none}
+body.editing main{padding-bottom:calc(24px + env(safe-area-inset-bottom))}
+body.editing .noedit{display:none}
+body.editing .cstick{position:sticky;top:52px;z-index:6;background:var(--bg);margin:-14px -16px 8px;padding:8px 16px 6px;box-shadow:0 6px 8px -8px rgba(0,0,0,.25)}
+body.editing .cstick .ptabs{display:none}
+body.editing .cwrap{max-width:calc(44dvh * var(--arn));margin-bottom:0}
+body.editing .cwrap{max-height:44dvh}
+#bText{scroll-margin-bottom:12px}
+@media (max-height:600px){body.editing .cwrap{max-width:calc(36dvh * var(--arn))}}
+.ebar{display:flex;align-items:center;gap:6px;margin:0 0 6px}
+.ebar b{flex:1;font-size:14px;min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.ebar .btn.sm{padding:5px 9px}
+.etabs{display:flex;margin:0 -14px 12px;border-bottom:1px solid var(--line)}
+.etabs button{flex:1;border:0;background:none;padding:9px 0;font-size:14px;color:var(--sub);border-bottom:2px solid transparent;margin-bottom:-1px}
+.etabs button.on{color:var(--acc);border-color:var(--acc);font-weight:700}
+#cctl .sec .f:last-child{margin-bottom:0}
 .ctool{display:flex;gap:6px;flex-wrap:wrap;justify-content:center;margin-bottom:12px}
 .btn.onb{background:var(--ink);border-color:var(--ink);color:#fff}
 .memo{margin:0;white-space:pre-wrap;font-size:14px}
@@ -135,7 +153,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--acc);outline-off
 .btn.ghost{background:#fff;color:var(--acc)}
 .btn.ghost:active{background:var(--acc-l)}
 .btn.danger{background:#fff;color:var(--warn);border-color:#f0c4c1}
-.btn.sm{padding:6px 11px;font-size:13px}
+.btn.sm{padding:6px 11px;font-size:13px;min-height:36px}
 .btn.wide{width:100%}
 .ico{border:1px solid #d3d6db;background:#fff;border-radius:10px;width:42px;flex:0 0 42px;color:var(--acc);font-size:16px}
 .empty{text-align:center;color:var(--sub);padding:40px 12px}
@@ -163,7 +181,15 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--acc);outline-off
 .prow{display:flex;gap:12px;align-items:flex-start}
 .pthumb{flex:0 0 108px;width:108px;aspect-ratio:1/1;border:1px dashed #c5c9d0;border-radius:10px;background:#f6f7f9;padding:0;overflow:hidden;display:flex;align-items:center;justify-content:center;color:var(--sub);font-size:12px}
 .pthumb img{width:100%;height:100%;object-fit:cover}
-.pbtns{display:flex;flex-direction:column;gap:6px;align-items:flex-start;min-width:0}
+.pbtns{flex:1;display:grid;grid-template-columns:1fr 1fr;gap:6px;min-width:0}
+.pbtns .btn{width:100%;padding-left:4px;padding-right:4px;overflow:hidden;text-overflow:ellipsis}
+.pbtns .main{grid-column:1/-1;min-height:44px;font-size:14px}
+.panel .ph .linkx{margin-left:auto;flex:0 0 auto;border:0;background:none;color:var(--warn);font-size:13px;padding:4px 2px}
+.pthumb{flex-basis:96px!important;width:96px!important}
+.fab.sm{padding:10px 16px;font-size:14px;display:flex;align-items:center;gap:6px}
+.fab.sm svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+body.editing #toast{bottom:calc(24px + env(safe-area-inset-bottom))}
+@media (max-width:400px){.two.nar{grid-template-columns:1fr}}
 .prev{display:grid;grid-template-columns:1fr 1fr;gap:3px;border-radius:14px;overflow:hidden;background:#fff;border:1px solid var(--line)}
 .prev div{aspect-ratio:4/3;background:#eef0f3;display:flex;align-items:center;justify-content:center;overflow:hidden;color:#b5bac2;font-weight:700}
 .prev img{width:100%;height:100%;object-fit:cover}
@@ -438,7 +464,7 @@ $('#back').onclick=goBack;
 $$('#tabs button').forEach(b=>b.onclick=()=>setTab(b.dataset.tab));
 function setHead(t){$('#ttl').textContent=t;$('#back').hidden=stack.length<=1;}
 function render(keep){
-  const y=keep?scrollY:0;const c=cur();
+  const y=keep?scrollY:0;const c=cur();document.body.classList.remove('editing','typing');
   ({works:vWorks,work:vWork,comic:vComic,scenes:vScenes,scene:vScene,parts:vParts,settings:vSettings})[c.v](c);
   $$('#tabs button').forEach(b=>b.classList.toggle('on',b.dataset.tab===tab));
   hydrate(view);
@@ -484,16 +510,15 @@ function vWork(c){
   <label class="f"><span>タイトル</span><input id="wTitle" value="${esc(w.title)}" placeholder="例：海でのハプニング"></label>
   ${[0,1,2,3].map(i=>{const sc=byId('scenes',w.panels[i]);const im=sc&&sc.images&&sc.images[0];
   return `<div class="sec panel">
-    <div class="ph"><span class="role r${i}">${ROLE[i]}</span><b>${sc?esc(sc.title||'無題のシーン'):'<span class="muted">シーンを選んでいません</span>'}</b></div>
+    <div class="ph"><span class="role r${i}">${ROLE[i]}</span><b>${sc?esc(sc.title||'無題のシーン'):'<span class="muted">シーンを選んでいません</span>'}</b>${sc?`<button class="linkx" data-act="clear" data-i="${i}">外す</button>`:''}</div>
     <div class="prow">
       <button class="pthumb" data-act="${sc?'open':'pick'}" data-i="${i}">${im?`<img data-img="${im}" alt="">`:(sc?'画像なし':'＋ 選ぶ')}</button>
       <div class="pbtns">
-        <button class="btn sm" data-act="pick" data-i="${i}">${sc?'シーンを変える':'シーンを選ぶ'}</button>
-        ${sc?`<button class="btn sm" data-act="comic" data-i="${i}">吹き出し・仕上げ${(getComp(w,i).bubbles||[]).length?`（${getComp(w,i).bubbles.length}）`:''}</button>
-        <button class="btn sm ghost" data-act="open" data-i="${i}">シーンを開く</button>
-        <button class="btn sm ghost" data-act="copy" data-i="${i}">プロンプトをコピー</button>
-        <button class="btn sm danger" data-act="clear" data-i="${i}">外す</button>`
-        :`<button class="btn sm ghost" data-act="newsc" data-i="${i}">新しく作る</button>`}
+        ${sc?`<button class="btn sm main" data-act="comic" data-i="${i}">吹き出し・仕上げ${(getComp(w,i).bubbles||[]).length?`（${getComp(w,i).bubbles.length}）`:''}</button>
+        <button class="btn sm ghost" data-act="copy" data-i="${i}">コピー</button>
+        <button class="btn sm ghost" data-act="open" data-i="${i}">シーン</button>
+        <button class="btn sm ghost" data-act="pick" data-i="${i}" style="grid-column:1/-1">シーンを変える</button>`
+        :`<button class="btn sm main" data-act="pick" data-i="${i}">シーンを選ぶ</button><button class="btn sm ghost" data-act="newsc" data-i="${i}" style="grid-column:1/-1">新しく作る</button>`}
       </div>
     </div>
     <label class="f" style="margin:10px 0 0"><span>セリフ・メモ（この作品だけ）</span><textarea data-line="${i}" rows="2" placeholder="例：ミカ「えっ、ここどこ！？」">${esc(w.lines[i]||'')}</textarea></label>
@@ -647,7 +672,7 @@ function vScene(c){
   ${u.length?`<p class="hint">使っている作品：${u.map(x=>`${esc(x.w.title||'無題の4コマ')}（${ROLE[x.i]}）`).join('、')}</p>`:''}
   <div class="row"><button class="btn" id="sDup">複製して少し変える</button><button class="btn danger" id="sDel">削除</button></div>
   <p class="hint">「複製して少し変える」は、部品の選び方とタグをそのまま写した新しいシーンを作ります（画像は写しません）。</p>
-  <button class="fab" id="fabCopy">プロンプトをコピー</button>`;
+  <button class="fab sm" id="fabCopy" aria-label="プロンプトをコピー"><svg viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3"/></svg>コピー</button>`;
   $('#fabCopy').onclick=()=>copyText(buildPrompt(sc).pos);
 
   sc.weights=sc.weights||{};
@@ -1072,7 +1097,7 @@ function openSets(w,i,comp,getSel,onDone){
 function linesToTexts(s){const m=[...String(s||'').matchAll(/[「『]([^」』]*)[」』]/g)].map(x=>x[1].trim()).filter(Boolean);
   return m.length?m:String(s||'').split('\n').map(x=>x.trim()).filter(Boolean);}
 
-let cSel=null,panMode=false,stampPickReplace=false;
+let cSel=null,panMode=false,stampPickReplace=false,ctlTab='text';
 function vComic(c){
   const w=byId('works',c.id);if(!w){stack.pop();return render();}
   const i=c.i,comp=getComp(w,i),sc=byId('scenes',w.panels[i]);
@@ -1080,18 +1105,20 @@ function vComic(c){
   setHead('仕上げ：'+(w.title||'無題の4コマ'));
   const[EW,EH]=expWH();
   view.innerHTML=`
-  <div class="ptabs">${ROLE.map((r,k)=>`<button data-pi="${k}" class="${k===i?'on':''}"><span class="role r${k}">${r}</span>${(getComp(w,k).bubbles||[]).length?`<small>${getComp(w,k).bubbles.length}</small>`:''}</button>`).join('')}</div>
-  <div class="cwrap" id="cwrap" style="aspect-ratio:${EW}/${EH};max-width:calc(62vh * ${EW} / ${EH})"><canvas id="cv"></canvas></div>
-  <div class="ctool"><button class="btn sm" id="addB">＋ 吹き出し</button><button class="btn sm ghost" id="stampB">セリフ画像</button><button class="btn sm ghost" id="fromSet">セットから</button><button class="btn sm ghost" id="fromLine">セリフから作る</button><button class="btn sm ghost ${panMode?'onb':''}" id="panB">${panMode?'✓ 絵を動かす':'絵を動かす'}</button></div>
+  <div class="cstick"><div class="ptabs">${ROLE.map((r,k)=>`<button data-pi="${k}" class="${k===i?'on':''}"><span class="role r${k}">${r}</span>${(getComp(w,k).bubbles||[]).length?`<small>${getComp(w,k).bubbles.length}</small>`:''}</button>`).join('')}</div>
+  <div class="cwrap" id="cwrap" style="aspect-ratio:${EW}/${EH};--arn:${EW/EH}"><canvas id="cv"></canvas></div></div>
+  <div class="ctool noedit"><button class="btn sm" id="addB">＋ 吹き出し</button><button class="btn sm ghost" id="stampB">セリフ画像</button><button class="btn sm ghost" id="fromSet">セットから</button><button class="btn sm ghost" id="fromLine">セリフから作る</button><button class="btn sm ghost ${panMode?'onb':''}" id="panB">${panMode?'✓ 絵を動かす':'絵を動かす'}</button></div>
   <div id="cctl"></div>
-  ${w.lines[i]?`<div class="sec"><h2>セリフ・メモ <small>作品の画面で書いたもの</small></h2><p class="memo">${esc(w.lines[i])}</p></div>`:''}
-  <div class="row"><button class="btn ghost" id="saveOne">この1枚を保存</button><button class="btn" id="expAll">4枚を書き出す</button></div>
-  <p class="hint">吹き出しは押すと選べます。選んだ吹き出しは指で動かせます。青い丸を動かすと、しっぽの向きが変わります。</p>`;
+  ${w.lines[i]?`<div class="sec noedit"><h2>セリフ・メモ <small>作品の画面で書いたもの</small></h2><p class="memo">${esc(w.lines[i])}</p></div>`:''}
+  <div class="row noedit"><button class="btn ghost" id="saveOne">この1枚を保存</button><button class="btn" id="expAll">4枚を書き出す</button></div>
+  <p class="hint noedit">吹き出しは押すと選べます。選んだ吹き出しは指で動かせます。青い丸を動かすと、しっぽの向きが変わります。</p>`;
   const cv=$('#cv'),wrap=$('#cwrap');
-  const dpr=Math.min(2,window.devicePixelRatio||1);const cssW=wrap.clientWidth,cssH=cssW*EH/EW;
-  cv.width=Math.round(cssW*dpr);cv.height=Math.round(cssH*dpr);
-  const ctx=cv.getContext('2d');let img=null,geoms=[],raf=0;
-  const W=cv.width,H=cv.height,unit=W/cssW;
+  const dpr=Math.min(2,window.devicePixelRatio||1);
+  const ctx=cv.getContext('2d');let img=null,geoms=[],raf=0,W=1,H=1,unit=1;
+  /* 見本の大きさが変わったら（選ぶ・キーボードが出る など）描き直す */
+  const fitCv=()=>{const cssW=wrap.clientWidth||1;const nw=Math.round(cssW*dpr);if(nw===cv.width&&W>1)return false;cv.width=nw;cv.height=Math.round(cssW*EH/EW*dpr);W=cv.width;H=cv.height;unit=W/cssW;return true;};
+  fitCv();
+  if(window.ResizeObserver){const ro=new ResizeObserver(()=>{if(!wrap.isConnected)return ro.disconnect();if(fitCv())draw();});ro.observe(wrap);}
   const draw=()=>{raf=0;geoms=drawPanel(ctx,W,H,w,i,img,{sel:cSel,unit});};
   const redraw=()=>{if(!raf)raf=requestAnimationFrame(draw);};
   draw();stampRedraw=redraw;
@@ -1099,11 +1126,11 @@ function vComic(c){
   preloadStamps(comp.bubbles).then(redraw);
   /* 操作 */
   $$('.ptabs button',view).forEach(b=>b.onclick=()=>{flush();cSel=null;cur().i=+b.dataset.pi;render();});
-  $('#addB').onclick=()=>{const b=newBubble('セリフ',comp.bubbles.length);comp.bubbles.push(b);cSel=comp.bubbles.length-1;save('works',w);draw();ctl();setTimeout(()=>{const t=$('#bText');if(t){t.focus();t.select();}},50);};
+  $('#addB').onclick=()=>{ctlTab='text';const b=newBubble('セリフ',comp.bubbles.length);comp.bubbles.push(b);cSel=comp.bubbles.length-1;save('works',w);draw();ctl();setTimeout(()=>{const t=$('#bText');if(t){t.focus();t.select();}},50);};
   $('#fromLine').onclick=()=>{const ts=linesToTexts(w.lines[i]);if(!ts.length)return toast('この コマのセリフ・メモが空です（作品の画面で書けます）');
     if(comp.bubbles.length&&!confirm(`セリフ・メモから ${ts.length} 個の吹き出しを足します。今の吹き出しは残ります。よろしいですか？`))return;
-    const n=comp.bubbles.length;ts.forEach((t,k)=>comp.bubbles.push(newBubble(t,n+k)));cSel=comp.bubbles.length-1;save('works',w);draw();ctl();toast(ts.length+'個の吹き出しを作りました');};
-  $('#fromSet').onclick=()=>openSets(w,i,comp,()=>cSel,(sel,focus)=>{cSel=sel;panMode=false;render(true);if(focus)setTimeout(()=>{const t=$('#bText');if(t){t.focus();t.select();}},80);});
+    ctlTab='text';const n=comp.bubbles.length;ts.forEach((t,k)=>comp.bubbles.push(newBubble(t,n+k)));cSel=comp.bubbles.length-1;save('works',w);draw();ctl();toast(ts.length+'個の吹き出しを作りました');};
+  $('#fromSet').onclick=()=>openSets(w,i,comp,()=>cSel,(sel,focus)=>{cSel=sel;panMode=false;if(focus)ctlTab='text';render(true);if(focus)setTimeout(()=>{const t=$('#bText');if(t){t.focus();t.select();}},80);});
   const placeStamp=id=>{loadStamp(id).then(()=>{const sb=cSel!=null?comp.bubbles[cSel]:null;
       if(sb&&sb.type==='img'&&stampPickReplace){sb.stamp=id;}else{const nb=newStampB(id,comp.bubbles.length);const o=stampImg[id];if(o&&o.im){const[EW,EH]=expWH();nb.sz=Math.min(0.2,0.6*(EW/EH)*o.im.naturalHeight/o.im.naturalWidth);nb.x=0.5;}comp.bubbles.push(nb);cSel=comp.bubbles.length-1;}
       stampPickReplace=false;panMode=false;save('works',w);render(true);});};
@@ -1137,57 +1164,67 @@ function vComic(c){
   /* 下の操作欄 */
   function ctl(){
     const box=$('#cctl');const b=cSel!=null?comp.bubbles[cSel]:null;
+    document.body.classList.toggle('editing',!!b);if(!b)document.body.classList.remove('typing');
+    /* 上の帯：何番目か・前後の吹き出し・よく使う操作 */
+    const n=comp.bubbles.length;
+    const bar=b?`<div class="ebar"><button class="btn ghost sm" id="bPrev" ${n<2?'disabled':''} aria-label="前の吹き出し">‹</button><b>${cSel+1}／${n}</b><button class="btn ghost sm" id="bNext" ${n<2?'disabled':''} aria-label="次の吹き出し">›</button><button class="btn ghost sm" id="bDup">複製</button><button class="btn danger sm" id="bDel">削除</button><button class="btn sm" id="bDone">完了</button></div>`:'';
+    const tabs=list=>{if(!list.some(([k])=>k===ctlTab))ctlTab=list[0][0];return `<div class="etabs">${list.map(([k,l])=>`<button type="button" class="${k===ctlTab?'on':''}" data-et="${k}">${l}</button>`).join('')}</div>`;};
+    const owRow=v=>v?`<label class="f"><span>外枠の太さ <b id="owv">${(b.ow||1).toFixed(1)}</b></span><input type="range" id="bOw" min="0.3" max="3" step="0.1" value="${b.ow||1}"></label>`:'';
+    const more=`<div class="row" style="margin:4px 0 0"><button class="btn ghost sm" id="bSet">セットに登録</button><button class="btn ghost sm" id="bFront">いちばん前へ</button></div>`;
     const common=()=>{
+      $$('[data-et]',box).forEach(x=>x.onclick=()=>{ctlTab=x.dataset.et;ctl();});
       $$('[data-ck]',box).forEach(x=>{const k=x.dataset.ck;
         if(x.tagName==='INPUT'){x.oninput=e=>{b[k]=e.target.value;save('works',w);redraw();};x.onchange=()=>{draw();ctl();};}
         else x.onclick=()=>{b[k]=x.dataset.cv;save('works',w);draw();ctl();};});
+      const on=(id,f)=>{const el=$('#'+id);if(el)el.onclick=f;};
       const owr=$('#bOw');if(owr)owr.oninput=e=>{b.ow=+e.target.value;$('#owv').textContent=b.ow.toFixed(1);save('works',w);redraw();};
-      $('#bSet').onclick=()=>$('#fromSet').click();
-      $('#bDup').onclick=()=>{const n=JSON.parse(JSON.stringify(b));n.id=uid();n.x=Math.min(1,n.x+0.05);n.y=Math.min(1,n.y+0.05);n.tx+=0.05;n.ty+=0.05;comp.bubbles.push(n);cSel=comp.bubbles.length-1;save('works',w);draw();ctl();};
-      $('#bFront').onclick=()=>{comp.bubbles.splice(cSel,1);comp.bubbles.push(b);cSel=comp.bubbles.length-1;save('works',w);draw();ctl();};
-      $('#bDel').onclick=()=>{comp.bubbles.splice(cSel,1);cSel=null;save('works',w);draw();ctl();};
-      $('#bDone').onclick=()=>{cSel=null;draw();ctl();};
+      const go2=d=>{cSel=(cSel+d+n)%n;draw();ctl();};
+      on('bPrev',()=>go2(-1));on('bNext',()=>go2(1));
+      on('bSet',()=>$('#fromSet').click());
+      on('bDup',()=>{const c=JSON.parse(JSON.stringify(b));c.id=uid();c.x=Math.min(1,c.x+0.05);c.y=Math.min(1,c.y+0.05);c.tx+=0.05;c.ty+=0.05;comp.bubbles.push(c);cSel=comp.bubbles.length-1;save('works',w);draw();ctl();});
+      on('bFront',()=>{comp.bubbles.splice(cSel,1);comp.bubbles.push(b);cSel=comp.bubbles.length-1;save('works',w);draw();ctl();});
+      on('bDel',()=>{comp.bubbles.splice(cSel,1);cSel=null;save('works',w);draw();ctl();});
+      on('bDone',()=>{cSel=null;draw();ctl();});
     };
-    const owRow=v=>v?`<label class="f"><span>外枠の太さ <b id="owv">${(b.ow||1).toFixed(1)}</b></span><input type="range" id="bOw" min="0.3" max="3" step="0.1" value="${b.ow||1}"></label>`:'';
-    const btns=`<div class="row" style="margin-bottom:0"><button class="btn ghost sm" id="bSet">セットに登録</button><button class="btn ghost sm" id="bDup">複製</button><button class="btn ghost sm" id="bFront">いちばん前へ</button><button class="btn danger sm" id="bDel">削除</button><button class="btn ghost sm" id="bDone">選ぶのをやめる</button></div>`;
+    const rng=(id,label,v,min,max,step,shown)=>`<label class="f"><span>${label} <b id="${id}v">${shown}</b></span><input type="range" id="${id}" min="${min}" max="${max}" step="${step}" value="${v}"></label>`;
     if(b&&b.type==='img'){
       const r=STAMPS.find(x=>x.id===b.stamp);
-      box.innerHTML=`<div class="sec"><h2>セリフ画像 <small>${esc(r?r.name:'見つかりません')}・${cSel+1}／${comp.bubbles.length}</small></h2>
-      <label class="f"><span>大きさ <b id="szv">${Math.round((b.sz||.16)*100)}</b></span><input type="range" id="bSz" min="3" max="90" step="1" value="${Math.round((b.sz||.16)*100)}"></label>
-      <label class="f"><span>傾き <b id="rtv">${b.rot||0}°</b></span><input type="range" id="bRot" min="-45" max="45" step="1" value="${b.rot||0}"></label>
-      ${colorRow('色（文字の部分を塗りかえる）','color',b.color,'元の色')}
-      ${colorRow('外枠の色','oc',b.oc,'なし')}
-      ${owRow(b.oc)}
-      <div class="row"><button class="btn ghost sm" id="bSwap">ほかの画像に替える</button></div>
-      ${btns}</div>`;
-      $('#bSz').oninput=e=>{b.sz=+e.target.value/100;$('#szv').textContent=e.target.value;save('works',w);redraw();};
-      $('#bRot').oninput=e=>{b.rot=+e.target.value;$('#rtv').textContent=b.rot+'°';save('works',w);redraw();};
-      $('#bSwap').onclick=()=>{stampPickReplace=true;openStamps(placeStamp);};
+      const T=tabs([['size','大きさ・傾き'],['color','色・外枠']]);
+      const body=ctlTab==='size'?`${rng('bSz','大きさ',Math.round((b.sz||.16)*100),3,90,1,Math.round((b.sz||.16)*100))}
+        ${rng('bRot','傾き',b.rot||0,-45,45,1,(b.rot||0)+'°')}
+        <div class="row" style="margin:4px 0 0"><button class="btn ghost sm" id="bSwap">ほかの画像に替える</button><button class="btn ghost sm" id="bSet">セットに登録</button><button class="btn ghost sm" id="bFront">いちばん前へ</button></div>
+        <p class="hint" style="margin:8px 0 0">${esc(r?r.name:'画像が見つかりません')}</p>`
+        :`${colorRow('色（文字の部分を塗りかえる）','color',b.color,'元の色')}${colorRow('外枠の色','oc',b.oc,'なし')}${owRow(b.oc)}`;
+      box.innerHTML=`<div class="sec">${bar}${T}${body}</div>`;
+      const sz=$('#bSz');if(sz)sz.oninput=e=>{b.sz=+e.target.value/100;$('#bSzv').textContent=e.target.value;save('works',w);redraw();};
+      const rt=$('#bRot');if(rt)rt.oninput=e=>{b.rot=+e.target.value;$('#bRotv').textContent=b.rot+'°';save('works',w);redraw();};
+      const sw=$('#bSwap');if(sw)sw.onclick=()=>{stampPickReplace=true;openStamps(placeStamp);};
       common();
     }else if(b){
-      box.innerHTML=`<div class="sec"><h2>吹き出し ${cSel+1} <small>${comp.bubbles.length}個中</small></h2>
-      <label class="f"><span>セリフ（改行で行を分けられます）</span><textarea id="bText" rows="2">${esc(b.text)}</textarea></label>
-      <div class="f"><span>形</span><div class="tgs">${BTYPES.map(([k,l])=>`<button type="button" class="tg ${b.type===k?'on':''}" data-bt="${k}">${l}</button>`).join('')}</div></div>
-      <div class="f"><span>書き方</span><div class="tgs"><button type="button" class="tg ${b.vertical?'on':''}" data-bv="1">縦書き</button><button type="button" class="tg ${b.vertical?'':'on'}" data-bv="0">横書き</button></div></div>
-      <div class="f"><span>字体</span><div class="tgs"><button type="button" class="tg ${!b.font?'on':''}" data-bf="">基本${S.meta.jpFont?'':'（スマホの字体）'}</button>${FONTS.filter(f=>f.loaded).map(f=>`<button type="button" class="tg ${b.font===f.id?'on':''}" data-bf="${f.id}" style="font-family:'${fontFam(f.id)}',${FONT}">${esc(f.name)}</button>`).join('')}</div>${FONTS.length?'':'<span class="hint">字体は「保存・設定」の「字体」で取り込めます。<button type="button" class="linkb" id="bFontHelp">入れ方を見る</button></span>'}</div>
-      ${b.type!=='none'?`<div class="f"><span>輪郭の線</span><div class="tgs"><button type="button" class="tg ${b.line!=='brush'?'on':''}" data-bl="pen">ふつう</button><button type="button" class="tg ${b.line==='brush'?'on':''}" data-bl="brush">筆</button></div></div>
-      <label class="f"><span>線の太さ <b id="lwv">${(b.lw||1).toFixed(1)}</b></span><input type="range" id="bLw" min="0.4" max="3" step="0.1" value="${b.lw||1}"></label>`:''}
-      ${colorRow('文字の色','color',b.color||'#111111')}
-      ${colorRow('文字の外枠','oc',textOC(b),'なし')}
-      ${owRow(textOC(b))}
-      <label class="f"><span>文字の大きさ <b id="fsv">${Math.round(b.fs*1000)}</b></span><input type="range" id="bFs" min="18" max="70" step="1" value="${Math.round(b.fs*1000)}"></label>
-      <label class="f"><span>1行の文字数 <b id="wrv">${b.wrap}</b></span><input type="range" id="bWrap" min="2" max="20" step="1" value="${b.wrap}"></label>
-      ${b.type!=='box'&&b.type!=='none'?`<label class="switch" style="margin-bottom:12px"><input type="checkbox" id="bTail" ${b.tail?'checked':''}><span>しっぽを付ける</span></label>`:''}
-      ${btns}</div>`;
-      $('#bText').oninput=e=>{b.text=e.target.value;save('works',w);redraw();};
+      const T=tabs([['text','文字'],['color','色'],['shape','形'],['size','大きさ']]);
+      let body='';
+      if(ctlTab==='text')body=`<label class="f"><textarea id="bText" rows="2" placeholder="セリフ（改行で行を分けられます）">${esc(b.text)}</textarea></label>
+        <div class="f"><span>書き方</span><div class="tgs"><button type="button" class="tg ${b.vertical?'on':''}" data-bv="1">縦書き</button><button type="button" class="tg ${b.vertical?'':'on'}" data-bv="0">横書き</button></div></div>
+        <div class="f"><span>字体</span><div class="tgs"><button type="button" class="tg ${!b.font?'on':''}" data-bf="">基本${S.meta.jpFont?'':'（スマホの字体）'}</button>${FONTS.filter(f=>f.loaded).map(f=>`<button type="button" class="tg ${b.font===f.id?'on':''}" data-bf="${f.id}" style="font-family:'${fontFam(f.id)}',${FONT}">${esc(f.name)}</button>`).join('')}</div>${FONTS.length?'':'<span class="hint">字体は「保存・設定」の「字体」で取り込めます。<button type="button" class="linkb" id="bFontHelp">入れ方を見る</button></span>'}</div>`;
+      else if(ctlTab==='color')body=`${colorRow('文字の色','color',b.color||'#111111')}${colorRow('文字の外枠','oc',textOC(b),'なし')}${owRow(textOC(b))}`;
+      else if(ctlTab==='shape')body=`<div class="f"><div class="tgs">${BTYPES.map(([k,l])=>`<button type="button" class="tg ${b.type===k?'on':''}" data-bt="${k}">${l}</button>`).join('')}</div></div>
+        ${b.type!=='none'?`<div class="f"><span>輪郭の線</span><div class="tgs"><button type="button" class="tg ${b.line!=='brush'?'on':''}" data-bl="pen">ふつう</button><button type="button" class="tg ${b.line==='brush'?'on':''}" data-bl="brush">筆</button></div></div>
+        ${rng('bLw','線の太さ',b.lw||1,0.4,3,0.1,(b.lw||1).toFixed(1))}`:''}
+        ${b.type!=='box'&&b.type!=='none'?`<label class="switch" style="margin-bottom:8px"><input type="checkbox" id="bTail" ${b.tail?'checked':''}><span>しっぽを付ける<span class="hint">見本の青い丸を動かすと、しっぽの向きが変わります</span></span></label>`:''}${more}`;
+      else body=`${rng('bFs','文字の大きさ',Math.round(b.fs*1000),18,70,1,Math.round(b.fs*1000))}${rng('bWrap','1行の文字数',b.wrap,2,20,1,b.wrap)}`;
+      box.innerHTML=`<div class="sec">${bar}${T}${body}</div>`;
+      const ta=$('#bText');if(ta){ta.oninput=e=>{b.text=e.target.value;save('works',w);redraw();};
+        /* キーボードが出たら、入力欄が見本の下に隠れないように画面の下へ寄せる */
+        const show=()=>{if(document.activeElement===ta)ta.scrollIntoView({block:'end',behavior:'smooth'});};
+        ta.onfocus=()=>setTimeout(show,350);if(window.visualViewport&&!window._kbHook){window._kbHook=1;visualViewport.addEventListener('resize',()=>{const t=$('#bText');if(t&&document.activeElement===t)setTimeout(()=>t.scrollIntoView({block:'end'}),50);});}}
       $$('[data-bt]',box).forEach(x=>x.onclick=()=>{b.type=x.dataset.bt;save('works',w);draw();ctl();});
       $$('[data-bv]',box).forEach(x=>x.onclick=()=>{b.vertical=x.dataset.bv==='1';save('works',w);draw();ctl();});
       const bfh=$('#bFontHelp');if(bfh)bfh.onclick=openFontHelp;
       $$('[data-bf]',box).forEach(x=>x.onclick=()=>{b.font=x.dataset.bf;S.meta.lastFont=b.font;dbPut('meta',S.meta);save('works',w);draw();ctl();});
       $$('[data-bl]',box).forEach(x=>x.onclick=()=>{b.line=x.dataset.bl;S.meta.lastLine=b.line;dbPut('meta',S.meta);save('works',w);draw();ctl();});
-      const lwr=$('#bLw');if(lwr)lwr.oninput=e=>{b.lw=+e.target.value;$('#lwv').textContent=b.lw.toFixed(1);S.meta.lastLw=b.lw;save('works',w);redraw();};
-      $('#bFs').oninput=e=>{b.fs=+e.target.value/1000;$('#fsv').textContent=e.target.value;save('works',w);redraw();};
-      $('#bWrap').oninput=e=>{b.wrap=+e.target.value;$('#wrv').textContent=e.target.value;save('works',w);redraw();};
+      const lwr=$('#bLw');if(lwr)lwr.oninput=e=>{b.lw=+e.target.value;$('#bLwv').textContent=b.lw.toFixed(1);S.meta.lastLw=b.lw;save('works',w);redraw();};
+      const fsr=$('#bFs');if(fsr)fsr.oninput=e=>{b.fs=+e.target.value/1000;$('#bFsv').textContent=e.target.value;save('works',w);redraw();};
+      const wrr=$('#bWrap');if(wrr)wrr.oninput=e=>{b.wrap=+e.target.value;$('#bWrapv').textContent=e.target.value;save('works',w);redraw();};
       const bt=$('#bTail');if(bt)bt.onchange=e=>{b.tail=e.target.checked;save('works',w);draw();};
       common();
     }else{
@@ -1213,7 +1250,7 @@ async function openExport(w){
   const[EW,EH]=expWH();
   openSheet(`<h2>4枚を書き出す <small class="muted" style="font-size:12px;font-weight:400">1コマ1枚（B）</small></h2>
   <div class="expgrid" id="expG">${ROLE.map((r,i)=>`<div><span class="role r${i}">${r}</span><i>作っています…</i></div>`).join('')}</div>
-  <div class="two" style="margin:12px 0">
+  <div class="two nar" style="margin:12px 0">
     <label class="f"><span>大きさ</span><select id="exSize">${Object.keys(EXP_SIZES).map(k=>`<option value="${k}"${(EXP_SIZES[S.meta.expSize]?S.meta.expSize:'1600x1824')===k?' selected':''}>${EXP_LABEL[k]}</option>`).join('')}</select></label>
     <label class="f"><span>形式</span><select id="exType"><option value="jpeg"${S.meta.expType!=='png'?' selected':''}>JPEG（おすすめ）</option><option value="png"${S.meta.expType==='png'?' selected':''}>PNG（きれい・重い）</option></select></label>
   </div>
