@@ -3,7 +3,7 @@
      （つながらないときや遅いときは、スマホの中に保存したものを出す）
    ・画像などは保存したものをすぐに出し、裏で新しいものに入れ替える
    ・アプリを直したら、下の VERSION の数字を1つ上げる */
-const VERSION = 'v11';
+const VERSION = 'v12';
 const CACHE = 'toukou-' + VERSION;
 const FILES = ['./', './index.html', './manifest.webmanifest', './icon-192.png', './icon-512.png', './icon-maskable-512.png', './apple-touch-icon.png'];
 

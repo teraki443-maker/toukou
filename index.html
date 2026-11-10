@@ -330,7 +330,7 @@ const FMT={
 
 /* ========== データベース（IndexedDB） ========== */
 let db=null;
-const APP_VER='v11';/* sw.js の VERSION と同じにする */
+const APP_VER='v12';/* sw.js の VERSION と同じにする */
 const STORES=['parts','scenes','works','images','meta','fonts','stamps'];
 function openDB(){return new Promise((res,rej)=>{const r=indexedDB.open('manga4koma',3);r.onupgradeneeded=()=>{const d=r.result;for(const s of STORES)if(!d.objectStoreNames.contains(s))d.createObjectStore(s,{keyPath:'id'});};r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error);});}
 function tx(store,mode,fn){return new Promise((res,rej)=>{if(!db)return res(undefined);const t=db.transaction(store,mode);const req=fn(t.objectStore(store));let out;if(req)req.onsuccess=()=>{out=req.result;};t.oncomplete=()=>res(out);t.onerror=()=>rej(t.error);t.onabort=()=>rej(t.error);});}
@@ -948,7 +948,7 @@ function wrapText(text,max){
   return out.length?out:[''];
 }
 function bLayout(ctx,b,H){
-  const fs=b.fs*H;const lines=wrapText(b.text||'…',b.wrap||8);ctx.font=`${fontWeight(b)} ${fs}px ${fontStack(b)}`;
+  const fs=b.fs*H;const lines=wrapText(b.text||'…',b.wrap===0?9999:(b.wrap||8));/* 1行の文字数 0＝自動（改行したところだけで行を分ける） */ctx.font=`${fontWeight(b)} ${fs}px ${fontStack(b)}`;
   const g=b.lsp==null?1:b.lsp;/* 行間（1がふつう、0で行どうしがくっつく） */
   const cs=(b.csp||0)*fs;/* 文字の間（字の大きさに対する割合。0がふつう） */
   if(b.vertical){const step=fs*1.08+cs,colW=fs*(1+0.3*g);const maxN=Math.max(1,...lines.map(l=>[...l].length));return{fs,lines,step,colW,w:lines.length*colW-(colW-fs),h:maxN*step-(step-fs)};}
@@ -1019,14 +1019,19 @@ function brushStroke(ctx,sh,lw,seed,idx){
     ctx.beginPath();ctx.moveTo(a[0],a[1]);ctx.lineTo(b[0],b[1]);ctx.stroke();
   }
 }
+/* 透明度のための下書き用キャンバス（1枚を使い回す） */
+let OFF=null;function offFor(ctx){const c=ctx.canvas;if(!OFF)OFF=document.createElement('canvas');if(OFF.width!==c.width||OFF.height!==c.height){OFF.width=c.width;OFF.height=c.height;}const x=OFF.getContext('2d');x.setTransform(1,0,0,1,0,0);x.globalAlpha=1;x.globalCompositeOperation='source-over';x.clearRect(0,0,OFF.width,OFF.height);x.setTransform(ctx.getTransform());return x;}
+function putOff(ctx,a){ctx.save();ctx.setTransform(1,0,0,1,0,0);ctx.globalAlpha=a;ctx.drawImage(OFF,0,0);ctx.restore();}
+const al=v=>v==null?1:v;/* 濃さ（1＝そのまま、0＝見えない） */
 function drawText(ctx,b,L,cx,cy){
   ctx.save();ctx.font=`${fontWeight(b)} ${L.fs}px ${fontStack(b)}`;ctx.textAlign='center';ctx.textBaseline='middle';
   if(b.trot){ctx.translate(cx,cy);ctx.rotate(b.trot*DEG);ctx.translate(-cx,-cy);}/* 文字の角度 */
   /* 文字の置き場所を先に決め、外枠を全部描いてから文字を塗る（となりの字の外枠が上に重ならないように） */
   const gl=[];const put=(ch,x,y,r)=>gl.push([ch,x,y,r]);
   if(b.vertical){
-    const x0=cx+L.w/2-L.fs/2,y0=cy-L.h/2+L.fs/2;
-    L.lines.forEach((line,ci)=>{const x=x0-ci*L.colW;[...line].forEach((ch,j)=>{const y=y0+j*L.step;
+    /* 縦書きの行の並び：ふつうは左から（vdir:'rtl' で右から） */
+    const rtl=b.vdir==='rtl';const x0=rtl?cx+L.w/2-L.fs/2:cx-L.w/2+L.fs/2,y0=cy-L.h/2+L.fs/2;
+    L.lines.forEach((line,ci)=>{const x=rtl?x0-ci*L.colW:x0+ci*L.colW;[...line].forEach((ch,j)=>{const y=y0+j*L.step;
       if(V_ROT.includes(ch))put(ch,x,y,true);
       else if(V_PUNC.includes(ch))put(ch,x+L.fs*0.55,y-L.fs*0.55);
       else put(ch,x,y);});});
@@ -1037,10 +1042,16 @@ function drawText(ctx,b,L,cx,cy){
       /* 文字の間を変えたときは1字ずつ並べる */
       let x=cx-L.lw(line)/2;for(const ch of line){const cw=ctx.measureText(ch).width;put(ch,x+cw/2,y);x+=cw+L.cs;}});
   }
-  const each=fn=>{for(const[ch,x,y,r]of gl){if(r){ctx.save();ctx.translate(x,y);ctx.rotate(Math.PI/2);fn(ch,0,0);ctx.restore();}else fn(ch,x,y);}};
-  const oc=textOC(b);
-  if(oc){ctx.lineJoin='round';ctx.miterLimit=2;ctx.strokeStyle=oc;ctx.lineWidth=L.fs*0.24*(b.ow||1);each((ch,x,y)=>ctx.strokeText(ch,x,y));}
-  ctx.fillStyle=b.color||'#111';each((ch,x,y)=>ctx.fillText(ch,x,y));
+  const each=(c,fn)=>{for(const[ch,x,y,r]of gl){if(r){c.save();c.translate(x,y);c.rotate(Math.PI/2);fn(c,ch,0,0);c.restore();}else fn(c,ch,x,y);}};
+  const oc=textOC(b),ca=al(b.ca),oa=al(b.oa);
+  const stroke=c=>{c.lineJoin='round';c.miterLimit=2;c.strokeStyle=oc;c.lineWidth=L.fs*0.24*(b.ow||1);each(c,(c,ch,x,y)=>c.strokeText(ch,x,y));};
+  if(oc&&oa>0){
+    if(oa>=1&&ca>=1)stroke(ctx);
+    else{/* 外枠だけを下書きに描き、字の形をくりぬいてから、濃さを付けて重ねる */
+      const x=offFor(ctx);x.font=ctx.font;x.textAlign='center';x.textBaseline='middle';stroke(x);
+      x.globalCompositeOperation='destination-out';x.fillStyle='#000';each(x,(c,ch,xx,y)=>c.fillText(ch,xx,y));putOff(ctx,oa);}
+  }
+  if(ca>0){ctx.globalAlpha=ca;ctx.fillStyle=b.color||'#111';each(ctx,(c,ch,x,y)=>c.fillText(ch,x,y));}
   ctx.restore();
 }
 function drawBubble(ctx,b,W,H){
@@ -1048,21 +1059,26 @@ function drawBubble(ctx,b,W,H){
     const o=stampImg[b.stamp],im=o&&o.im,cx=b.x*W,cy=b.y*H;
     if(!im){if(!o)loadStamp(b.stamp).then(()=>{if(stampRedraw)stampRedraw();});const r=H*0.05;ctx.save();ctx.strokeStyle='#9aa1ab';ctx.lineWidth=Math.max(1,H*0.003);ctx.setLineDash([r*0.3,r*0.2]);ctx.strokeRect(cx-r,cy-r,r*2,r*2);ctx.restore();return{cx,cy,rx:r,ry:r,rect:true};}
     const s=(b.sz||0.16)*H/im.naturalHeight;const{c}=stampCanvas(b,im);const dw=c.width*s,dh=c.height*s;
-    ctx.save();ctx.translate(cx,cy);ctx.rotate((b.rot||0)*Math.PI/180);ctx.drawImage(c,-dw/2,-dh/2,dw,dh);ctx.restore();
+    ctx.save();ctx.globalAlpha=al(b.ia);ctx.translate(cx,cy);ctx.rotate((b.rot||0)*Math.PI/180);ctx.drawImage(c,-dw/2,-dh/2,dw,dh);ctx.restore();
     return{cx,cy,rx:dw/2,ry:dh/2,rect:true};
   }
   const L=bLayout(ctx,b,H),g=bGeom(b,L,W,H);
   if(b.type!=='none'){
     const sh=bShapes(b,g,W,H);const lw=Math.max(1,H*0.0032)*(b.lw||1);
-    ctx.save();ctx.lineJoin='round';ctx.strokeStyle='#111';
-    if(b.brot){ctx.translate(g.cx,g.cy);ctx.rotate(b.brot*DEG);ctx.translate(-g.cx,-g.cy);}/* 吹き出しの角度 */
-    /* 線を描いてから白で塗ると、重なったところの線が消えて1つの形になる */
-    /* 中の色：決めていなければ白。''は透明（線だけ） */
-    const bg=b.bg===undefined?'#ffffff':b.bg;
-    if(b.line==='brush'){const seed=hashStr(b.id||'x');sh.forEach((s,k)=>{if(!s.inner)brushStroke(ctx,s,lw*(bg?1.35:0.9),seed,k);});}
-    else{ctx.lineWidth=bg?lw*2:lw;for(const s of sh){if(s.inner&&b.type==='think')continue;ctx.beginPath();pathPts(ctx,s.pts);ctx.stroke();}}
-    if(bg){ctx.fillStyle=bg;for(const s of sh){ctx.beginPath();pathPts(ctx,s.pts);ctx.fill();}}
-    ctx.restore();
+    /* 線を描いてから中を塗ると、重なったところの線が消えて1つの形になる
+       中の色：決めていなければ白。''は透明（線だけ）。線の色はふつう黒 */
+    const bg=b.bg===undefined?'#ffffff':b.bg,lc=b.lc||'#111111',la=al(b.la),bga=al(b.bga);
+    const rot=c=>{if(b.brot){c.translate(g.cx,g.cy);c.rotate(b.brot*DEG);c.translate(-g.cx,-g.cy);}};/* 吹き出しの角度 */
+    const lines=c=>{c.lineJoin='round';c.strokeStyle=lc;
+      if(b.line==='brush'){const seed=hashStr(b.id||'x');sh.forEach((s,k)=>{if(!s.inner)brushStroke(c,s,lw*(bg?1.35:0.9),seed,k);});}
+      else{c.lineWidth=bg?lw*2:lw;for(const s of sh){if(s.inner&&b.type==='think')continue;c.beginPath();pathPts(c,s.pts);c.stroke();}}};
+    const fills=(c,col)=>{c.fillStyle=col;for(const s of sh){c.beginPath();pathPts(c,s.pts);c.fill();}};
+    if(la>=1&&bga>=1){ctx.save();rot(ctx);lines(ctx);if(bg)fills(ctx,bg);ctx.restore();}
+    else{
+      /* 濃さを変えるときは、線だけを下書きに描いて中をくりぬき、線と中をそれぞれの濃さで重ねる */
+      if(la>0){const x=offFor(ctx);x.save();rot(x);lines(x);if(bg){x.globalCompositeOperation='destination-out';fills(x,'#000');}x.restore();putOff(ctx,la);}
+      if(bg&&bga>0){ctx.save();rot(ctx);ctx.globalAlpha=bga;fills(ctx,bg);ctx.restore();}
+    }
   }
   drawText(ctx,b,L,g.cx,g.cy);
   return rotBox(g,b.type==='none'?b.trot:b.brot);
@@ -1091,10 +1107,10 @@ async function renderFull(w,i){
   return new Promise(res=>cv.toBlob(b=>res(b),type,0.92));
 }
 const fileName=(w,i)=>`${(w.title||'4koma').replace(/[\\/:*?"<>|\s]+/g,'_')}_${i+1}_${ROLE[i]}.${S.meta.expType==='png'?'png':'jpg'}`;
-function newBubble(text,k){return{id:uid(),type:'round',font:'',/* 新しい吹き出しは「いつもの字体」 */line:S.meta.lastLine||'pen',lw:S.meta.lastLw||1,text:text||'セリフ',vertical:true,fs:0.034,wrap:6,x:k%2?0.3:0.72,y:Math.min(0.8,0.26+(k||0)*0.19),tail:true,tx:k%2?0.4:0.62,ty:Math.min(0.95,0.36+(k||0)*0.19)};}
+function newBubble(text,k){return{id:uid(),type:'round',font:'',/* 新しい吹き出しは「いつもの字体」 */line:S.meta.lastLine||'pen',lw:S.meta.lastLw||1,text:text||'セリフ',vertical:true,fs:0.034,wrap:0,x:k%2?0.3:0.72,y:Math.min(0.8,0.26+(k||0)*0.19),tail:true,tx:k%2?0.4:0.62,ty:Math.min(0.95,0.36+(k||0)*0.19)};}
 /* ========== よく使う吹き出しのセット ==========
    セット＝吹き出し1つ以上の「見た目と位置」（セリフの文字は保存するかを選べる）。S.meta.bsets に入る */
-const STYLE_KEYS=['type','font','line','lw','fs','wrap','vertical','tail','color','oc','ow','bg','lsp','csp','bsx','bsy','brot','trot'];
+const STYLE_KEYS=['type','font','line','lw','fs','wrap','vertical','tail','color','oc','ow','bg','lsp','csp','bsx','bsy','brot','trot','ca','oa','bga','la','lc','vdir'];
 function defaultSets(){
   const B=o=>Object.assign(newBubble('',0),{font:'',line:'pen',lw:1,x:.5,y:.4,tx:.42,ty:.62},o);
   return[
@@ -1157,7 +1173,7 @@ function openSets(w,i,comp,getSel,onDone){
 function linesToTexts(s){const m=[...String(s||'').matchAll(/[「『]([^」』]*)[」』]/g)].map(x=>x[1].trim()).filter(Boolean);
   return m.length?m:String(s||'').split('\n').map(x=>x.trim()).filter(Boolean);}
 
-let cSel=null,panMode=false,stampPickReplace=false,ctlTab='text';
+let cSel=null,panMode=false,stampPickReplace=false,ctlTab='text',colSub='text';
 function vComic(c){
   const w=byId('works',c.id);if(!w){stack.pop();return render();}
   const i=c.i,comp=getComp(w,i),sc=byId('scenes',w.panels[i]);
@@ -1229,7 +1245,8 @@ function vComic(c){
     const n=comp.bubbles.length;
     const bar=b?`<div class="ebar"><button class="btn ghost sm" id="bPrev" ${n<2?'disabled':''} aria-label="前の吹き出し">‹</button><b>${cSel+1}／${n}</b><button class="btn ghost sm" id="bNext" ${n<2?'disabled':''} aria-label="次の吹き出し">›</button><button class="btn ghost sm" id="bDup">複製</button><button class="btn danger sm" id="bDel">削除</button><button class="btn sm" id="bDone">完了</button></div>`:'';
     const tabs=list=>{if(!list.some(([k])=>k===ctlTab))ctlTab=list[0][0];return `<div class="etabs">${list.map(([k,l])=>`<button type="button" class="${k===ctlTab?'on':''}" data-et="${k}">${l}</button>`).join('')}</div>`;};
-    const owRow=v=>v?`<label class="f"><span>外枠の太さ <b id="owv">${(b.ow||1).toFixed(1)}</b></span><input type="range" id="bOw" min="0.3" max="3" step="0.1" value="${b.ow||1}"></label>`:'';
+    const owRow=v=>v?`<div class="rg"><span>外枠の太さ<br><b id="bOwv">${(b.ow||1).toFixed(1)}</b></span><input type="range" id="bOw" min="0.3" max="3" step="0.1" value="${b.ow||1}" aria-label="外枠の太さ"></div>`:'';
+    const aRow=(id,k,label)=>{const v=Math.round(al(b[k])*100);return `<div class="rg"><span>${label}<br><b id="${id}v">${v}%</b></span><input type="range" id="${id}" data-alpha="${k}" min="0" max="100" step="1" value="${v}" aria-label="${label}"><button type="button" class="btn ghost sm" data-rs="${id}">戻す</button></div>`;};
     const more=`<div class="row" style="margin:4px 0 0"><button class="btn ghost sm" id="bSet">セットに登録</button><button class="btn ghost sm" id="bFront">いちばん前へ</button></div>`;
     const common=()=>{
       $$('[data-et]',box).forEach(x=>x.onclick=()=>{ctlTab=x.dataset.et;ctl();});
@@ -1237,7 +1254,11 @@ function vComic(c){
         if(x.tagName==='INPUT'){x.oninput=e=>{b[k]=e.target.value;save('works',w);redraw();};x.onchange=()=>{draw();ctl();};}
         else x.onclick=()=>{b[k]=x.dataset.cv;save('works',w);draw();ctl();};});
       const on=(id,f)=>{const el=$('#'+id);if(el)el.onclick=f;};
-      const owr=$('#bOw');if(owr)owr.oninput=e=>{b.ow=+e.target.value;$('#owv').textContent=b.ow.toFixed(1);save('works',w);redraw();};
+      const owr=$('#bOw');if(owr)owr.oninput=e=>{b.ow=+e.target.value;$('#bOwv').textContent=b.ow.toFixed(1);save('works',w);redraw();};
+      /* 濃さ（透明度） */
+      $$('[data-alpha]',box).forEach(el=>{const k=el.dataset.alpha;el.oninput=e=>{b[k]=+e.target.value/100;$('#'+el.id+'v').textContent=e.target.value+'%';save('works',w);redraw();};
+        const rs=$(`[data-rs="${el.id}"]`);if(rs)rs.onclick=()=>{el.value=100;b[k]=1;$('#'+el.id+'v').textContent='100%';save('works',w);redraw();};});
+      $$('[data-cs]',box).forEach(x=>x.onclick=()=>{colSub=x.dataset.cs;ctl();});
       const go2=d=>{cSel=(cSel+d+n)%n;draw();ctl();};
       on('bPrev',()=>go2(-1));on('bNext',()=>go2(1));
       on('bSet',()=>$('#fromSet').click());
@@ -1258,7 +1279,7 @@ function vComic(c){
         ${rng('bRot','傾き',b.rot||0,-180,180,1,(b.rot||0)+'°',0)}
         <div class="row" style="margin:4px 0 0"><button class="btn ghost sm" id="bSwap">ほかの画像に替える</button><button class="btn ghost sm" id="bSet">セットに登録</button><button class="btn ghost sm" id="bFront">いちばん前へ</button></div>
         <p class="hint" style="margin:8px 0 0">${esc(r?r.name:'画像が見つかりません')}</p>`
-        :`${colorRow('色（文字の部分を塗りかえる）','color',b.color,'元の色')}${colorRow('外枠の色','oc',b.oc,'なし')}${owRow(b.oc)}`;
+        :`${colorRow('色（文字の部分を塗りかえる）','color',b.color,'元の色')}${colorRow('外枠の色','oc',b.oc,'なし')}${owRow(b.oc)}${aRow('bIa','ia','画像の濃さ')}`;
       box.innerHTML=`<div class="sec">${bar}${T}${body}</div>`;
       const sz=$('#bSz');if(sz)sz.oninput=e=>{b.sz=+e.target.value/100;$('#bSzv').textContent=e.target.value;save('works',w);redraw();};
       bindR('bRot',v=>b.rot=v,dg);
@@ -1269,8 +1290,15 @@ function vComic(c){
       let body='';
       if(ctlTab==='text')body=`<label class="f"><textarea id="bText" rows="2" placeholder="セリフ（改行で行を分けられます）">${esc(b.text)}</textarea></label>
         <div class="f"><span>書き方</span><div class="tgs"><button type="button" class="tg ${b.vertical?'on':''}" data-bv="1">縦書き</button><button type="button" class="tg ${b.vertical?'':'on'}" data-bv="0">横書き</button></div></div>
+        ${b.vertical?`<div class="f"><span>縦書きの行の並び（改行したとき）</span><div class="tgs"><button type="button" class="tg ${b.vdir!=='rtl'?'on':''}" data-vd="">左から</button><button type="button" class="tg ${b.vdir==='rtl'?'on':''}" data-vd="rtl">右から</button></div></div>`:''}
         <div class="f"><span>字体</span><div class="tgs"><button type="button" class="tg ${!b.font?'on':''}" data-bf="">いつもの字体（${esc((FONTS.find(f=>f.id===S.meta.jpFont&&f.loaded)||{name:'スマホの字体'}).name)}）</button>${FONTS.filter(f=>f.loaded&&f.id!==S.meta.jpFont).map(f=>`<button type="button" class="tg ${b.font===f.id?'on':''}" data-bf="${f.id}" style="font-family:'${fontFam(f.id)}',${FONT}">${esc(f.name)}</button>`).join('')}</div>${FONTS.length?'<span class="hint">「いつもの字体」は「保存・設定」で変えられます。変えると、ここで「いつもの字体」にしている吹き出しは全部変わります。</span>':'<span class="hint">字体は「保存・設定」の「字体」で取り込めます。<button type="button" class="linkb" id="bFontHelp">入れ方を見る</button></span>'}</div>`;
-      else if(ctlTab==='color')body=`${colorRow('文字の色','color',b.color||'#111111')}${colorRow('文字の外枠','oc',textOC(b),'なし')}${owRow(textOC(b))}${b.type!=='none'?colorRow('吹き出しの中の色','bg',b.bg===undefined?'#ffffff':b.bg,'透明'):''}`;
+      else if(ctlTab==='color'){
+        const subs=[['text','文字'],['outline','文字の外枠'],...(b.type!=='none'?[['bubble','吹き出し']]:[])];if(!subs.some(([k])=>k===colSub))colSub='text';
+        body=`<div class="tgs" style="margin-bottom:10px">${subs.map(([k,l])=>`<button type="button" class="tg ${colSub===k?'on':''}" data-cs="${k}">${l}</button>`).join('')}</div>`+
+        (colSub==='text'?`${colorRow('文字の色','color',b.color||'#111111')}${aRow('bCa','ca','文字の濃さ')}`
+        :colSub==='outline'?`${colorRow('文字の外枠の色','oc',textOC(b),'なし')}${owRow(textOC(b))}${textOC(b)?aRow('bOa','oa','外枠の濃さ'):''}`
+        :`${colorRow('中の色','bg',b.bg===undefined?'#ffffff':b.bg,'透明')}${(b.bg===undefined||b.bg)?aRow('bBga','bga','中の濃さ'):''}${colorRow('線の色','lc',b.lc||'#111111')}${aRow('bLa','la','線の濃さ')}`)+
+        `<p class="hint" style="margin:4px 0 0">濃さを下げると、うしろの絵が透けて見えます。</p>`;}
       else if(ctlTab==='shape')body=`<div class="f"><div class="tgs">${BTYPES.map(([k,l])=>`<button type="button" class="tg ${b.type===k?'on':''}" data-bt="${k}">${l}</button>`).join('')}</div></div>
         ${b.type!=='none'?`<div class="f"><span>輪郭の線</span><div class="tgs"><button type="button" class="tg ${b.line!=='brush'?'on':''}" data-bl="pen">ふつう</button><button type="button" class="tg ${b.line==='brush'?'on':''}" data-bl="brush">筆</button></div></div>
         ${rng('bLw','線の太さ',b.lw||1,0.4,3,0.1,(b.lw||1).toFixed(1))}`:''}
@@ -1279,14 +1307,15 @@ function vComic(c){
         <div class="row" style="margin:2px 0 0">${[-90,-15,15,90].map(d=>`<button type="button" class="btn ghost sm" data-tr="${d}">文字 ${d>0?'+':''}${d}°</button>`).join('')}</div>
         <p class="hint" style="margin:6px 0 0">吹き出しと文字は、別々に回せます。${b.type!=='none'?'しっぽの先は、回しても今の場所のままです。':''}</p>`;
       else body=`${b.type!=='none'?rng('bBsx','吹き出しの横幅',b.bsx||1,0.5,2.5,0.05,pct(b.bsx||1),1)+rng('bBsy','吹き出しの高さ',b.bsy||1,0.5,2.5,0.05,pct(b.bsy||1),1):''}
-        ${rng('bFs','文字の大きさ',Math.round(b.fs*1000),18,70,1,Math.round(b.fs*1000))}${rng('bWrap','1行の文字数',b.wrap,2,20,1,b.wrap)}${rng('bCsp','文字の間',b.csp||0,-0.3,1,0.05,(b.csp||0).toFixed(2),0)}${rng('bLsp','行間',b.lsp==null?1:b.lsp,0,3,0.1,(b.lsp==null?1:b.lsp).toFixed(1),1)}
-        <p class="hint" style="margin:4px 0 0">文字の間は、となりの字とのすき間（0がふつう）。行間は、改行したときの行と行のあいだ（1.0がふつう）です。</p>`;
+        ${rng('bFs','文字の大きさ',Math.round(b.fs*1000),18,70,1,Math.round(b.fs*1000))}${rng('bWrap','1行の文字数',b.wrap||0,0,20,1,b.wrap?b.wrap:'自動')}${rng('bCsp','文字の間',b.csp||0,-0.3,1,0.05,(b.csp||0).toFixed(2),0)}${rng('bLsp','行間',b.lsp==null?1:b.lsp,0,3,0.1,(b.lsp==null?1:b.lsp).toFixed(1),1)}
+        <p class="hint" style="margin:4px 0 0">1行の文字数を「自動」（いちばん左）にすると、改行したところでだけ行が分かれ、吹き出しが文字に合わせて広がります。文字の間は、となりの字とのすき間（0がふつう）。行間は、改行したときの行と行のあいだ（1.0がふつう）です。</p>`;
       box.innerHTML=`<div class="sec">${bar}${T}${body}</div>`;
       const ta=$('#bText');if(ta){ta.oninput=e=>{b.text=e.target.value;save('works',w);redraw();};
         /* キーボードが出たら、入力欄が見本の下に隠れないように画面の下へ寄せる */
         const show=()=>{if(document.activeElement===ta)ta.scrollIntoView({block:'end',behavior:'smooth'});};
         ta.onfocus=()=>setTimeout(show,350);if(window.visualViewport&&!window._kbHook){window._kbHook=1;visualViewport.addEventListener('resize',()=>{const t=$('#bText');if(t&&document.activeElement===t)setTimeout(()=>t.scrollIntoView({block:'end'}),50);});}}
       $$('[data-bt]',box).forEach(x=>x.onclick=()=>{b.type=x.dataset.bt;save('works',w);draw();ctl();});
+      $$('[data-vd]',box).forEach(x=>x.onclick=()=>{b.vdir=x.dataset.vd;save('works',w);draw();ctl();});
       $$('[data-bv]',box).forEach(x=>x.onclick=()=>{b.vertical=x.dataset.bv==='1';save('works',w);draw();ctl();});
       const bfh=$('#bFontHelp');if(bfh)bfh.onclick=openFontHelp;
       $$('[data-bf]',box).forEach(x=>x.onclick=()=>{b.font=x.dataset.bf;S.meta.lastFont=b.font;dbPut('meta',S.meta);save('works',w);draw();ctl();});
@@ -1296,7 +1325,7 @@ function vComic(c){
       bindR('bBsx',v=>b.bsx=v,pct);bindR('bBsy',v=>b.bsy=v,pct);
       bindR('bBrot',v=>b.brot=v,dg);bindR('bTrot',v=>b.trot=v,dg);
       $$('[data-tr]',box).forEach(x=>x.onclick=()=>{let v=(b.trot||0)+ +x.dataset.tr;if(v>180)v-=360;if(v<-180)v+=360;b.trot=v;$('#bTrot').value=v;$('#bTrotv').textContent=dg(v);save('works',w);redraw();});
-      bindR('bCsp',v=>b.csp=v,v=>v.toFixed(2));bindR('bLsp',v=>b.lsp=v,v=>v.toFixed(1));bindR('bWrap',v=>b.wrap=v,v=>v);
+      bindR('bCsp',v=>b.csp=v,v=>v.toFixed(2));bindR('bLsp',v=>b.lsp=v,v=>v.toFixed(1));bindR('bWrap',v=>b.wrap=v,v=>v?v:'自動');
       const bt=$('#bTail');if(bt)bt.onchange=e=>{b.tail=e.target.checked;save('works',w);draw();};
       common();
     }else{
