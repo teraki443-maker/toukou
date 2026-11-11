@@ -255,7 +255,11 @@ body.editing #toast{bottom:calc(24px + env(safe-area-inset-bottom))}
 .seg button{flex:0 0 auto;border:1px solid var(--line2);background:var(--card);border-radius:999px;padding:5px 13px;font-size:13px}
 .seg button.on{background:var(--ink);border-color:var(--ink);color:#fff}
 .pcat{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
-.pcat button{display:flex;flex-wrap:wrap;align-items:baseline;gap:2px 8px;text-align:left;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px;min-height:72px}
+.f.cat{border-left:4px solid var(--c);padding:8px 0 8px 10px;margin-left:-4px;border-radius:4px;background:color-mix(in srgb,var(--c) 7%,transparent)}
+.f.cat>span{color:color-mix(in srgb,var(--c) 75%,var(--ink));font-weight:700}
+.f.cat .tg,.pgrid button{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+.f.cat .tg.on{background:var(--c);border-color:var(--c)}
+.pcat button{border-left:5px solid var(--c)!important;display:flex;flex-wrap:wrap;align-items:baseline;gap:2px 8px;text-align:left;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px;min-height:72px}
 .pcat b{font-size:15px}.pcat .n{margin-left:auto;font-size:13px;color:var(--sub);font-weight:700}
 .pcat small{flex-basis:100%;font-size:11px;color:var(--sub);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .pitem{display:block;width:100%;text-align:left;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-bottom:8px}
@@ -367,7 +371,7 @@ const FMT={
 
 /* ========== データベース（IndexedDB） ========== */
 let db=null;
-const APP_VER='v22';/* sw.js の VERSION と同じにする */
+const APP_VER='v23';/* sw.js の VERSION と同じにする */
 const STORES=['parts','scenes','works','images','meta','fonts','stamps'];
 function openDB(){return new Promise((res,rej)=>{const r=indexedDB.open('manga4koma',3);r.onupgradeneeded=()=>{const d=r.result;for(const s of STORES)if(!d.objectStoreNames.contains(s))d.createObjectStore(s,{keyPath:'id'});};r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error);});}
 function tx(store,mode,fn){return new Promise((res,rej)=>{if(!db)return res(undefined);const t=db.transaction(store,mode);const req=fn(t.objectStore(store));let out;if(req)req.onsuccess=()=>{out=req.result;};t.oncomplete=()=>res(out);t.onerror=()=>rej(t.error);t.onabort=()=>rej(t.error);});}
@@ -752,14 +756,25 @@ function vScenes(c){
 
 /* ========== シーンの編集 ========== */
 function opts(type,sel){const ps=S.parts.filter(p=>p.type===type).sort((a,b)=>(a.name||'').localeCompare(b.name||'','ja'));return `<option value="">（なし）</option>${ps.map(p=>`<option value="${p.id}"${p.id===sel?' selected':''}>${esc(p.name||'名前なし')}</option>`).join('')}<option value="__new">＋ 新しく登録…</option>`;}
+/* 部品の種類ごとの色（シーンの欄と部品の一覧で同じ色を使う） */
+const CATC={chara:'#3b82f6',phys:'#0ea5a4',outfit:'#8b5cf6',action:'#f97316',face:'#ec4899',body:'#ef4444',inter:'#d946ef',bg:'#22a34a',angle:'#6366f1',camera:'#0891b2',light:'#eab308',fx:'#84cc16',np:'#64748b',style:'#a16207',lora:'#475569'};
+/* 長押し：0.5秒押し続けたら fn を呼ぶ。そのあとの「押した」はなかったことにする */
+function longPress(el,fn){let t=0,x=0,y=0,fired=false;
+  const stop=()=>{clearTimeout(t);t=0;};
+  el.addEventListener('pointerdown',e=>{fired=false;x=e.clientX;y=e.clientY;stop();t=setTimeout(()=>{fired=true;t=0;if(navigator.vibrate)try{navigator.vibrate(15);}catch(_){}fn();},500);});
+  el.addEventListener('pointermove',e=>{if(t&&Math.hypot(e.clientX-x,e.clientY-y)>10)stop();});
+  ['pointerup','pointercancel','pointerleave'].forEach(k=>el.addEventListener(k,stop));
+  el.addEventListener('click',e=>{if(fired){fired=false;e.stopImmediatePropagation();e.preventDefault();}},true);
+  el.addEventListener('contextmenu',e=>e.preventDefault());}
+const catAttr=t=>`data-cat="${t}" style="--c:${CATC[t]||'#888'}"`;
 function partSel(label,type,val,attrs){const p=byId('parts',val);
   /* 表情・画風は、見本画像があれば画像を並べて選べるようにする */
   const ps=IMG_TYPES.includes(type)?S.parts.filter(x=>x.type===type).sort((a,b)=>(a.name||'').localeCompare(b.name||'','ja')):[];
   const grid=ps.some(x=>x.img)?`<div class="pgrid">${ps.map(x=>`<button type="button" class="${x.id===val?'on':''}" data-gpick="${x.id}"><span class="gi" ${x.img?`style="background-image:url(${partImgUrl(x)})"`:''}>${x.img?'':'画像なし'}</span><small>${esc(x.name||'名前なし')}</small></button>`).join('')}</div>`:'';
-  return `<div class="f"><span>${label}</span><div class="sel"><select ${attrs} data-type="${type}" aria-label="${label}">${opts(type,val)}</select>${p?`<button class="ico" data-editpart="${p.id}" title="この部品を直す" aria-label="この部品を直す">✎</button>`:''}</div>${p&&p.tags?`<div class="ptags">${esc(p.tags)}</div>`:''}${grid}</div>`;}
+  return `<div class="f cat" ${catAttr(type)}><span>${label}</span><div class="sel"><select ${attrs} data-type="${type}" aria-label="${label}">${opts(type,val)}</select>${p?`<button class="ico" data-editpart="${p.id}" title="この部品を直す" aria-label="この部品を直す">✎</button>`:''}</div>${p&&p.tags?`<div class="ptags">${esc(p.tags)}</div>`:''}${grid}</div>`;}
 /* いくつでも選べる部品（体の状態・絡み） */
 function chipSel(label,type,arr,attrs){const ps=S.parts.filter(p=>p.type===type).sort((a,b)=>(a.name||'').localeCompare(b.name||'','ja'));
-  return `<div class="f"><span>${label}（いくつでも）</span><div class="tgs">${ps.map(p=>`<button type="button" class="tg ${arr.includes(p.id)?'on':''}" ${attrs} data-pid="${p.id}">${esc(p.name||'名前なし')}</button>`).join('')}<button type="button" class="tg new" ${attrs} data-pid="__new">＋ 登録</button></div></div>`;}
+  return `<div class="f cat" ${catAttr(type)}><span>${label}（いくつでも・長押しで直す）</span><div class="tgs">${ps.map(p=>`<button type="button" class="tg ${arr.includes(p.id)?'on':''}" ${attrs} data-pid="${p.id}">${esc(p.name||'名前なし')}</button>`).join('')}<button type="button" class="tg new" ${attrs} data-pid="__new">＋ 登録</button></div></div>`;}
 let wSel=null;
 function vScene(c){
   const sc=byId('scenes',c.id);if(!sc){stack.pop();return render();}
@@ -890,6 +905,8 @@ function vScene(c){
     setv(s.value);save('scenes',sc);render(true);
   });
   $$('[data-editpart]',view).forEach(b=>b.onclick=()=>openPart(b.dataset.editpart,null,()=>render(true)));
+  /* 部品のボタン・見本画像は、長押しで部品を直す */
+  $$('[data-chip][data-pid]:not([data-pid="__new"]),[data-gpick]',view).forEach(b=>longPress(b,()=>openPart(b.dataset.pid||b.dataset.gpick,null,()=>render(true))));
   $$('input[data-t]',view).forEach(i=>i.oninput=()=>{sc.chars[+i.dataset.slot][i.dataset.t]=i.value;save('scenes',sc);upd();});
   $$('input[data-st]',view).forEach(i=>i.oninput=()=>{sc[i.dataset.st]=i.value;save('scenes',sc);upd();});
   $$('[data-delslot]',view).forEach(b=>b.onclick=()=>{sc.chars.splice(+b.dataset.delslot,1);save('scenes',sc);render(true);});
@@ -1520,7 +1537,7 @@ function vParts(){
   /* 部品の種類を1画面に並べ、押すとその種類の一覧へ */
   setHead('部品');
   view.innerHTML=`<p class="hint" style="margin:0 0 10px">種類を選ぶと、その部品の一覧が出ます。</p>
-  <div class="pcat">${PT_ORDER.map(t=>{const n=S.parts.filter(p=>p.type===t).length;return `<button data-t="${t}"><b>${PT[t].label}</b><span class="n">${n}</span><small>${esc(PT[t].namePh.replace(/^例：/,'例：'))}</small></button>`;}).join('')}</div>`;
+  <div class="pcat">${PT_ORDER.map(t=>{const n=S.parts.filter(p=>p.type===t).length;return `<button data-t="${t}" style="--c:${CATC[t]}"><b>${PT[t].label}</b><span class="n">${n}</span><small>${esc(PT[t].namePh.replace(/^例：/,'例：'))}</small></button>`;}).join('')}</div>`;
   $$('.pcat button',view).forEach(b=>b.onclick=()=>{partTab=b.dataset.t;go('plist',{t:b.dataset.t});});
 }
 function vPList(c){
