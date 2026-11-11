@@ -258,6 +258,15 @@ body.editing #toast{bottom:calc(24px + env(safe-area-inset-bottom))}
 .pcat b{font-size:15px}.pcat .n{margin-left:auto;font-size:13px;color:var(--sub);font-weight:700}
 .pcat small{flex-basis:100%;font-size:11px;color:var(--sub);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .pitem{display:block;width:100%;text-align:left;background:#fff;border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-bottom:8px}
+.pitem.hasimg{display:flex;gap:10px;align-items:flex-start}.pitem.hasimg>div{flex:1;min-width:0}
+.pitem .pim{flex:0 0 64px;width:64px;height:64px;border-radius:8px;object-fit:cover;background:#eee}
+.pimg{display:flex;gap:12px;align-items:center;margin-bottom:12px}
+.pimg .ph{width:96px;height:96px;flex:0 0 96px;border-radius:10px;border:1px dashed #c3c7cf;background:#f6f7f9 center/cover no-repeat;display:flex;align-items:center;justify-content:center;color:var(--sub);font-size:11px;text-align:center}
+.pgrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;margin-top:8px}
+.pgrid button{border:2px solid transparent;border-radius:10px;background:#fff;padding:0;overflow:hidden;display:flex;flex-direction:column;text-align:center}
+.pgrid button.on{border-color:var(--acc)}
+.pgrid .gi{aspect-ratio:1;width:100%;background:#eef0f3 center/cover no-repeat;display:flex;align-items:center;justify-content:center;color:var(--sub);font-size:11px;padding:4px}
+.pgrid small{font-size:11px;padding:3px 4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--ink)}
 .pitem b{font-size:14px}
 .pitem small{float:right;color:var(--sub);font-size:11px;margin-top:2px}
 .pitem .ptags{font-size:12px}
@@ -337,7 +346,7 @@ const FMT={
 
 /* ========== データベース（IndexedDB） ========== */
 let db=null;
-const APP_VER='v18';/* sw.js の VERSION と同じにする */
+const APP_VER='v19';/* sw.js の VERSION と同じにする */
 const STORES=['parts','scenes','works','images','meta','fonts','stamps'];
 function openDB(){return new Promise((res,rej)=>{const r=indexedDB.open('manga4koma',3);r.onupgradeneeded=()=>{const d=r.result;for(const s of STORES)if(!d.objectStoreNames.contains(s))d.createObjectStore(s,{keyPath:'id'});};r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error);});}
 function tx(store,mode,fn){return new Promise((res,rej)=>{if(!db)return res(undefined);const t=db.transaction(store,mode);const req=fn(t.objectStore(store));let out;if(req)req.onsuccess=()=>{out=req.result;};t.oncomplete=()=>res(out);t.onerror=()=>rej(t.error);t.onabort=()=>rej(t.error);});}
@@ -427,6 +436,10 @@ document.addEventListener('visibilitychange',()=>{if(document.hidden)flush();});
 /* ========== 画像 ========== */
 const urlCache={};
 async function imgURL(id,thumb){const k=id+(thumb?':t':':f');if(urlCache[k])return urlCache[k];const r=await dbGet('images',id);if(!r)return'';const b=thumb?(r.thumb||r.blob):r.blob;return urlCache[k]=URL.createObjectURL(b);}
+/* 部品の見本画像（表情・画風などのイメージ）。部品のデータの中に小さい画像として入れておく */
+const partUrls={};
+function partImgUrl(p){if(!p||!p.img)return '';const c=partUrls[p.id];if(c&&c.b===p.img)return c.u;if(c)URL.revokeObjectURL(c.u);const u=URL.createObjectURL(p.img);partUrls[p.id]={b:p.img,u};return u;}
+const IMG_TYPES=['face','style'];/* 見本を並べて選べる種類 */
 function makeThumb(blob,max){return new Promise(res=>{const u=URL.createObjectURL(blob);const im=new Image();im.onload=()=>{const s=Math.min(1,max/Math.max(im.width,im.height));const c=document.createElement('canvas');c.width=Math.max(1,Math.round(im.width*s));c.height=Math.max(1,Math.round(im.height*s));c.getContext('2d').drawImage(im,0,0,c.width,c.height);c.toBlob(b=>{URL.revokeObjectURL(u);res(b||blob);},'image/jpeg',.82);};im.onerror=()=>{URL.revokeObjectURL(u);res(blob);};im.src=u;});}
 async function addImage(file){const blob=new Blob([file],{type:file.type||'image/png'});const thumb=await makeThumb(blob,480);const id=uid();await dbPut('images',{id,blob,thumb,name:file.name||'image',type:blob.type});return id;}
 function hydrate(root){$$('img[data-img]',root).forEach(img=>{if(img.src)return;imgURL(img.dataset.img,!img.dataset.full).then(u=>{if(u)img.src=u;});});}
@@ -681,7 +694,11 @@ function vScenes(c){
 
 /* ========== シーンの編集 ========== */
 function opts(type,sel){const ps=S.parts.filter(p=>p.type===type).sort((a,b)=>(a.name||'').localeCompare(b.name||'','ja'));return `<option value="">（なし）</option>${ps.map(p=>`<option value="${p.id}"${p.id===sel?' selected':''}>${esc(p.name||'名前なし')}</option>`).join('')}<option value="__new">＋ 新しく登録…</option>`;}
-function partSel(label,type,val,attrs){const p=byId('parts',val);return `<div class="f"><span>${label}</span><div class="sel"><select ${attrs} data-type="${type}" aria-label="${label}">${opts(type,val)}</select>${p?`<button class="ico" data-editpart="${p.id}" title="この部品を直す" aria-label="この部品を直す">✎</button>`:''}</div>${p&&p.tags?`<div class="ptags">${esc(p.tags)}</div>`:''}</div>`;}
+function partSel(label,type,val,attrs){const p=byId('parts',val);
+  /* 表情・画風は、見本画像があれば画像を並べて選べるようにする */
+  const ps=IMG_TYPES.includes(type)?S.parts.filter(x=>x.type===type).sort((a,b)=>(a.name||'').localeCompare(b.name||'','ja')):[];
+  const grid=ps.some(x=>x.img)?`<div class="pgrid">${ps.map(x=>`<button type="button" class="${x.id===val?'on':''}" data-gpick="${x.id}"><span class="gi" ${x.img?`style="background-image:url(${partImgUrl(x)})"`:''}>${x.img?'':'画像なし'}</span><small>${esc(x.name||'名前なし')}</small></button>`).join('')}</div>`:'';
+  return `<div class="f"><span>${label}</span><div class="sel"><select ${attrs} data-type="${type}" aria-label="${label}">${opts(type,val)}</select>${p?`<button class="ico" data-editpart="${p.id}" title="この部品を直す" aria-label="この部品を直す">✎</button>`:''}</div>${p&&p.tags?`<div class="ptags">${esc(p.tags)}</div>`:''}${grid}</div>`;}
 /* いくつでも選べる部品（体の状態・絡み） */
 function chipSel(label,type,arr,attrs){const ps=S.parts.filter(p=>p.type===type).sort((a,b)=>(a.name||'').localeCompare(b.name||'','ja'));
   return `<div class="f"><span>${label}（いくつでも）</span><div class="tgs">${ps.map(p=>`<button type="button" class="tg ${arr.includes(p.id)?'on':''}" ${attrs} data-pid="${p.id}">${esc(p.name||'名前なし')}</button>`).join('')}<button type="button" class="tg new" ${attrs} data-pid="__new">＋ 登録</button></div></div>`;}
@@ -804,6 +821,7 @@ function vScene(c){
   $('#sMemo').oninput=e=>{sc.memo=e.target.value;save('scenes',sc);};
   $$('[data-role]',view).forEach(b=>b.onclick=()=>{const r=b.dataset.role;sc.roles=sc.roles.includes(r)?sc.roles.filter(x=>x!==r):[...sc.roles,r];b.classList.toggle('on');save('scenes',sc);});
   /* 部品を選ぶ */
+  $$('[data-gpick]',view).forEach(b=>b.onclick=()=>{const sel=b.closest('.f').querySelector('select[data-type]');sel.value=sel.value===b.dataset.gpick?'':b.dataset.gpick;sel.onchange();});
   $$('select[data-type]',view).forEach(s=>s.onchange=()=>{
     const slot=s.dataset.slot,f=s.dataset.f,scf=s.dataset.scf;
     const setv=v=>{if(slot!=null)sc.chars[+slot][f]=v;else sc[scf]=v;};
@@ -1449,7 +1467,8 @@ function vPList(c){
   const list=S.parts.filter(p=>p.type===t).sort((a,b)=>(a.name||'').localeCompare(b.name||'','ja'));
   view.innerHTML=`
   <p class="hint" style="margin:0 0 12px">${esc(T.hint)}</p>
-  ${list.length?list.map(p=>{const n=partUsage(p.id);return `<button class="pitem" data-id="${p.id}"><small>${n?n+'シーン':'未使用'}</small><b>${esc(p.name||'名前なし')}</b>${p.type==='chara'?` <span class="chip">${esc(p.subject||'girl')}</span>`:''}${p.type==='lora'?` <span class="chip">重み ${esc(p.weight??'')}</span>`:''}<div class="ptags">${esc(p.tags)||'<span class="muted">タグなし</span>'}</div></button>`;}).join('')
+  ${list.length?list.map(p=>{const n=partUsage(p.id);const inner=`<small>${n?n+'シーン':'未使用'}</small><b>${esc(p.name||'名前なし')}</b>${p.type==='chara'?` <span class="chip">${esc(p.subject||'girl')}</span>`:''}${p.type==='lora'?` <span class="chip">重み ${esc(p.weight??'')}</span>`:''}<div class="ptags">${esc(p.tags)||'<span class="muted">タグなし</span>'}</div>`;
+    return p.img?`<button class="pitem hasimg" data-id="${p.id}"><img class="pim" src="${partImgUrl(p)}" alt=""><div>${inner}</div></button>`:`<button class="pitem" data-id="${p.id}">${inner}</button>`;}).join('')
   :`<div class="empty"><b>${T.label}はまだありません</b>「＋ 新しい${T.label}」で登録します。</div>`}
   <button class="fab" id="newPart">＋ 新しい${T.label}</button>`;
   $$('.pitem',view).forEach(b=>b.onclick=()=>openPart(b.dataset.id,null,()=>render(true)));
@@ -1457,10 +1476,13 @@ function vPList(c){
 }
 function openPart(id,type,onSave){
   const src=id?byId('parts',id):null;
-  const p=src?JSON.parse(JSON.stringify(src)):{id:uid(),type,name:'',tags:'',subject:type==='chara'?'girl':'',weight:type==='lora'?0.7:'',loraName:'',neg:'',memo:'',text:''};
+  const p=src?Object.assign(JSON.parse(JSON.stringify(Object.assign({},src,{img:null}))),{img:src.img||null}):{id:uid(),type,name:'',tags:'',subject:type==='chara'?'girl':'',weight:type==='lora'?0.7:'',loraName:'',neg:'',memo:'',text:''};
   const T=PT[p.type];const used=src?partUsage(src.id):0;
   openSheet(`<h2>${src?T.label+'を直す':'新しい'+T.label}</h2>
   <label class="f"><span>名前（アプリの中での呼び名）</span><input id="pName" value="${esc(p.name)}" placeholder="${esc(T.namePh)}"></label>
+  <div class="f"><span>見本の画像${IMG_TYPES.includes(p.type)?'（シーンで選ぶとき、画像を並べて選べます）':'（なくてもよい）'}</span><div class="pimg"><div class="ph" id="pImgPh">画像なし</div>
+    <div class="row" style="margin:0;flex-direction:column;align-items:flex-start;gap:6px"><label class="btn ghost sm">画像を選ぶ<input type="file" accept="image/*" hidden id="pImgIn"></label><button type="button" class="btn ghost sm" id="pImgDel" hidden>外す</button></div></div>
+    <span class="hint">PixAI で作った絵など、どんな感じかがわかる画像を入れておくと選びやすくなります。</span></div>
   ${p.type==='chara'?`<label class="f"><span>呼び方（プロンプトの先頭の言葉）</span><input id="pSubj" list="subjList" value="${esc(p.subject)}" placeholder="girl"><datalist id="subjList"><option value="girl"><option value="boy"><option value="woman"><option value="man"><option value="1girl"><option value="1boy"></datalist><span class="hint">girl・boy などで書くと、人数のタグ（1girl・2girls・1boy）が自動で付きます</span></label>`:''}
   ${p.type==='lora'?`<label class="f"><span>LoRA の正式な名前（PixAI で探すときの名前）</span><input id="pLname" value="${esc(p.loraName)}" placeholder="名前と同じなら空のまま"></label>
   <label class="f"><span>標準の重み</span><input id="pW" type="number" step="0.05" inputmode="decimal" value="${esc(p.weight)}"></label>`:''}
@@ -1471,10 +1493,17 @@ function openPart(id,type,onSave){
   ${used?`<div class="banner info">この部品は ${used} 件のシーンで使っています。直すと、そのすべてのシーンのプロンプトが変わります。</div>`:''}
   <div class="row"><button class="btn" id="pSave">保存</button>${src?'<button class="btn ghost" id="pDup">複製</button><button class="btn danger" id="pDel">削除</button>':''}<button class="btn ghost" id="pCancel">やめる</button></div>`);
   setTimeout(()=>{if(!src)$('#pName')&&$('#pName').focus();},50);
+  let tmpUrl='';
+  const showImg=()=>{const ph=$('#pImgPh');if(tmpUrl){URL.revokeObjectURL(tmpUrl);tmpUrl='';}
+    if(p.img){tmpUrl=URL.createObjectURL(p.img);ph.style.backgroundImage=`url(${tmpUrl})`;ph.textContent='';}else{ph.style.backgroundImage='';ph.textContent='画像なし';}
+    $('#pImgDel').hidden=!p.img;};
+  showImg();
+  $('#pImgIn').onchange=async e=>{const f=e.target.files[0];e.target.value='';if(!f)return;p.img=await makeThumb(f,512);showImg();};
+  $('#pImgDel').onclick=()=>{p.img=null;showImg();};
   const read=o=>{o.name=$('#pName').value.trim();o.tags=$('#pTags').value.trim();if($('#pSubj'))o.subject=$('#pSubj').value.trim()||'girl';if($('#pLname'))o.loraName=$('#pLname').value.trim();if($('#pW'))o.weight=$('#pW').value;if($('#pNegT'))o.neg=$('#pNegT').value.trim();if($('#pText'))o.text=$('#pText').value.trim();o.memo=$('#pMemo').value;if(!o.name)o.name=(o.tags.slice(0,18)||'名前なし');return o;};
   $('#pCancel').onclick=closeSheet;
   $('#pSave').onclick=async()=>{read(p);const i=S.parts.findIndex(x=>x.id===p.id);if(i>=0)S.parts[i]=p;else S.parts.push(p);await saveNow('parts',p);closeSheet();onSave&&onSave(p);toast('保存しました');};
-  const dp=$('#pDup');if(dp)dp.onclick=async()=>{const n=read(JSON.parse(JSON.stringify(p)));n.id=uid();n.name+='（コピー）';S.parts.push(n);await saveNow('parts',n);closeSheet();setTimeout(()=>openPart(n.id,null,onSave),30);};
+  const dp=$('#pDup');if(dp)dp.onclick=async()=>{const n=read(Object.assign(JSON.parse(JSON.stringify(Object.assign({},p,{img:null}))),{img:p.img||null}));n.id=uid();n.name+='（コピー）';S.parts.push(n);await saveNow('parts',n);closeSheet();setTimeout(()=>openPart(n.id,null,onSave),30);};
   const dl=$('#pDel');if(dl)dl.onclick=async()=>{if(!confirm(used?`この部品は ${used} 件のシーンで使っています。削除すると、そのシーンからも外れます。削除しますか？`:'この部品を削除しますか？'))return;
     for(const s of S.scenes){let ch=false;for(const c of s.chars||[]){for(const f of['chara','outfit','action','face'])if(c[f]===p.id){c[f]='';ch=true;}
         for(const f of['body','phys'])if((c[f]||[]).includes(p.id)){c[f]=c[f].filter(x=>x!==p.id);ch=true;}}
@@ -1600,7 +1629,7 @@ async function exportAll(){
     const images=[];for(const r of await dbAll('images'))images.push({id:r.id,name:r.name,type:r.type,data:await b64(r.blob),thumb:r.thumb?await b64(r.thumb):null});
     const fonts=[];for(const f of await dbAll('fonts'))fonts.push({id:f.id,name:f.name,file:f.file,size:f.size,created:f.created,data:await b64(f.blob)});
     const stamps=[];for(const r of await dbAll('stamps'))stamps.push({id:r.id,name:r.name,w:r.w,h:r.h,created:r.created,data:await b64(r.blob)});
-    const data={app:'4koma-kobo',version:1,exported:new Date().toISOString(),meta:S.meta,parts:S.parts,scenes:S.scenes,works:S.works,images,fonts,stamps};
+    const data={app:'4koma-kobo',version:1,exported:new Date().toISOString(),meta:S.meta,parts:await Promise.all(S.parts.map(async p=>p.img?Object.assign({},p,{img:await b64(p.img)}):p)),scenes:S.scenes,works:S.works,images,fonts,stamps};
     const blob=new Blob([JSON.stringify(data)],{type:'application/json'});
     const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`4koma-backup-${ymd()}.json`;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},10000);
     S.meta.lastBackup=Date.now();await dbPut('meta',S.meta);toast('書き出しました（ダウンロードのフォルダ）');render(true);
@@ -1619,7 +1648,7 @@ async function importAll(file,replace){
     for(const r of data.fonts||[])await dbPut('fonts',{id:r.id,name:r.name,file:r.file,size:r.size,created:r.created,blob:await unb64(r.data)});
     if(data.meta&&Array.isArray(data.meta.bsets)){const have=new Set((S.meta.bsets||[]).map(s=>s.id));S.meta.bsets=replace?data.meta.bsets:[...(S.meta.bsets||[]),...data.meta.bsets.filter(s=>!have.has(s.id))];}
     if(data.meta){for(const k of['jpFont','expSize','expType','fmt','loraInPrompt'])if(data.meta[k]!==undefined&&(replace||S.meta[k]===undefined))S.meta[k]=data.meta[k];await dbPut('meta',S.meta);}
-    for(const k of['parts','scenes','works'])for(const o of data[k]||[])await dbPut(k,o);
+    for(const k of['parts','scenes','works'])for(const o of data[k]||[]){if(k==='parts'&&typeof o.img==='string')o.img=await unb64(o.img);await dbPut(k,o);}
     for(const k in urlCache){URL.revokeObjectURL(urlCache[k]);delete urlCache[k];}
     await loadAll();for(const k in imgCache)delete imgCache[k];for(const k in stampImg)delete stampImg[k];for(const k in stampCv)delete stampCv[k];await loadStamps().catch(()=>{});await loadFonts().catch(()=>{});toast('読み込みました');render();
   }catch(e){toast('読み込みの途中で失敗しました');}
