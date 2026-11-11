@@ -271,6 +271,10 @@ body.editing #toast{bottom:calc(24px + env(safe-area-inset-bottom))}
 #sheet .full{width:100%;max-height:46vh;max-height:46dvh;object-fit:contain;border-radius:10px;display:block;background:#f0f1f4;margin-bottom:12px}
 #toast{position:fixed;left:50%;bottom:calc(130px + env(safe-area-inset-bottom));transform:translateX(-50%);background:rgba(30,32,40,.92);color:#fff;padding:9px 16px;border-radius:999px;font-size:14px;z-index:60;opacity:0;pointer-events:none;transition:opacity .2s;max-width:90vw;text-align:center}
 #toast.show{opacity:1}
+details.nh{margin:-4px 0 12px;font-size:14px}
+details.nh summary{color:var(--acc);font-size:13px;cursor:pointer;padding:4px 0}
+details.nh .nhb{background:#fff;border:1px solid var(--line);border-radius:10px;padding:12px;margin-top:6px}
+details.nh .nhb .sec{border:0;padding:0;background:none;box-shadow:none}
 .stat{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;text-align:center}
 .stat div{background:#f3f4f8;border-radius:8px;padding:8px 0}
 .stat b{display:block;font-size:18px}
@@ -318,21 +322,22 @@ const PT={
   inter:{label:'絡み',hint:'ハグ・キス・手をつなぐなど、人物どうしの関わり。シーンにいくつでも付けられます',ph:'hug',namePh:'例：ハグ'},
   bg:{label:'背景',hint:'場所・時間帯・天気など',ph:'beach, blue sky, daytime',namePh:'例：昼のビーチ'},
   angle:{label:'カメラ位置',hint:'どこから見るか（横から・後ろから・見上げなど）。シーンにいくつでも付けられます',ph:'from side',namePh:'例：横から'},
-  camera:{label:'構図・光',hint:'カメラの距離・角度、光の当たり方',ph:'full body, soft lighting',namePh:'例：全身・やわらかい光'},
+  camera:{label:'構図',hint:'カメラの距離（全身・上半身・アップなど）やピント',ph:'full body',namePh:'例：全身'},
+  light:{label:'光',hint:'光の当たり方・明るさだけ（逆光・薄暗いなど）。場所（暗い部屋・夕方の海など）は「背景」に入れます',ph:'soft lighting',namePh:'例：やわらかい光'},
   style:{label:'画風',hint:'画質・画風のタグ。タグの形では最後に入ります',ph:'masterpiece, best quality',namePh:'例：いつもの画風'},
   lora:{label:'LoRA',hint:'LoRA を使うときにプロンプトへ足すタグ（なければ空のまま）。LoRA は作られたモデルの系統（SDXL 系・Tsubaki 系）でしか使えません',ph:'トリガーワード',namePh:'例：水彩風'}
 };
-const PT_ORDER=['chara','phys','outfit','action','face','body','inter','bg','angle','camera','style','lora'];
+const PT_ORDER=['chara','phys','outfit','action','face','body','inter','bg','angle','camera','light','style','lora'];
 /* プロンプトの形（PixAI 公式ブログの勧めに合わせる） */
 const FMT={
-  tag:{label:'タグ（SDXL 系：Haruka・Hoshino など）',hint:'人数 → 人物の特徴 → 身体の特徴 → 服 → ポーズ → 表情 → 体の状態 → 絡み → 背景 → カメラ位置 → 構図・光 → 画風 の順に、タグを並べます。'},
-  prose:{label:'文章（Tsubaki 系）',hint:'人物（2人以上なら人数と絡みを先に）→ 一人ずつの説明 → 背景 → カメラ位置 → 構図・光 → 画風 の順の英語の文章にします。部品に「文章」を書いておくと、タグの代わりにそれを使います。'},
+  tag:{label:'タグ（SDXL 系：Haruka・Hoshino など）',hint:'人数 → 人物の特徴 → 身体の特徴 → 服 → ポーズ → 表情 → 体の状態 → 絡み → 背景 → カメラ位置 → 構図 → 光 → 画風 の順に、タグを並べます。'},
+  prose:{label:'文章（Tsubaki 系）',hint:'人物（2人以上なら人数と絡みを先に）→ 一人ずつの説明 → 背景 → カメラ位置 → 構図 → 光 → 画風 の順の英語の文章にします。部品に「文章」を書いておくと、タグの代わりにそれを使います。'},
   group:{label:'かっこでまとめる（girl(…) の形）',hint:'人物ごとに girl(…) の形でまとめます（今までの書き方）。'}
 };
 
 /* ========== データベース（IndexedDB） ========== */
 let db=null;
-const APP_VER='v15';/* sw.js の VERSION と同じにする */
+const APP_VER='v18';/* sw.js の VERSION と同じにする */
 const STORES=['parts','scenes','works','images','meta','fonts','stamps'];
 function openDB(){return new Promise((res,rej)=>{const r=indexedDB.open('manga4koma',3);r.onupgradeneeded=()=>{const d=r.result;for(const s of STORES)if(!d.objectStoreNames.contains(s))d.createObjectStore(s,{keyPath:'id'});};r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error);});}
 function tx(store,mode,fn){return new Promise((res,rej)=>{if(!db)return res(undefined);const t=db.transaction(store,mode);const req=fn(t.objectStore(store));let out;if(req)req.onsuccess=()=>{out=req.result;};t.oncomplete=()=>res(out);t.onerror=()=>rej(t.error);t.onabort=()=>rej(t.error);});}
@@ -346,7 +351,7 @@ const byId=(k,id)=>id?S[k].find(x=>x.id===id):undefined;
 async function loadAll(){
   S.parts=await dbAll('parts');S.scenes=await dbAll('scenes');S.works=await dbAll('works');
   S.meta=Object.assign({id:'settings',loraInPrompt:false,lastBackup:0},await dbGet('meta','settings')||{});
-  await seedAngles();
+  await seedAngles();await seedCams();
 }
 /* カメラ位置のよく使う部品を、最初の1回だけ入れておく（消しても、もう一度は入らない） */
 const ANGLE_PRESETS=[
@@ -368,6 +373,48 @@ async function seedAngles(){
     for(const[name,tags,memo]of ANGLE_PRESETS){const p={id:uid(),type:'angle',name,tags,memo,created:Date.now(),updated:Date.now()};S.parts.push(p);await dbPut('parts',p);}
   }
   S.meta.seedAngle=1;await dbPut('meta',S.meta);
+}
+/* 構図・光のよく効く部品を、1回だけ足す（同じタグのものがあれば足さない） */
+const CAM_PRESETS=[
+  ['太ももから上（カウボーイショット）','cowboy shot','太ももあたりから上。体の形と表情が両方見える、いちばん使いやすい距離'],
+  ['顔のアップ','close-up, portrait','顔を大きく。表情を見せたいコマに'],
+  ['背景ぼかし','depth of field, blurry background','人物にピントを合わせ、背景をぼかす']
+];
+/* 光のよく効く部品 */
+/* 光の部品は、光のことだけ（場所や時間帯は背景に入れる） */
+const LIGHT_PRESETS=[
+  ['やわらかい光','soft lighting','ふんわり明るい。どんな場面にも合わせやすい'],
+  ['ドラマチックな光','cinematic lighting, dramatic lighting','映画のような強い明暗。見せ場のコマに'],
+  ['薄暗い（ぼんやり）','dim lighting, low light','全体が暗く、人物がうっすら見える。背景の「暗い部屋」などと組み合わせる'],
+  ['薄暗い＋窓からの光','dim lighting, window light, light rays','暗い中に、窓から光の筋がさしこむ'],
+  ['薄暗い＋ランプの灯り','dim lighting, warm lighting, lamplight','暗い中で、オレンジ色の灯りが近くを照らす'],
+  ['薄暗い＋画面の光','dim lighting, screen light, face lit by screen','スマホやパソコンの画面の光で顔が照らされる'],
+  ['逆光','backlighting, rim light','うしろから光。体や髪のふちが光る'],
+  ['逆光（夕日の色）','backlighting, golden hour, warm lighting','うしろから夕方のあたたかい光。夕日は背景で選ぶ'],
+  ['逆光（光のつぶ）','backlighting, sunlight, light particles','明るい光を背にして、光のつぶが舞う'],
+  ['逆光（シルエット）','backlighting, silhouette','人物が影になって形だけ見える']
+];
+/* v17 で入れた光の部品を、光だけのタグに直す（自分で直したものはそのまま） */
+const LIGHT_FIX={'dark room, dim lighting, low light':2,'dark room, window light, light rays, dim lighting':3,'dark room, dim lighting, warm lamp light, glowing':4,'dark room, screen light, glowing screen, face lit by screen':5,'backlighting, sunset, golden hour':7,'backlighting, sunlight through window, light particles':8,'backlighting, silhouette, dark figure':9};
+async function seedCams(){
+  if(!S.meta.seedCam){
+    const have=new Set(S.parts.filter(p=>p.type==='camera').map(p=>(p.tags||'').trim()));
+    for(const[name,tags,memo]of CAM_PRESETS){if(have.has(tags))continue;const p={id:uid(),type:'camera',name,tags,memo,created:Date.now(),updated:Date.now()};S.parts.push(p);await dbPut('parts',p);}
+    S.meta.seedCam=1;await dbPut('meta',S.meta);
+  }
+  if(!S.meta.seedLight){
+    /* 構図と光を分けたとき：光だけの部品は「光」へ移し、シーンでも光の欄に付けかえる */
+    const lightOnly=new Set(LIGHT_PRESETS.map(x=>x[1]));
+    for(const p of S.parts)if(p.type==='camera'&&lightOnly.has((p.tags||'').trim())){p.type='light';p.updated=Date.now();await dbPut('parts',p);
+      for(const sc of S.scenes)if(sc.camera===p.id){sc.camera='';if(!sc.light)sc.light=p.id;await dbPut('scenes',sc);}}
+    const have=new Set(S.parts.filter(p=>p.type==='light').map(p=>(p.tags||'').trim()));
+    for(const[name,tags,memo]of LIGHT_PRESETS){if(have.has(tags))continue;const p={id:uid(),type:'light',name,tags,memo,created:Date.now(),updated:Date.now()};S.parts.push(p);await dbPut('parts',p);}
+    S.meta.seedLight=1;await dbPut('meta',S.meta);
+  }
+  if(!S.meta.seedLight2){
+    for(const p of S.parts){const k=LIGHT_FIX[(p.tags||'').trim()];if(p.type==='light'&&k!=null){const[name,tags,memo]=LIGHT_PRESETS[k];p.name=name;p.tags=tags;p.memo=memo;p.updated=Date.now();await dbPut('parts',p);}}
+    S.meta.seedLight2=1;await dbPut('meta',S.meta);
+  }
 }
 /* 入力のたびに保存（少し待ってまとめて保存） */
 const pending=new Map();let flushT;
@@ -425,7 +472,7 @@ function buildPrompt(sc){
   const fmt=S.meta.fmt||'tag';
   const slots=(sc.chars||[]).map(slotInfo);
   const srm=splitTags(sc.remove);
-  const inter=uniq((sc.inter||[]).flatMap(T_),srm),bg=uniq(T_(sc.bg),srm),ang=uniq((sc.angle||[]).flatMap(T_),srm),cam=uniq(T_(sc.camera),srm),add=uniq(splitTags(sc.add),srm),style=uniq(T_(sc.style),srm);
+  const inter=uniq((sc.inter||[]).flatMap(T_),srm),bg=uniq(T_(sc.bg),srm),ang=uniq((sc.angle||[]).flatMap(T_),srm),cam=uniq(T_(sc.camera),srm),lit=uniq(T_(sc.light),srm),add=uniq(splitTags(sc.add),srm),style=uniq(T_(sc.style),srm);
   const loras=[],trig=[];
   for(const l of sc.loras||[]){
     const p=P_(l.id);if(!p)continue;
@@ -436,23 +483,23 @@ function buildPrompt(sc){
   const loraTxt=S.meta.loraInPrompt?loras.map(l=>`<lora:${l.name}:${l.weight===''?1:l.weight}>`):[];
   let pos;
   /* 重みを付けられるタグの一覧（並びはタグの形と同じ） */
-  const all=[...trig];for(const s of slots)all.push(...s.feat,...s.phys,...s.out,...s.pose,...s.face,...s.body,...s.add);all.push(...inter,...bg,...ang,...add,...cam,...style);
+  const all=[...trig];for(const s of slots)all.push(...s.feat,...s.phys,...s.out,...s.pose,...s.face,...s.body,...s.add);all.push(...inter,...bg,...ang,...add,...cam,...lit,...style);
   const tagList=uniq(all).map(t=>({base:baseOf(t),key:norm(t),own:parseTag(t).w}));
   const W=t=>weigh(t,sc);
   if(fmt==='group'){
     const out=slots.map(s=>{const t=uniq([...s.feat,...s.phys,...s.out,...s.pose,...s.face,...s.body,...s.add]).map(W);return t.length?`${s.subj}(${t.join(', ')})`:s.subj;});
-    pos=[...out,...uniq([...inter,...bg,...ang,...add,...cam,...style,...trig]).map(W),...loraTxt].join(', ');
+    pos=[...out,...uniq([...inter,...bg,...ang,...add,...cam,...lit,...style,...trig]).map(W),...loraTxt].join(', ');
   }else if(fmt==='tag'){
     const t=[...trig];
     for(const s of slots)t.push(...s.feat,...s.phys,...s.out,...s.pose,...s.face,...s.body,...s.add);
-    t.push(...inter,...bg,...ang,...add,...cam,...style);
+    t.push(...inter,...bg,...ang,...add,...cam,...lit,...style);
     pos=[...countTags(slots.map(s=>s.subj)),...uniq(t).map(W),...loraTxt].join(', ');
   }else{
     /* 文章の形では重みを使わない（PixAI の DiT ガイドで、(tag:1.2) は効かないとされているため） */
     const B=a=>a.map(baseOf);
     for(const s of slots)for(const k of['feat','phys','out','pose','face','body','add'])s[k]=B(s[k]);
     trig.splice(0,trig.length,...B(trig));
-    for(const a of[inter,bg,ang,cam,add,style])a.splice(0,a.length,...B(a));
+    for(const a of[inter,bg,ang,cam,lit,add,style])a.splice(0,a.length,...B(a));
     /* 文章（Tsubaki 系） */
     const S2=[];
     if(trig.length)S2.push(uniq(trig).join(', ')+',');
@@ -472,7 +519,8 @@ function buildPrompt(sc){
     if(add.length)S2.push(sent(add.join(', ')));
     const at=(sc.angle||[]).map(id=>TX_(id)).filter(Boolean),atTags=(sc.angle||[]).filter(id=>!TX_(id)).flatMap(id=>uniq(T_(id),srm).map(baseOf));
     for(const x of at)S2.push(sent(x));if(atTags.length)S2.push(sent('Viewed '+uniq(atTags).join(', ')));
-    const ct=TX_(sc.camera)||cam.join(', ');if(ct)S2.push(sent(TX_(sc.camera)?ct:'Framing and light: '+ct));
+    const ct=TX_(sc.camera)||cam.join(', ');if(ct)S2.push(sent(TX_(sc.camera)?ct:'Framing: '+ct));
+    const lt=TX_(sc.light)||lit.join(', ');if(lt)S2.push(sent(TX_(sc.light)?lt:'Lighting: '+lt));
     const sty=TX_(sc.style)||style.join(', ');if(sty)S2.push(sent(TX_(sc.style)?sty:'Style: '+sty));
     pos=[S2.join(' '),...loraTxt].filter(Boolean).join(' ');
   }
@@ -516,9 +564,9 @@ $('#sheet .bk').onclick=closeSheet;
 
 /* ========== 使われている場所 ========== */
 function usedIn(sceneId){const r=[];for(const w of S.works)(w.panels||[]).forEach((p,i)=>{if(p===sceneId)r.push({w,i});});return r;}
-function partUsage(pid){return S.scenes.filter(s=>s.bg===pid||s.style===pid||s.camera===pid||(s.inter||[]).includes(pid)||(s.angle||[]).includes(pid)||(s.chars||[]).some(c=>c.chara===pid||c.outfit===pid||c.action===pid||c.face===pid||(c.body||[]).includes(pid)||(c.phys||[]).includes(pid))||(s.loras||[]).some(l=>l.id===pid)).length;}
+function partUsage(pid){return S.scenes.filter(s=>s.bg===pid||s.style===pid||s.camera===pid||s.light===pid||(s.inter||[]).includes(pid)||(s.angle||[]).includes(pid)||(s.chars||[]).some(c=>c.chara===pid||c.outfit===pid||c.action===pid||c.face===pid||(c.body||[]).includes(pid)||(c.phys||[]).includes(pid))||(s.loras||[]).some(l=>l.id===pid)).length;}
 const newSlot=()=>({chara:'',phys:[],outfit:'',action:'',face:'',body:[],add:'',remove:''});
-function newScene(){const s={id:uid(),title:'',roles:[],chars:[newSlot()],inter:[],angle:[],bg:'',camera:'',style:defaultStyle(),loras:[],add:'',remove:'',neg:'',memo:'',images:[],created:Date.now(),updated:Date.now()};S.scenes.push(s);return s;}
+function newScene(){const s={id:uid(),title:'',roles:[],chars:[newSlot()],inter:[],angle:[],bg:'',camera:'',light:'',style:defaultStyle(),loras:[],add:'',remove:'',neg:'',memo:'',images:[],created:Date.now(),updated:Date.now()};S.scenes.push(s);return s;}
 function defaultStyle(){const st=S.parts.filter(p=>p.type==='style');return st.length===1?st[0].id:'';}
 
 /* ========== 作品一覧 ========== */
@@ -685,13 +733,15 @@ function vScene(c){
   <div class="sec"><h2>背景・カメラ・画風</h2>
     ${partSel('背景','bg',sc.bg,'data-scf="bg"')}
     ${chipSel('カメラ位置','angle',sc.angle,'data-chip="angle"')}
-    ${partSel('構図・光','camera',sc.camera,'data-scf="camera"')}
+    ${partSel('構図','camera',sc.camera,'data-scf="camera"')}
+    ${partSel('光','light',sc.light,'data-scf="light"')}
     ${partSel('画風','style',sc.style,'data-scf="style"')}
     <div class="two">
       <label class="f"><span>足すタグ（人物以外）</span><input data-st="add" value="${esc(sc.add)}" placeholder="sunset"></label>
       <label class="f"><span>外すタグ</span><input data-st="remove" value="${esc(sc.remove)}" placeholder="daytime"></label>
     </div>
-    <label class="f" style="margin-top:12px"><span>ネガティブに足すタグ（このシーンだけ）</span><input data-st="neg" value="${esc(sc.neg)}" placeholder="extra fingers"></label>
+    <label class="f" style="margin-top:12px"><span>ネガティブに足すタグ（このシーンだけ）</span><input data-st="neg" value="${esc(sc.neg)}" placeholder="glasses, text, watermark"></label>
+    ${negHelp()}
   </div>
 
   <div class="sec"><h2>LoRA <small>PixAI の画面で選ぶ LoRA と重みを記録</small></h2>
@@ -790,7 +840,7 @@ function vScene(c){
     const imgs=sc.images;S.scenes=S.scenes.filter(x=>x.id!==sc.id);await dbDel('scenes',sc.id);for(const id of imgs)await deleteImageIfUnused(id);goBack();};
 }
 /* 画像ごとに、そのときのプロンプトの設定を記録する */
-const SNAP_KEYS=['chars','inter','angle','bg','camera','style','loras','add','remove','neg','weights'];
+const SNAP_KEYS=['chars','inter','angle','bg','camera','light','style','loras','add','remove','neg','weights'];
 const snapDef=k=>(k==='chars'||k==='inter'||k==='angle'||k==='loras')?[]:k==='weights'?{}:'';
 const snapVal=(o,k)=>JSON.parse(JSON.stringify(o[k]??snapDef(k)));
 function recordSnap(sc,id){sc.imgMeta=sc.imgMeta||{};const snap={};for(const k of SNAP_KEYS)snap[k]=snapVal(sc,k);const p=buildPrompt(sc);sc.imgMeta[id]={snap,pos:p.pos,neg:p.neg,loras:p.loras,fmt:p.fmt,at:Date.now()};}
@@ -801,7 +851,7 @@ function snapSummary(snap){
   (snap.chars||[]).forEach((c,i)=>{const b=[nm(c.chara),...(c.phys||[]).map(nm),nm(c.outfit),nm(c.action),nm(c.face),...(c.body||[]).map(nm)].filter(Boolean).join('・');rows.push(`<tr><th>人物 ${i+1}</th><td>${b||'—'}${c.add?`<br><small>足す：${esc(c.add)}</small>`:''}${c.remove?`<br><small>外す：${esc(c.remove)}</small>`:''}</td></tr>`);});
   if((snap.inter||[]).length)rows.push(`<tr><th>絡み</th><td>${snap.inter.map(nm).join('・')}</td></tr>`);
   if((snap.angle||[]).length)rows.push(`<tr><th>カメラ位置</th><td>${snap.angle.map(nm).join('・')}</td></tr>`);
-  const rest=[['背景',snap.bg],['構図・光',snap.camera],['画風',snap.style]].filter(x=>x[1]).map(([l,id])=>`<tr><th>${l}</th><td>${nm(id)}</td></tr>`);
+  const rest=[['背景',snap.bg],['構図',snap.camera],['光',snap.light],['画風',snap.style]].filter(x=>x[1]).map(([l,id])=>`<tr><th>${l}</th><td>${nm(id)}</td></tr>`);
   rows.push(...rest);
   if((snap.loras||[]).length)rows.push(`<tr><th>LoRA</th><td>${snap.loras.map(l=>nm(l.id)+(l.weight!==''&&l.weight!=null?`（${esc(l.weight)}）`:'')).join('・')}</td></tr>`);
   const w=Object.entries(snap.weights||{});if(w.length)rows.push(`<tr><th>重み</th><td>${w.map(([k,v])=>`${esc(k)} ${v}`).join('、')}</td></tr>`);
@@ -1385,7 +1435,7 @@ async function openExport(w){
 
 /* ========== 部品 ========== */
 let partTab='chara';
-const TEXT_PH={chara:'a petite girl with short black hair and brown eyes',outfit:'wearing a black bikini',action:'standing and looking back over her shoulder',face:'smiling brightly',body:'sweating a little',inter:'the girl hugs the boy from behind',bg:'on a sunny beach with a clear blue sky',camera:'full body shot, soft afternoon light',style:'anime illustration with clean lines'};
+const TEXT_PH={chara:'a petite girl with short black hair and brown eyes',outfit:'wearing a black bikini',action:'standing and looking back over her shoulder',face:'smiling brightly',body:'sweating a little',inter:'the girl hugs the boy from behind',bg:'on a sunny beach with a clear blue sky',camera:'full body shot',light:'soft afternoon light',style:'anime illustration with clean lines'};
 function vParts(){
   /* 部品の種類を1画面に並べ、押すとその種類の一覧へ */
   setHead('部品');
@@ -1416,7 +1466,7 @@ function openPart(id,type,onSave){
   <label class="f"><span>標準の重み</span><input id="pW" type="number" step="0.05" inputmode="decimal" value="${esc(p.weight)}"></label>`:''}
   <label class="f"><span>${p.type==='lora'?'トリガーワード（プロンプトに足すタグ）':'タグ（カンマ区切り）'}</span><textarea id="pTags" rows="3" placeholder="${esc(T.ph)}">${esc(p.tags)}</textarea><span class="hint">${esc(T.hint)}</span></label>
   ${p.type!=='lora'?`<label class="f"><span>文章で書くとき（Tsubaki 系・英語・なくてもよい）</span><textarea id="pText" rows="2" placeholder="${esc(TEXT_PH[p.type]||'')}">${esc(p.text||'')}</textarea><span class="hint">プロンプトの形が「文章」のときだけ、タグの代わりにこの文を使います。空のままならタグから文を作ります。</span></label>`:''}
-  ${p.type==='style'?`<label class="f"><span>ネガティブプロンプト</span><textarea id="pNegT" rows="3" placeholder="lowres, bad anatomy, bad hands">${esc(p.neg)}</textarea></label>`:''}
+  ${p.type==='style'?`<label class="f"><span>ネガティブプロンプト</span><textarea id="pNegT" rows="3" placeholder="lowres, blurry, jpeg artifacts, text, watermark">${esc(p.neg)}</textarea></label>${negHelp()}`:''}
   <label class="f"><span>メモ</span><textarea id="pMemo" rows="2" placeholder="${p.type==='lora'?'PixAI のURL・合う重みなど':''}">${esc(p.memo)}</textarea></label>
   ${used?`<div class="banner info">この部品は ${used} 件のシーンで使っています。直すと、そのすべてのシーンのプロンプトが変わります。</div>`:''}
   <div class="row"><button class="btn" id="pSave">保存</button>${src?'<button class="btn ghost" id="pDup">複製</button><button class="btn danger" id="pDel">削除</button>':''}<button class="btn ghost" id="pCancel">やめる</button></div>`);
@@ -1428,7 +1478,7 @@ function openPart(id,type,onSave){
   const dl=$('#pDel');if(dl)dl.onclick=async()=>{if(!confirm(used?`この部品は ${used} 件のシーンで使っています。削除すると、そのシーンからも外れます。削除しますか？`:'この部品を削除しますか？'))return;
     for(const s of S.scenes){let ch=false;for(const c of s.chars||[]){for(const f of['chara','outfit','action','face'])if(c[f]===p.id){c[f]='';ch=true;}
         for(const f of['body','phys'])if((c[f]||[]).includes(p.id)){c[f]=c[f].filter(x=>x!==p.id);ch=true;}}
-      for(const f of['bg','style','camera'])if(s[f]===p.id){s[f]='';ch=true;}
+      for(const f of['bg','style','camera','light'])if(s[f]===p.id){s[f]='';ch=true;}
       for(const f of['inter','angle'])if((s[f]||[]).includes(p.id)){s[f]=s[f].filter(x=>x!==p.id);ch=true;}
       if((s.loras||[]).some(l=>l.id===p.id)){s.loras=s.loras.filter(l=>l.id!==p.id);ch=true;}
       if(ch)await saveNow('scenes',s);}
@@ -1595,12 +1645,12 @@ async function insertSample(){
   const kiss=P('inter','キス','kiss',{text:'They are kissing'});
   const beach=P('bg','昼のビーチ','beach, blue sky, daytime');
   const cls=P('bg','教室','classroom, desk, window, daytime');
-  const cam=P('camera','全身・やわらかい光','full body, soft lighting');
+  const cam=P('camera','全身','full body');const soft=P('light','やわらかい光','soft lighting');
   const st=P('style','いつもの画風','masterpiece, best quality, anime style',{neg:'lowres, bad anatomy, bad hands, text, watermark'});
   const lo=P('lora','水彩風（例）','watercolor',{weight:0.6,memo:'サンプルです。実際の LoRA 名に直してください'});
   const parts=[mika,sen,uni,swim,casual,stand,run,smile,surp,sweat,blush,wet,hug,hand,kiss,beach,cls,cam,st,lo];
-  const SC=(title,roles,chars,bg,extra)=>Object.assign({id:uid(),title,roles,chars:chars.map(c=>Object.assign(newSlot(),c)),inter:[],bg,angle:[],camera:'',style:st.id,loras:[],add:'',remove:'',neg:'',memo:'',images:[],created:Date.now(),updated:Date.now()},extra||{});
-  const s1=SC('ビーチで笑顔のミカ',['起'],[{chara:mika.id,outfit:swim.id,action:stand.id,face:smile.id,body:[wet.id]}],beach.id,{camera:cam.id});
+  const SC=(title,roles,chars,bg,extra)=>Object.assign({id:uid(),title,roles,chars:chars.map(c=>Object.assign(newSlot(),c)),inter:[],bg,angle:[],camera:'',light:'',style:st.id,loras:[],add:'',remove:'',neg:'',memo:'',images:[],created:Date.now(),updated:Date.now()},extra||{});
+  const s1=SC('ビーチで笑顔のミカ',['起'],[{chara:mika.id,outfit:swim.id,action:stand.id,face:smile.id,body:[wet.id]}],beach.id,{camera:cam.id,light:soft.id});
   const s2=SC('先輩が走ってくる',['承'],[{chara:sen.id,outfit:uni.id,action:run.id,face:smile.id,body:[sweat.id]}],beach.id);
   const s3=SC('驚くミカ（夕方）',['転'],[{chara:mika.id,outfit:swim.id,action:stand.id,face:surp.id,body:[sweat.id,blush.id],add:'looking back'}],beach.id,{add:'sunset, orange sky',remove:'daytime, blue sky'});
   const s4=SC('教室でハグする二人',['結'],[{chara:mika.id,outfit:uni.id,action:stand.id,face:smile.id,body:[blush.id]},{chara:sen.id,outfit:uni.id,action:stand.id,face:surp.id,add:'scratching head'}],cls.id,{inter:[hug.id],loras:[{id:lo.id,weight:''}]});
@@ -1611,6 +1661,20 @@ async function insertSample(){
   toast('サンプルを入れました');setTab('works');
 }
 
+/* ネガティブプロンプトの効かせ方（参考：note「ネガティブプロンプトで消えない理由」） */
+function negHelp(){return `<details class="nh"><summary>ネガティブの効かせ方を見る</summary><div class="nhb">  <p style="margin:0 0 10px">ネガティブは「消す命令」ではなく「<b>弱める</b>」ものです。ポジティブのほうが強いので、ネガに書いても消えないことがよくあります。</p>
+  <div class="sec" style="margin-bottom:10px"><h2>効きやすいもの</h2><p class="hint" style="margin:0">あとから付く小物（glasses など）・頬の赤み・画質（lowres, blurry, jpeg artifacts）・文字（text, watermark）・背景（simple background）</p></div>
+  <div class="sec" style="margin-bottom:10px"><h2>効きにくいもの</h2><p class="hint" style="margin:0">その言葉と一体の特徴（angel の翼、猫耳キャラのしっぽ）・キャラLoRAに焼き付いた服・手や指の数・構図やカメラ位置。bad hands, extra fingers を入れても直りにくいです。</p></div>
+  <div class="sec" style="margin-bottom:10px"><h2>消したいときのやり方</h2>
+  <ol style="margin:0;padding-left:1.3em;line-height:1.7;font-size:14px">
+    <li><b>言葉を分ける（いちばん効く）</b>：angel ではなく white dress, halo のように、ほしい部分だけを書く</li>
+    <li><b>ポジティブで「なし」と書く</b>：no wings, without wings, wingless</li>
+    <li><b>重みで調整</b>：元の言葉を弱める（angel:0.8）／ネガを強める（wings:1.5）。強すぎると絵が崩れます</li>
+    <li><b>言いかえを足す</b>：feathered wings, angel wings など。ただしネガを長くしすぎると、かえって効きが弱まります</li>
+    <li><b>手や指・しつこい部分</b>：ネガより、できた絵の一部を描き直す（inpaint）ほうが早いです</li>
+  </ol></div>
+  <p class="hint" style="margin:0 0 12px">モデルによって効き方は変わります。何枚か出して、当たりを選ぶつもりで使ってください。</p>
+  </div></details>`;}
 /* ========== 起動 ========== */
 (async()=>{
   history.replaceState({n:1},'');
