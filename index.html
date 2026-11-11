@@ -257,6 +257,7 @@ body.editing #toast{bottom:calc(24px + env(safe-area-inset-bottom))}
 .pcat{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
 .f.cat{border-left:4px solid var(--c);padding:8px 0 8px 10px;margin-left:-4px;border-radius:4px;background:color-mix(in srgb,var(--c) 7%,transparent)}
 .f.cat>span{color:color-mix(in srgb,var(--c) 75%,var(--ink));font-weight:700}
+.pic{font-style:normal;margin-right:5px;font-size:1.05em;line-height:1}
 .f.cat .tg,.pgrid button{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
 .f.cat .tg.on{background:var(--c);border-color:var(--c)}
 .pcat button{border-left:5px solid var(--c)!important;display:flex;flex-wrap:wrap;align-items:baseline;gap:2px 8px;text-align:left;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px;min-height:72px}
@@ -346,6 +347,7 @@ function ymd(){const d=new Date();return `${d.getFullYear()}${String(d.getMonth(
 /* 部品の種類 */
 const PT={
   chara:{label:'人物',hint:'その人の変わらない特徴（髪・目など）。体つきは「身体の特徴」、服や表情は別の部品にすると使い回しやすい',ph:'black hair, short hair, brown eyes',namePh:'例：ミカ'},
+  act:{label:'行動',hint:'その人がしていること（服を持ち上げる など）。ポーズと組み合わせて使います。1人にいくつでも付けられます',ph:'lift up clothes',namePh:'例：服を持ち上げる'},
   phys:{label:'身体の特徴',hint:'体型・身長・肌の色・胸の大きさなど、体のつくり。1人にいくつでも付けられます',ph:'slender, tall, fair skin',namePh:'例：細身'},
   outfit:{label:'服装',hint:'服・小物のタグ',ph:'bikini',namePh:'例：水着（黒）'},
   action:{label:'ポーズ',hint:'ポーズ・動き・視線など',ph:'standing, looking at viewer',namePh:'例：立つ'},
@@ -361,17 +363,17 @@ const PT={
   style:{label:'画風',hint:'画質・画風のタグ。タグの形では最後に入ります',ph:'masterpiece, best quality',namePh:'例：いつもの画風'},
   lora:{label:'LoRA',hint:'LoRA を使うときにプロンプトへ足すタグ（なければ空のまま）。LoRA は作られたモデルの系統（SDXL 系・Tsubaki 系）でしか使えません',ph:'トリガーワード',namePh:'例：水彩風'}
 };
-const PT_ORDER=['chara','phys','outfit','action','face','body','inter','bg','angle','camera','light','fx','np','style','lora'];
+const PT_ORDER=['chara','phys','outfit','action','act','face','body','inter','bg','angle','camera','light','fx','np','style','lora'];
 /* プロンプトの形（PixAI 公式ブログの勧めに合わせる） */
 const FMT={
-  tag:{label:'タグ（SDXL 系：Haruka・Hoshino など）',hint:'人数 → 人物の特徴 → 身体の特徴 → 服 → ポーズ → 表情 → 体の状態 → 絡み → 背景 → カメラ位置 → 構図 → 光 → エフェクト・動き → ネガポジ → 画風 の順に、タグを並べます。'},
+  tag:{label:'タグ（SDXL 系：Haruka・Hoshino など）',hint:'人数 → 人物の特徴 → 身体の特徴 → 服 → ポーズ → 行動 → 表情 → 体の状態 → 絡み → 背景 → カメラ位置 → 構図 → 光 → エフェクト・動き → ネガポジ → 画風 の順に、タグを並べます。'},
   prose:{label:'文章（Tsubaki 系）',hint:'人物（2人以上なら人数と絡みを先に）→ 一人ずつの説明 → 背景 → カメラ位置 → 構図 → 光 → エフェクト・動き → ネガポジ → 画風 の順の英語の文章にします。部品に「文章」を書いておくと、タグの代わりにそれを使います。'},
   group:{label:'かっこでまとめる（girl(…) の形）',hint:'人物ごとに girl(…) の形でまとめます（今までの書き方）。'}
 };
 
 /* ========== データベース（IndexedDB） ========== */
 let db=null;
-const APP_VER='v23';/* sw.js の VERSION と同じにする */
+const APP_VER='v24';/* sw.js の VERSION と同じにする */
 const STORES=['parts','scenes','works','images','meta','fonts','stamps'];
 function openDB(){return new Promise((res,rej)=>{const r=indexedDB.open('manga4koma',3);r.onupgradeneeded=()=>{const d=r.result;for(const s of STORES)if(!d.objectStoreNames.contains(s))d.createObjectStore(s,{keyPath:'id'});};r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error);});}
 function tx(store,mode,fn){return new Promise((res,rej)=>{if(!db)return res(undefined);const t=db.transaction(store,mode);const req=fn(t.objectStore(store));let out;if(req)req.onsuccess=()=>{out=req.result;};t.oncomplete=()=>res(out);t.onerror=()=>rej(t.error);t.onabort=()=>rej(t.error);});}
@@ -385,7 +387,7 @@ const byId=(k,id)=>id?S[k].find(x=>x.id===id):undefined;
 async function loadAll(){
   S.parts=await dbAll('parts');S.scenes=await dbAll('scenes');S.works=await dbAll('works');
   S.meta=Object.assign({id:'settings',loraInPrompt:false,lastBackup:0},await dbGet('meta','settings')||{});
-  await seedAngles();await seedCams();await seedFx();await seedNp();await fixNp();
+  await seedAngles();await seedCams();await seedFx();await seedNp();await fixNp();await seedAct();
 }
 /* カメラ位置のよく使う部品を、最初の1回だけ入れておく（消しても、もう一度は入らない） */
 const ANGLE_PRESETS=[
@@ -407,6 +409,14 @@ async function seedAngles(){
     for(const[name,tags,memo]of ANGLE_PRESETS){const p={id:uid(),type:'angle',name,tags,memo,created:Date.now(),updated:Date.now()};S.parts.push(p);await dbPut('parts',p);}
   }
   S.meta.seedAngle=1;await dbPut('meta',S.meta);
+}
+/* 行動のよく使う部品 */
+const ACT_PRESETS=[['服を持ち上げる','lift up clothes',''],['胸を出す','breast out','']];
+async function seedAct(){
+  if(S.meta.seedAct)return;
+  const have=new Set(S.parts.filter(p=>p.type==='act').map(p=>(p.tags||'').trim()));
+  for(const[name,tags,memo]of ACT_PRESETS){if(have.has(tags))continue;const p={id:uid(),type:'act',name,tags,memo,created:Date.now(),updated:Date.now()};S.parts.push(p);await dbPut('parts',p);}
+  S.meta.seedAct=1;await dbPut('meta',S.meta);
 }
 /* ネガポジのよく使う部品（ポジとネガの両方からおさえる） */
 /* ネガポジ：ポジティブだけで効くように書く（なくしたいものは no ○○、色ははっきり指定） */
@@ -533,7 +543,7 @@ function countTags(subs){const g=subs.filter(s=>subjKind(s)==='girl').length,b=s
 function slotInfo(sl){
   const c=P_(sl.chara),rm=splitTags(sl.remove);
   const subj=(((c&&c.subject)||'girl').trim()||'girl').replace(/^\d+\s*/,'');
-  return{sl,c,subj,rm,feat:uniq(T_(sl.chara),rm),phys:uniq((sl.phys||[]).flatMap(T_),rm),out:uniq(T_(sl.outfit),rm),pose:uniq(T_(sl.action),rm),face:uniq(T_(sl.face),rm),
+  return{sl,c,subj,rm,feat:uniq(T_(sl.chara),rm),phys:uniq((sl.phys||[]).flatMap(T_),rm),out:uniq(T_(sl.outfit),rm),pose:uniq(T_(sl.action),rm),act:uniq((sl.act||[]).flatMap(T_),rm),face:uniq(T_(sl.face),rm),
     body:uniq((sl.body||[]).flatMap(T_),rm),add:uniq(splitTags(sl.add),rm)};
 }
 const NUMW=['','One','Two','Three','Four','Five','Six'];
@@ -555,21 +565,21 @@ function buildPrompt(sc){
   const loraTxt=S.meta.loraInPrompt?loras.map(l=>`<lora:${l.name}:${l.weight===''?1:l.weight}>`):[];
   let pos;
   /* 重みを付けられるタグの一覧（並びはタグの形と同じ） */
-  const all=[...trig];for(const s of slots)all.push(...s.feat,...s.phys,...s.out,...s.pose,...s.face,...s.body,...s.add);all.push(...inter,...bg,...ang,...add,...cam,...lit,...fx,...npP,...style);
+  const all=[...trig];for(const s of slots)all.push(...s.feat,...s.phys,...s.out,...s.pose,...s.act,...s.face,...s.body,...s.add);all.push(...inter,...bg,...ang,...add,...cam,...lit,...fx,...npP,...style);
   const tagList=uniq(all).map(t=>({base:baseOf(t),key:norm(t),own:parseTag(t).w}));
   const W=t=>weigh(t,sc);
   if(fmt==='group'){
-    const out=slots.map(s=>{const t=uniq([...s.feat,...s.phys,...s.out,...s.pose,...s.face,...s.body,...s.add]).map(W);return t.length?`${s.subj}(${t.join(', ')})`:s.subj;});
+    const out=slots.map(s=>{const t=uniq([...s.feat,...s.phys,...s.out,...s.pose,...s.act,...s.face,...s.body,...s.add]).map(W);return t.length?`${s.subj}(${t.join(', ')})`:s.subj;});
     pos=[...out,...uniq([...inter,...bg,...ang,...add,...cam,...lit,...fx,...npP,...style,...trig]).map(W),...loraTxt].join(', ');
   }else if(fmt==='tag'){
     const t=[...trig];
-    for(const s of slots)t.push(...s.feat,...s.phys,...s.out,...s.pose,...s.face,...s.body,...s.add);
+    for(const s of slots)t.push(...s.feat,...s.phys,...s.out,...s.pose,...s.act,...s.face,...s.body,...s.add);
     t.push(...inter,...bg,...ang,...add,...cam,...lit,...fx,...npP,...style);
     pos=[...countTags(slots.map(s=>s.subj)),...uniq(t).map(W),...loraTxt].join(', ');
   }else{
     /* 文章の形では重みを使わない（PixAI の DiT ガイドで、(tag:1.2) は効かないとされているため） */
     const B=a=>a.map(baseOf);
-    for(const s of slots)for(const k of['feat','phys','out','pose','face','body','add'])s[k]=B(s[k]);
+    for(const s of slots)for(const k of['feat','phys','out','pose','act','face','body','add'])s[k]=B(s[k]);
     trig.splice(0,trig.length,...B(trig));
     for(const a of[inter,bg,ang,cam,lit,fx,npP,add,style])a.splice(0,a.length,...B(a));
     /* 文章（Tsubaki 系） */
@@ -577,7 +587,7 @@ function buildPrompt(sc){
     if(trig.length)S2.push(uniq(trig).join(', ')+',');
     const head=s=>TX_(s.sl.chara)||`${art(s.subj)} ${s.subj}${s.feat.length?' with '+s.feat.join(', '):''}`;
     const details=s=>{const d=[];const ph=(s.sl.phys||[]).map(id=>TX_(id)||uniq(T_(id),s.rm).map(baseOf).join(', ')).filter(Boolean).join(', ');if(ph)d.push(ph);const o=TX_(s.sl.outfit)||s.out.join(', ');if(o)d.push(/^wear/i.test(o)?o:'wearing '+o);
-      const pz=TX_(s.sl.action)||s.pose.join(', ');if(pz)d.push(pz);const fc=TX_(s.sl.face)||s.face.join(', ');if(fc)d.push(fc);
+      const pz=TX_(s.sl.action)||s.pose.join(', ');if(pz)d.push(pz);const ac=(s.sl.act||[]).map(id=>TX_(id)||uniq(T_(id),s.rm).join(', ')).filter(Boolean).join(', ');if(ac)d.push(ac);const fc=TX_(s.sl.face)||s.face.join(', ');if(fc)d.push(fc);
       const bd=(s.sl.body||[]).map(id=>TX_(id)||uniq(T_(id),s.rm).join(', ')).filter(Boolean).join(', ');if(bd)d.push(bd);if(s.add.length)d.push(s.add.join(', '));return d;};
     if(slots.length===1){const s=slots[0];S2.push(sent([head(s),...details(s)].join(', ')));}
     else if(slots.length>1){
@@ -639,8 +649,8 @@ $('#sheet .bk').onclick=closeSheet;
 
 /* ========== 使われている場所 ========== */
 function usedIn(sceneId){const r=[];for(const w of S.works)(w.panels||[]).forEach((p,i)=>{if(p===sceneId)r.push({w,i});});return r;}
-function partUsage(pid){return S.scenes.filter(s=>s.bg===pid||s.style===pid||s.camera===pid||s.light===pid||(s.inter||[]).includes(pid)||(s.angle||[]).includes(pid)||(s.fx||[]).includes(pid)||(s.np||[]).includes(pid)||(s.chars||[]).some(c=>c.chara===pid||c.outfit===pid||c.action===pid||c.face===pid||(c.body||[]).includes(pid)||(c.phys||[]).includes(pid))||(s.loras||[]).some(l=>l.id===pid)).length;}
-const newSlot=()=>({chara:'',phys:[],outfit:'',action:'',face:'',body:[],add:'',remove:''});
+function partUsage(pid){return S.scenes.filter(s=>s.bg===pid||s.style===pid||s.camera===pid||s.light===pid||(s.inter||[]).includes(pid)||(s.angle||[]).includes(pid)||(s.fx||[]).includes(pid)||(s.np||[]).includes(pid)||(s.chars||[]).some(c=>c.chara===pid||c.outfit===pid||c.action===pid||c.face===pid||(c.body||[]).includes(pid)||(c.phys||[]).includes(pid)||(c.act||[]).includes(pid))||(s.loras||[]).some(l=>l.id===pid)).length;}
+const newSlot=()=>({chara:'',phys:[],outfit:'',action:'',act:[],face:'',body:[],add:'',remove:''});
 function newScene(){const s={id:uid(),title:'',roles:[],chars:[newSlot()],inter:[],angle:[],fx:[],np:[],bg:'',camera:'',light:'',style:defaultStyle(),loras:[],add:'',remove:'',neg:'',memo:'',images:[],created:Date.now(),updated:Date.now()};S.scenes.push(s);return s;}
 function defaultStyle(){const st=S.parts.filter(p=>p.type==='style');return st.length===1?st[0].id:'';}
 
@@ -757,7 +767,7 @@ function vScenes(c){
 /* ========== シーンの編集 ========== */
 function opts(type,sel){const ps=S.parts.filter(p=>p.type===type).sort((a,b)=>(a.name||'').localeCompare(b.name||'','ja'));return `<option value="">（なし）</option>${ps.map(p=>`<option value="${p.id}"${p.id===sel?' selected':''}>${esc(p.name||'名前なし')}</option>`).join('')}<option value="__new">＋ 新しく登録…</option>`;}
 /* 部品の種類ごとの色（シーンの欄と部品の一覧で同じ色を使う） */
-const CATC={chara:'#3b82f6',phys:'#0ea5a4',outfit:'#8b5cf6',action:'#f97316',face:'#ec4899',body:'#ef4444',inter:'#d946ef',bg:'#22a34a',angle:'#6366f1',camera:'#0891b2',light:'#eab308',fx:'#84cc16',np:'#64748b',style:'#a16207',lora:'#475569'};
+const CATC={act:'#f43f5e',chara:'#3b82f6',phys:'#0ea5a4',outfit:'#8b5cf6',action:'#f97316',face:'#ec4899',body:'#ef4444',inter:'#d946ef',bg:'#22a34a',angle:'#6366f1',camera:'#0891b2',light:'#eab308',fx:'#84cc16',np:'#64748b',style:'#a16207',lora:'#475569'};
 /* 長押し：0.5秒押し続けたら fn を呼ぶ。そのあとの「押した」はなかったことにする */
 function longPress(el,fn){let t=0,x=0,y=0,fired=false;
   const stop=()=>{clearTimeout(t);t=0;};
@@ -766,20 +776,23 @@ function longPress(el,fn){let t=0,x=0,y=0,fired=false;
   ['pointerup','pointercancel','pointerleave'].forEach(k=>el.addEventListener(k,stop));
   el.addEventListener('click',e=>{if(fired){fired=false;e.stopImmediatePropagation();e.preventDefault();}},true);
   el.addEventListener('contextmenu',e=>e.preventDefault());}
+/* 種類ごとの小さな絵（ピクトグラム） */
+const CATI={chara:'👤',phys:'🧍',outfit:'👕',action:'🤸',act:'✋',face:'😊',body:'💧',inter:'🤝',bg:'🏞️',angle:'🎥',camera:'🖼️',light:'💡',fx:'✨',np:'⚖️',style:'🎨',lora:'🧩'};
+const pic=t=>CATI[t]?`<i class="pic" aria-hidden="true">${CATI[t]}</i>`:'';
 const catAttr=t=>`data-cat="${t}" style="--c:${CATC[t]||'#888'}"`;
 function partSel(label,type,val,attrs){const p=byId('parts',val);
   /* 表情・画風は、見本画像があれば画像を並べて選べるようにする */
   const ps=IMG_TYPES.includes(type)?S.parts.filter(x=>x.type===type).sort((a,b)=>(a.name||'').localeCompare(b.name||'','ja')):[];
   const grid=ps.some(x=>x.img)?`<div class="pgrid">${ps.map(x=>`<button type="button" class="${x.id===val?'on':''}" data-gpick="${x.id}"><span class="gi" ${x.img?`style="background-image:url(${partImgUrl(x)})"`:''}>${x.img?'':'画像なし'}</span><small>${esc(x.name||'名前なし')}</small></button>`).join('')}</div>`:'';
-  return `<div class="f cat" ${catAttr(type)}><span>${label}</span><div class="sel"><select ${attrs} data-type="${type}" aria-label="${label}">${opts(type,val)}</select>${p?`<button class="ico" data-editpart="${p.id}" title="この部品を直す" aria-label="この部品を直す">✎</button>`:''}</div>${p&&p.tags?`<div class="ptags">${esc(p.tags)}</div>`:''}${grid}</div>`;}
+  return `<div class="f cat" ${catAttr(type)}><span>${pic(type)}${label}</span><div class="sel"><select ${attrs} data-type="${type}" aria-label="${label}">${opts(type,val)}</select>${p?`<button class="ico" data-editpart="${p.id}" title="この部品を直す" aria-label="この部品を直す">✎</button>`:''}</div>${p&&p.tags?`<div class="ptags">${esc(p.tags)}</div>`:''}${grid}</div>`;}
 /* いくつでも選べる部品（体の状態・絡み） */
 function chipSel(label,type,arr,attrs){const ps=S.parts.filter(p=>p.type===type).sort((a,b)=>(a.name||'').localeCompare(b.name||'','ja'));
-  return `<div class="f cat" ${catAttr(type)}><span>${label}（いくつでも・長押しで直す）</span><div class="tgs">${ps.map(p=>`<button type="button" class="tg ${arr.includes(p.id)?'on':''}" ${attrs} data-pid="${p.id}">${esc(p.name||'名前なし')}</button>`).join('')}<button type="button" class="tg new" ${attrs} data-pid="__new">＋ 登録</button></div></div>`;}
+  return `<div class="f cat" ${catAttr(type)}><span>${pic(type)}${label}（いくつでも・長押しで直す）</span><div class="tgs">${ps.map(p=>`<button type="button" class="tg ${arr.includes(p.id)?'on':''}" ${attrs} data-pid="${p.id}">${esc(p.name||'名前なし')}</button>`).join('')}<button type="button" class="tg new" ${attrs} data-pid="__new">＋ 登録</button></div></div>`;}
 let wSel=null;
 function vScene(c){
   const sc=byId('scenes',c.id);if(!sc){stack.pop();return render();}
   sc.chars=sc.chars||[];sc.loras=sc.loras||[];sc.images=sc.images||[];sc.roles=sc.roles||[];sc.inter=sc.inter||[];sc.angle=sc.angle||[];sc.fx=sc.fx||[];sc.np=sc.np||[];
-  sc.chars.forEach(c=>{c.body=c.body||[];c.phys=c.phys||[];});
+  sc.chars.forEach(c=>{c.body=c.body||[];c.phys=c.phys||[];c.act=c.act||[];});
   setHead(sc.title||'無題のシーン');
   const loraParts=S.parts.filter(p=>p.type==='lora');
   const u=usedIn(sc.id);
@@ -804,6 +817,7 @@ function vScene(c){
       ${chipSel('身体の特徴','phys',sl.phys,`data-chip="phys" data-slot="${i}"`)}
       ${partSel('服装','outfit',sl.outfit,`data-slot="${i}" data-f="outfit"`)}
       ${partSel('ポーズ','action',sl.action,`data-slot="${i}" data-f="action"`)}
+      ${chipSel('行動','act',sl.act,`data-chip="act" data-slot="${i}"`)}
       ${partSel('表情','face',sl.face,`data-slot="${i}" data-f="face"`)}
       ${chipSel('体の状態','body',sl.body,`data-chip="body" data-slot="${i}"`)}
       <div class="two">
@@ -914,7 +928,7 @@ function vScene(c){
   /* 体の状態・絡み（いくつでも） */
   $$('[data-chip]',view).forEach(b=>b.onclick=()=>{
     const kind=b.dataset.chip,slot=b.dataset.slot;
-    const per=kind==='body'||kind==='phys';/* 人物ごと */
+    const per=kind==='body'||kind==='phys'||kind==='act';/* 人物ごと */
     const arr=()=>per?(sc.chars[+slot][kind]||[]):(sc[kind]||[]);
     const setArr=a=>{if(per)sc.chars[+slot][kind]=a;else sc[kind]=a;};
     if(b.dataset.pid==='__new'){openPart(null,kind,p=>{if(p){setArr([...arr(),p.id]);saveNow('scenes',sc);}render(true);});return;}
@@ -943,7 +957,7 @@ function snapSame(sc,snap){return SNAP_KEYS.every(k=>JSON.stringify(snapVal(sc,k
 function snapSummary(snap){
   const nm=id=>{const p=byId('parts',id);return p?esc(p.name||'名前なし'):(id?'<span class="gone">（削除された部品）</span>':'');};
   const rows=[];
-  (snap.chars||[]).forEach((c,i)=>{const b=[nm(c.chara),...(c.phys||[]).map(nm),nm(c.outfit),nm(c.action),nm(c.face),...(c.body||[]).map(nm)].filter(Boolean).join('・');rows.push(`<tr><th>人物 ${i+1}</th><td>${b||'—'}${c.add?`<br><small>足す：${esc(c.add)}</small>`:''}${c.remove?`<br><small>外す：${esc(c.remove)}</small>`:''}</td></tr>`);});
+  (snap.chars||[]).forEach((c,i)=>{const b=[nm(c.chara),...(c.phys||[]).map(nm),nm(c.outfit),nm(c.action),...(c.act||[]).map(nm),nm(c.face),...(c.body||[]).map(nm)].filter(Boolean).join('・');rows.push(`<tr><th>人物 ${i+1}</th><td>${b||'—'}${c.add?`<br><small>足す：${esc(c.add)}</small>`:''}${c.remove?`<br><small>外す：${esc(c.remove)}</small>`:''}</td></tr>`);});
   if((snap.inter||[]).length)rows.push(`<tr><th>絡み</th><td>${snap.inter.map(nm).join('・')}</td></tr>`);
   if((snap.angle||[]).length)rows.push(`<tr><th>カメラ位置</th><td>${snap.angle.map(nm).join('・')}</td></tr>`);
   if((snap.fx||[]).length)rows.push(`<tr><th>エフェクト</th><td>${snap.fx.map(nm).join('・')}</td></tr>`);
@@ -1537,12 +1551,12 @@ function vParts(){
   /* 部品の種類を1画面に並べ、押すとその種類の一覧へ */
   setHead('部品');
   view.innerHTML=`<p class="hint" style="margin:0 0 10px">種類を選ぶと、その部品の一覧が出ます。</p>
-  <div class="pcat">${PT_ORDER.map(t=>{const n=S.parts.filter(p=>p.type===t).length;return `<button data-t="${t}" style="--c:${CATC[t]}"><b>${PT[t].label}</b><span class="n">${n}</span><small>${esc(PT[t].namePh.replace(/^例：/,'例：'))}</small></button>`;}).join('')}</div>`;
+  <div class="pcat">${PT_ORDER.map(t=>{const n=S.parts.filter(p=>p.type===t).length;return `<button data-t="${t}" style="--c:${CATC[t]}"><b>${pic(t)}${PT[t].label}</b><span class="n">${n}</span><small>${esc(PT[t].namePh.replace(/^例：/,'例：'))}</small></button>`;}).join('')}</div>`;
   $$('.pcat button',view).forEach(b=>b.onclick=()=>{partTab=b.dataset.t;go('plist',{t:b.dataset.t});});
 }
 function vPList(c){
   const t=c.t||partTab;partTab=t;const T=PT[t];
-  setHead(T.label);
+  setHead((CATI[t]?CATI[t]+' ':'')+T.label);
   const list=S.parts.filter(p=>p.type===t).sort((a,b)=>(a.name||'').localeCompare(b.name||'','ja'));
   view.innerHTML=`
   <p class="hint" style="margin:0 0 12px">${esc(T.hint)}</p>
@@ -1586,7 +1600,7 @@ function openPart(id,type,onSave){
   const dp=$('#pDup');if(dp)dp.onclick=async()=>{const n=read(Object.assign(JSON.parse(JSON.stringify(Object.assign({},p,{img:null}))),{img:p.img||null}));n.id=uid();n.name+='（コピー）';S.parts.push(n);await saveNow('parts',n);closeSheet();setTimeout(()=>openPart(n.id,null,onSave),30);};
   const dl=$('#pDel');if(dl)dl.onclick=async()=>{if(!confirm(used?`この部品は ${used} 件のシーンで使っています。削除すると、そのシーンからも外れます。削除しますか？`:'この部品を削除しますか？'))return;
     for(const s of S.scenes){let ch=false;for(const c of s.chars||[]){for(const f of['chara','outfit','action','face'])if(c[f]===p.id){c[f]='';ch=true;}
-        for(const f of['body','phys'])if((c[f]||[]).includes(p.id)){c[f]=c[f].filter(x=>x!==p.id);ch=true;}}
+        for(const f of['body','phys','act'])if((c[f]||[]).includes(p.id)){c[f]=c[f].filter(x=>x!==p.id);ch=true;}}
       for(const f of['bg','style','camera','light'])if(s[f]===p.id){s[f]='';ch=true;}
       for(const f of['inter','angle','fx','np'])if((s[f]||[]).includes(p.id)){s[f]=s[f].filter(x=>x!==p.id);ch=true;}
       if((s.loras||[]).some(l=>l.id===p.id)){s.loras=s.loras.filter(l=>l.id!==p.id);ch=true;}
