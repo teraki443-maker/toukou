@@ -330,23 +330,24 @@ const PT={
   body:{label:'体の状態',hint:'汗・赤面・濡れ・涙など。1人にいくつでも付けられます',ph:'sweat',namePh:'例：汗'},
   inter:{label:'絡み',hint:'ハグ・キス・手をつなぐなど、人物どうしの関わり。シーンにいくつでも付けられます',ph:'hug',namePh:'例：ハグ'},
   bg:{label:'背景',hint:'場所・時間帯・天気など',ph:'beach, blue sky, daytime',namePh:'例：昼のビーチ'},
+  fx:{label:'エフェクト・動き',hint:'動きの線・キラキラ・風・水しぶきなど、絵に足す効果。シーンにいくつでも付けられます',ph:'motion lines',namePh:'例：動きの線'},
   angle:{label:'カメラ位置',hint:'どこから見るか（横から・後ろから・見上げなど）。シーンにいくつでも付けられます',ph:'from side',namePh:'例：横から'},
   camera:{label:'構図',hint:'カメラの距離（全身・上半身・アップなど）やピント',ph:'full body',namePh:'例：全身'},
   light:{label:'光',hint:'光の当たり方・明るさだけ（逆光・薄暗いなど）。場所（暗い部屋・夕方の海など）は「背景」に入れます',ph:'soft lighting',namePh:'例：やわらかい光'},
   style:{label:'画風',hint:'画質・画風のタグ。タグの形では最後に入ります',ph:'masterpiece, best quality',namePh:'例：いつもの画風'},
   lora:{label:'LoRA',hint:'LoRA を使うときにプロンプトへ足すタグ（なければ空のまま）。LoRA は作られたモデルの系統（SDXL 系・Tsubaki 系）でしか使えません',ph:'トリガーワード',namePh:'例：水彩風'}
 };
-const PT_ORDER=['chara','phys','outfit','action','face','body','inter','bg','angle','camera','light','style','lora'];
+const PT_ORDER=['chara','phys','outfit','action','face','body','inter','bg','angle','camera','light','fx','style','lora'];
 /* プロンプトの形（PixAI 公式ブログの勧めに合わせる） */
 const FMT={
-  tag:{label:'タグ（SDXL 系：Haruka・Hoshino など）',hint:'人数 → 人物の特徴 → 身体の特徴 → 服 → ポーズ → 表情 → 体の状態 → 絡み → 背景 → カメラ位置 → 構図 → 光 → 画風 の順に、タグを並べます。'},
-  prose:{label:'文章（Tsubaki 系）',hint:'人物（2人以上なら人数と絡みを先に）→ 一人ずつの説明 → 背景 → カメラ位置 → 構図 → 光 → 画風 の順の英語の文章にします。部品に「文章」を書いておくと、タグの代わりにそれを使います。'},
+  tag:{label:'タグ（SDXL 系：Haruka・Hoshino など）',hint:'人数 → 人物の特徴 → 身体の特徴 → 服 → ポーズ → 表情 → 体の状態 → 絡み → 背景 → カメラ位置 → 構図 → 光 → エフェクト・動き → 画風 の順に、タグを並べます。'},
+  prose:{label:'文章（Tsubaki 系）',hint:'人物（2人以上なら人数と絡みを先に）→ 一人ずつの説明 → 背景 → カメラ位置 → 構図 → 光 → エフェクト・動き → 画風 の順の英語の文章にします。部品に「文章」を書いておくと、タグの代わりにそれを使います。'},
   group:{label:'かっこでまとめる（girl(…) の形）',hint:'人物ごとに girl(…) の形でまとめます（今までの書き方）。'}
 };
 
 /* ========== データベース（IndexedDB） ========== */
 let db=null;
-const APP_VER='v19';/* sw.js の VERSION と同じにする */
+const APP_VER='v20';/* sw.js の VERSION と同じにする */
 const STORES=['parts','scenes','works','images','meta','fonts','stamps'];
 function openDB(){return new Promise((res,rej)=>{const r=indexedDB.open('manga4koma',3);r.onupgradeneeded=()=>{const d=r.result;for(const s of STORES)if(!d.objectStoreNames.contains(s))d.createObjectStore(s,{keyPath:'id'});};r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error);});}
 function tx(store,mode,fn){return new Promise((res,rej)=>{if(!db)return res(undefined);const t=db.transaction(store,mode);const req=fn(t.objectStore(store));let out;if(req)req.onsuccess=()=>{out=req.result;};t.oncomplete=()=>res(out);t.onerror=()=>rej(t.error);t.onabort=()=>rej(t.error);});}
@@ -360,7 +361,7 @@ const byId=(k,id)=>id?S[k].find(x=>x.id===id):undefined;
 async function loadAll(){
   S.parts=await dbAll('parts');S.scenes=await dbAll('scenes');S.works=await dbAll('works');
   S.meta=Object.assign({id:'settings',loraInPrompt:false,lastBackup:0},await dbGet('meta','settings')||{});
-  await seedAngles();await seedCams();
+  await seedAngles();await seedCams();await seedFx();
 }
 /* カメラ位置のよく使う部品を、最初の1回だけ入れておく（消しても、もう一度は入らない） */
 const ANGLE_PRESETS=[
@@ -382,6 +383,20 @@ async function seedAngles(){
     for(const[name,tags,memo]of ANGLE_PRESETS){const p={id:uid(),type:'angle',name,tags,memo,created:Date.now(),updated:Date.now()};S.parts.push(p);await dbPut('parts',p);}
   }
   S.meta.seedAngle=1;await dbPut('meta',S.meta);
+}
+/* エフェクト・動きのよく使う部品を、1回だけ足す */
+const FX_PRESETS=[
+  ['動きの線（マンガ風）','motion lines','体のまわりに動きを表す線。マンガらしさが出る'],
+  ['スピード感','speed lines, motion blur','背景に流れる線とぶれ。走る・飛ぶ場面に'],
+  ['キラキラ','sparkle','まわりに光の粒。かわいい・うれしい場面に'],
+  ['風（髪がなびく）','wind, floating hair','風で髪や服がなびく'],
+  ['水しぶき','splashing, water drop','水が跳ねる。プール・海・雨の場面に']
+];
+async function seedFx(){
+  if(S.meta.seedFx)return;
+  const have=new Set(S.parts.filter(p=>p.type==='fx').map(p=>(p.tags||'').trim()));
+  for(const[name,tags,memo]of FX_PRESETS){if(have.has(tags))continue;const p={id:uid(),type:'fx',name,tags,memo,created:Date.now(),updated:Date.now()};S.parts.push(p);await dbPut('parts',p);}
+  S.meta.seedFx=1;await dbPut('meta',S.meta);
 }
 /* 構図・光のよく効く部品を、1回だけ足す（同じタグのものがあれば足さない） */
 const CAM_PRESETS=[
@@ -485,7 +500,7 @@ function buildPrompt(sc){
   const fmt=S.meta.fmt||'tag';
   const slots=(sc.chars||[]).map(slotInfo);
   const srm=splitTags(sc.remove);
-  const inter=uniq((sc.inter||[]).flatMap(T_),srm),bg=uniq(T_(sc.bg),srm),ang=uniq((sc.angle||[]).flatMap(T_),srm),cam=uniq(T_(sc.camera),srm),lit=uniq(T_(sc.light),srm),add=uniq(splitTags(sc.add),srm),style=uniq(T_(sc.style),srm);
+  const inter=uniq((sc.inter||[]).flatMap(T_),srm),bg=uniq(T_(sc.bg),srm),ang=uniq((sc.angle||[]).flatMap(T_),srm),cam=uniq(T_(sc.camera),srm),lit=uniq(T_(sc.light),srm),fx=uniq((sc.fx||[]).flatMap(T_),srm),add=uniq(splitTags(sc.add),srm),style=uniq(T_(sc.style),srm);
   const loras=[],trig=[];
   for(const l of sc.loras||[]){
     const p=P_(l.id);if(!p)continue;
@@ -496,23 +511,23 @@ function buildPrompt(sc){
   const loraTxt=S.meta.loraInPrompt?loras.map(l=>`<lora:${l.name}:${l.weight===''?1:l.weight}>`):[];
   let pos;
   /* 重みを付けられるタグの一覧（並びはタグの形と同じ） */
-  const all=[...trig];for(const s of slots)all.push(...s.feat,...s.phys,...s.out,...s.pose,...s.face,...s.body,...s.add);all.push(...inter,...bg,...ang,...add,...cam,...lit,...style);
+  const all=[...trig];for(const s of slots)all.push(...s.feat,...s.phys,...s.out,...s.pose,...s.face,...s.body,...s.add);all.push(...inter,...bg,...ang,...add,...cam,...lit,...fx,...style);
   const tagList=uniq(all).map(t=>({base:baseOf(t),key:norm(t),own:parseTag(t).w}));
   const W=t=>weigh(t,sc);
   if(fmt==='group'){
     const out=slots.map(s=>{const t=uniq([...s.feat,...s.phys,...s.out,...s.pose,...s.face,...s.body,...s.add]).map(W);return t.length?`${s.subj}(${t.join(', ')})`:s.subj;});
-    pos=[...out,...uniq([...inter,...bg,...ang,...add,...cam,...lit,...style,...trig]).map(W),...loraTxt].join(', ');
+    pos=[...out,...uniq([...inter,...bg,...ang,...add,...cam,...lit,...fx,...style,...trig]).map(W),...loraTxt].join(', ');
   }else if(fmt==='tag'){
     const t=[...trig];
     for(const s of slots)t.push(...s.feat,...s.phys,...s.out,...s.pose,...s.face,...s.body,...s.add);
-    t.push(...inter,...bg,...ang,...add,...cam,...lit,...style);
+    t.push(...inter,...bg,...ang,...add,...cam,...lit,...fx,...style);
     pos=[...countTags(slots.map(s=>s.subj)),...uniq(t).map(W),...loraTxt].join(', ');
   }else{
     /* 文章の形では重みを使わない（PixAI の DiT ガイドで、(tag:1.2) は効かないとされているため） */
     const B=a=>a.map(baseOf);
     for(const s of slots)for(const k of['feat','phys','out','pose','face','body','add'])s[k]=B(s[k]);
     trig.splice(0,trig.length,...B(trig));
-    for(const a of[inter,bg,ang,cam,lit,add,style])a.splice(0,a.length,...B(a));
+    for(const a of[inter,bg,ang,cam,lit,fx,add,style])a.splice(0,a.length,...B(a));
     /* 文章（Tsubaki 系） */
     const S2=[];
     if(trig.length)S2.push(uniq(trig).join(', ')+',');
@@ -534,6 +549,8 @@ function buildPrompt(sc){
     for(const x of at)S2.push(sent(x));if(atTags.length)S2.push(sent('Viewed '+uniq(atTags).join(', ')));
     const ct=TX_(sc.camera)||cam.join(', ');if(ct)S2.push(sent(TX_(sc.camera)?ct:'Framing: '+ct));
     const lt=TX_(sc.light)||lit.join(', ');if(lt)S2.push(sent(TX_(sc.light)?lt:'Lighting: '+lt));
+    const ft=(sc.fx||[]).map(id=>TX_(id)).filter(Boolean),ftTags=(sc.fx||[]).filter(id=>!TX_(id)).flatMap(id=>uniq(T_(id),srm).map(baseOf));
+    for(const x of ft)S2.push(sent(x));if(ftTags.length)S2.push(sent('Effects: '+uniq(ftTags).join(', ')));
     const sty=TX_(sc.style)||style.join(', ');if(sty)S2.push(sent(TX_(sc.style)?sty:'Style: '+sty));
     pos=[S2.join(' '),...loraTxt].filter(Boolean).join(' ');
   }
@@ -577,9 +594,9 @@ $('#sheet .bk').onclick=closeSheet;
 
 /* ========== 使われている場所 ========== */
 function usedIn(sceneId){const r=[];for(const w of S.works)(w.panels||[]).forEach((p,i)=>{if(p===sceneId)r.push({w,i});});return r;}
-function partUsage(pid){return S.scenes.filter(s=>s.bg===pid||s.style===pid||s.camera===pid||s.light===pid||(s.inter||[]).includes(pid)||(s.angle||[]).includes(pid)||(s.chars||[]).some(c=>c.chara===pid||c.outfit===pid||c.action===pid||c.face===pid||(c.body||[]).includes(pid)||(c.phys||[]).includes(pid))||(s.loras||[]).some(l=>l.id===pid)).length;}
+function partUsage(pid){return S.scenes.filter(s=>s.bg===pid||s.style===pid||s.camera===pid||s.light===pid||(s.inter||[]).includes(pid)||(s.angle||[]).includes(pid)||(s.fx||[]).includes(pid)||(s.chars||[]).some(c=>c.chara===pid||c.outfit===pid||c.action===pid||c.face===pid||(c.body||[]).includes(pid)||(c.phys||[]).includes(pid))||(s.loras||[]).some(l=>l.id===pid)).length;}
 const newSlot=()=>({chara:'',phys:[],outfit:'',action:'',face:'',body:[],add:'',remove:''});
-function newScene(){const s={id:uid(),title:'',roles:[],chars:[newSlot()],inter:[],angle:[],bg:'',camera:'',light:'',style:defaultStyle(),loras:[],add:'',remove:'',neg:'',memo:'',images:[],created:Date.now(),updated:Date.now()};S.scenes.push(s);return s;}
+function newScene(){const s={id:uid(),title:'',roles:[],chars:[newSlot()],inter:[],angle:[],fx:[],bg:'',camera:'',light:'',style:defaultStyle(),loras:[],add:'',remove:'',neg:'',memo:'',images:[],created:Date.now(),updated:Date.now()};S.scenes.push(s);return s;}
 function defaultStyle(){const st=S.parts.filter(p=>p.type==='style');return st.length===1?st[0].id:'';}
 
 /* ========== 作品一覧 ========== */
@@ -705,7 +722,7 @@ function chipSel(label,type,arr,attrs){const ps=S.parts.filter(p=>p.type===type)
 let wSel=null;
 function vScene(c){
   const sc=byId('scenes',c.id);if(!sc){stack.pop();return render();}
-  sc.chars=sc.chars||[];sc.loras=sc.loras||[];sc.images=sc.images||[];sc.roles=sc.roles||[];sc.inter=sc.inter||[];sc.angle=sc.angle||[];
+  sc.chars=sc.chars||[];sc.loras=sc.loras||[];sc.images=sc.images||[];sc.roles=sc.roles||[];sc.inter=sc.inter||[];sc.angle=sc.angle||[];sc.fx=sc.fx||[];
   sc.chars.forEach(c=>{c.body=c.body||[];c.phys=c.phys||[];});
   setHead(sc.title||'無題のシーン');
   const loraParts=S.parts.filter(p=>p.type==='lora');
@@ -752,6 +769,7 @@ function vScene(c){
     ${chipSel('カメラ位置','angle',sc.angle,'data-chip="angle"')}
     ${partSel('構図','camera',sc.camera,'data-scf="camera"')}
     ${partSel('光','light',sc.light,'data-scf="light"')}
+    ${chipSel('エフェクト・動き','fx',sc.fx,'data-chip="fx"')}
     ${partSel('画風','style',sc.style,'data-scf="style"')}
     <div class="two">
       <label class="f"><span>足すタグ（人物以外）</span><input data-st="add" value="${esc(sc.add)}" placeholder="sunset"></label>
@@ -858,8 +876,8 @@ function vScene(c){
     const imgs=sc.images;S.scenes=S.scenes.filter(x=>x.id!==sc.id);await dbDel('scenes',sc.id);for(const id of imgs)await deleteImageIfUnused(id);goBack();};
 }
 /* 画像ごとに、そのときのプロンプトの設定を記録する */
-const SNAP_KEYS=['chars','inter','angle','bg','camera','light','style','loras','add','remove','neg','weights'];
-const snapDef=k=>(k==='chars'||k==='inter'||k==='angle'||k==='loras')?[]:k==='weights'?{}:'';
+const SNAP_KEYS=['chars','inter','angle','fx','bg','camera','light','style','loras','add','remove','neg','weights'];
+const snapDef=k=>(k==='chars'||k==='inter'||k==='angle'||k==='fx'||k==='loras')?[]:k==='weights'?{}:'';
 const snapVal=(o,k)=>JSON.parse(JSON.stringify(o[k]??snapDef(k)));
 function recordSnap(sc,id){sc.imgMeta=sc.imgMeta||{};const snap={};for(const k of SNAP_KEYS)snap[k]=snapVal(sc,k);const p=buildPrompt(sc);sc.imgMeta[id]={snap,pos:p.pos,neg:p.neg,loras:p.loras,fmt:p.fmt,at:Date.now()};}
 function snapSame(sc,snap){return SNAP_KEYS.every(k=>JSON.stringify(snapVal(sc,k))===JSON.stringify(snapVal(snap,k)));}
@@ -869,6 +887,7 @@ function snapSummary(snap){
   (snap.chars||[]).forEach((c,i)=>{const b=[nm(c.chara),...(c.phys||[]).map(nm),nm(c.outfit),nm(c.action),nm(c.face),...(c.body||[]).map(nm)].filter(Boolean).join('・');rows.push(`<tr><th>人物 ${i+1}</th><td>${b||'—'}${c.add?`<br><small>足す：${esc(c.add)}</small>`:''}${c.remove?`<br><small>外す：${esc(c.remove)}</small>`:''}</td></tr>`);});
   if((snap.inter||[]).length)rows.push(`<tr><th>絡み</th><td>${snap.inter.map(nm).join('・')}</td></tr>`);
   if((snap.angle||[]).length)rows.push(`<tr><th>カメラ位置</th><td>${snap.angle.map(nm).join('・')}</td></tr>`);
+  if((snap.fx||[]).length)rows.push(`<tr><th>エフェクト</th><td>${snap.fx.map(nm).join('・')}</td></tr>`);
   const rest=[['背景',snap.bg],['構図',snap.camera],['光',snap.light],['画風',snap.style]].filter(x=>x[1]).map(([l,id])=>`<tr><th>${l}</th><td>${nm(id)}</td></tr>`);
   rows.push(...rest);
   if((snap.loras||[]).length)rows.push(`<tr><th>LoRA</th><td>${snap.loras.map(l=>nm(l.id)+(l.weight!==''&&l.weight!=null?`（${esc(l.weight)}）`:'')).join('・')}</td></tr>`);
@@ -1508,7 +1527,7 @@ function openPart(id,type,onSave){
     for(const s of S.scenes){let ch=false;for(const c of s.chars||[]){for(const f of['chara','outfit','action','face'])if(c[f]===p.id){c[f]='';ch=true;}
         for(const f of['body','phys'])if((c[f]||[]).includes(p.id)){c[f]=c[f].filter(x=>x!==p.id);ch=true;}}
       for(const f of['bg','style','camera','light'])if(s[f]===p.id){s[f]='';ch=true;}
-      for(const f of['inter','angle'])if((s[f]||[]).includes(p.id)){s[f]=s[f].filter(x=>x!==p.id);ch=true;}
+      for(const f of['inter','angle','fx'])if((s[f]||[]).includes(p.id)){s[f]=s[f].filter(x=>x!==p.id);ch=true;}
       if((s.loras||[]).some(l=>l.id===p.id)){s.loras=s.loras.filter(l=>l.id!==p.id);ch=true;}
       if(ch)await saveNow('scenes',s);}
     S.parts=S.parts.filter(x=>x.id!==p.id);await dbDel('parts',p.id);closeSheet();onSave&&onSave(null);};
@@ -1674,11 +1693,11 @@ async function insertSample(){
   const kiss=P('inter','キス','kiss',{text:'They are kissing'});
   const beach=P('bg','昼のビーチ','beach, blue sky, daytime');
   const cls=P('bg','教室','classroom, desk, window, daytime');
-  const cam=P('camera','全身','full body');const soft=P('light','やわらかい光','soft lighting');
-  const st=P('style','いつもの画風','masterpiece, best quality, anime style',{neg:'lowres, bad anatomy, bad hands, text, watermark'});
+  const cam=P('camera','全身','full body');const soft0=S.parts.find(p=>p.type==='light'&&(p.tags||'').trim()==='soft lighting');const soft=soft0||P('light','やわらかい光','soft lighting');
+  const st=P('style','いつもの画風','masterpiece, best quality, anime style',{neg:'lowres, blurry, jpeg artifacts, text, watermark'});
   const lo=P('lora','水彩風（例）','watercolor',{weight:0.6,memo:'サンプルです。実際の LoRA 名に直してください'});
-  const parts=[mika,sen,uni,swim,casual,stand,run,smile,surp,sweat,blush,wet,hug,hand,kiss,beach,cls,cam,st,lo];
-  const SC=(title,roles,chars,bg,extra)=>Object.assign({id:uid(),title,roles,chars:chars.map(c=>Object.assign(newSlot(),c)),inter:[],bg,angle:[],camera:'',light:'',style:st.id,loras:[],add:'',remove:'',neg:'',memo:'',images:[],created:Date.now(),updated:Date.now()},extra||{});
+  const parts=[mika,sen,uni,swim,casual,stand,run,smile,surp,sweat,blush,wet,hug,hand,kiss,beach,cls,cam,st,lo,...(soft0?[]:[soft])];
+  const SC=(title,roles,chars,bg,extra)=>Object.assign({id:uid(),title,roles,chars:chars.map(c=>Object.assign(newSlot(),c)),inter:[],bg,angle:[],fx:[],camera:'',light:'',style:st.id,loras:[],add:'',remove:'',neg:'',memo:'',images:[],created:Date.now(),updated:Date.now()},extra||{});
   const s1=SC('ビーチで笑顔のミカ',['起'],[{chara:mika.id,outfit:swim.id,action:stand.id,face:smile.id,body:[wet.id]}],beach.id,{camera:cam.id,light:soft.id});
   const s2=SC('先輩が走ってくる',['承'],[{chara:sen.id,outfit:uni.id,action:run.id,face:smile.id,body:[sweat.id]}],beach.id);
   const s3=SC('驚くミカ（夕方）',['転'],[{chara:mika.id,outfit:swim.id,action:stand.id,face:surp.id,body:[sweat.id,blush.id],add:'looking back'}],beach.id,{add:'sunset, orange sky',remove:'daytime, blue sky'});
