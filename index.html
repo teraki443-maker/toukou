@@ -258,6 +258,15 @@ body.editing #toast{bottom:calc(24px + env(safe-area-inset-bottom))}
 .f.cat{border-left:4px solid var(--c);padding:8px 0 8px 10px;margin-left:-4px;border-radius:4px;background:color-mix(in srgb,var(--c) 7%,transparent)}
 .f.cat>span{color:color-mix(in srgb,var(--c) 75%,var(--ink));font-weight:700}
 .pic{font-style:normal;margin-right:5px;font-size:1.05em;line-height:1}
+.tg.wt{border-left:5px solid var(--c)!important}
+.wgrp{display:flex;flex-direction:column;gap:8px}
+.wg{border-left:4px solid var(--c);padding:4px 0 4px 8px;border-radius:4px;background:color-mix(in srgb,var(--c) 6%,transparent)}
+.wgl{font-size:12px;font-weight:700;color:color-mix(in srgb,var(--c) 75%,var(--ink));margin-bottom:4px}
+.wg .tgs{gap:5px}
+.wi{font-style:normal;margin-right:4px;font-size:.95em}
+.wleg{display:flex;flex-wrap:wrap;gap:4px 10px;margin:0 0 8px;font-size:11px}
+.wleg span{display:flex;align-items:center;gap:3px;color:color-mix(in srgb,var(--c) 75%,var(--ink));font-weight:700}
+.wleg span::before{content:'';width:8px;height:8px;border-radius:2px;background:var(--c)}
 .f.cat .tg,.pgrid button{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
 .f.cat .tg.on{background:var(--c);border-color:var(--c)}
 .pcat button{border-left:5px solid var(--c)!important;display:flex;flex-wrap:wrap;align-items:baseline;gap:2px 8px;text-align:left;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px;min-height:72px}
@@ -373,7 +382,7 @@ const FMT={
 
 /* ========== データベース（IndexedDB） ========== */
 let db=null;
-const APP_VER='v24';/* sw.js の VERSION と同じにする */
+const APP_VER='v27';/* sw.js の VERSION と同じにする */
 const STORES=['parts','scenes','works','images','meta','fonts','stamps'];
 function openDB(){return new Promise((res,rej)=>{const r=indexedDB.open('manga4koma',3);r.onupgradeneeded=()=>{const d=r.result;for(const s of STORES)if(!d.objectStoreNames.contains(s))d.createObjectStore(s,{keyPath:'id'});};r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error);});}
 function tx(store,mode,fn){return new Promise((res,rej)=>{if(!db)return res(undefined);const t=db.transaction(store,mode);const req=fn(t.objectStore(store));let out;if(req)req.onsuccess=()=>{out=req.result;};t.oncomplete=()=>res(out);t.onerror=()=>rej(t.error);t.onabort=()=>rej(t.error);});}
@@ -543,7 +552,7 @@ function countTags(subs){const g=subs.filter(s=>subjKind(s)==='girl').length,b=s
 function slotInfo(sl){
   const c=P_(sl.chara),rm=splitTags(sl.remove);
   const subj=(((c&&c.subject)||'girl').trim()||'girl').replace(/^\d+\s*/,'');
-  return{sl,c,subj,rm,feat:uniq(T_(sl.chara),rm),phys:uniq((sl.phys||[]).flatMap(T_),rm),out:uniq(T_(sl.outfit),rm),pose:uniq(T_(sl.action),rm),act:uniq((sl.act||[]).flatMap(T_),rm),face:uniq(T_(sl.face),rm),
+  return{sl,c,subj,rm,feat:uniq(T_(sl.chara),rm),phys:uniq((sl.phys||[]).flatMap(T_),rm),out:uniq(A_(sl.outfit).flatMap(T_),rm),pose:uniq(A_(sl.action).flatMap(T_),rm),act:uniq((sl.act||[]).flatMap(T_),rm),face:uniq(T_(sl.face),rm),
     body:uniq((sl.body||[]).flatMap(T_),rm),add:uniq(splitTags(sl.add),rm)};
 }
 const NUMW=['','One','Two','Three','Four','Five','Six'];
@@ -566,7 +575,11 @@ function buildPrompt(sc){
   let pos;
   /* 重みを付けられるタグの一覧（並びはタグの形と同じ） */
   const all=[...trig];for(const s of slots)all.push(...s.feat,...s.phys,...s.out,...s.pose,...s.act,...s.face,...s.body,...s.add);all.push(...inter,...bg,...ang,...add,...cam,...lit,...fx,...npP,...style);
-  const tagList=uniq(all).map(t=>({base:baseOf(t),key:norm(t),own:parseTag(t).w}));
+  /* どの項目から来たタグか（重みの色分けに使う。最初に出てきた項目にする） */
+  const catOf={};const mark=(arr,c)=>{for(const t of arr){const k=norm(t);if(!(k in catOf))catOf[k]=c;}};
+  mark(trig,'lora');for(const s of slots){mark(s.feat,'chara');mark(s.phys,'phys');mark(s.out,'outfit');mark(s.pose,'action');mark(s.act,'act');mark(s.face,'face');mark(s.body,'body');mark(s.add,'add');}
+  mark(inter,'inter');mark(bg,'bg');mark(ang,'angle');mark(add,'add');mark(cam,'camera');mark(lit,'light');mark(fx,'fx');mark(npP,'np');mark(style,'style');
+  const tagList=uniq(all).map(t=>({base:baseOf(t),key:norm(t),own:parseTag(t).w,cat:catOf[norm(t)]||'add'}));
   const W=t=>weigh(t,sc);
   if(fmt==='group'){
     const out=slots.map(s=>{const t=uniq([...s.feat,...s.phys,...s.out,...s.pose,...s.act,...s.face,...s.body,...s.add]).map(W);return t.length?`${s.subj}(${t.join(', ')})`:s.subj;});
@@ -586,8 +599,8 @@ function buildPrompt(sc){
     const S2=[];
     if(trig.length)S2.push(uniq(trig).join(', ')+',');
     const head=s=>TX_(s.sl.chara)||`${art(s.subj)} ${s.subj}${s.feat.length?' with '+s.feat.join(', '):''}`;
-    const details=s=>{const d=[];const ph=(s.sl.phys||[]).map(id=>TX_(id)||uniq(T_(id),s.rm).map(baseOf).join(', ')).filter(Boolean).join(', ');if(ph)d.push(ph);const o=TX_(s.sl.outfit)||s.out.join(', ');if(o)d.push(/^wear/i.test(o)?o:'wearing '+o);
-      const pz=TX_(s.sl.action)||s.pose.join(', ');if(pz)d.push(pz);const ac=(s.sl.act||[]).map(id=>TX_(id)||uniq(T_(id),s.rm).join(', ')).filter(Boolean).join(', ');if(ac)d.push(ac);const fc=TX_(s.sl.face)||s.face.join(', ');if(fc)d.push(fc);
+    const details=s=>{const d=[];const ph=(s.sl.phys||[]).map(id=>TX_(id)||uniq(T_(id),s.rm).map(baseOf).join(', ')).filter(Boolean).join(', ');if(ph)d.push(ph);const oTx=A_(s.sl.outfit).map(TX_).filter(Boolean);const o=oTx.length?oTx.join(', '):s.out.join(', ');if(o)d.push(/^wear/i.test(o)?o:'wearing '+o);
+      const pTx=A_(s.sl.action).map(TX_).filter(Boolean);const pz=pTx.length?pTx.join(', '):s.pose.join(', ');if(pz)d.push(pz);const ac=(s.sl.act||[]).map(id=>TX_(id)||uniq(T_(id),s.rm).join(', ')).filter(Boolean).join(', ');if(ac)d.push(ac);const fc=TX_(s.sl.face)||s.face.join(', ');if(fc)d.push(fc);
       const bd=(s.sl.body||[]).map(id=>TX_(id)||uniq(T_(id),s.rm).join(', ')).filter(Boolean).join(', ');if(bd)d.push(bd);if(s.add.length)d.push(s.add.join(', '));return d;};
     if(slots.length===1){const s=slots[0];S2.push(sent([head(s),...details(s)].join(', ')));}
     else if(slots.length>1){
@@ -649,8 +662,10 @@ $('#sheet .bk').onclick=closeSheet;
 
 /* ========== 使われている場所 ========== */
 function usedIn(sceneId){const r=[];for(const w of S.works)(w.panels||[]).forEach((p,i)=>{if(p===sceneId)r.push({w,i});});return r;}
-function partUsage(pid){return S.scenes.filter(s=>s.bg===pid||s.style===pid||s.camera===pid||s.light===pid||(s.inter||[]).includes(pid)||(s.angle||[]).includes(pid)||(s.fx||[]).includes(pid)||(s.np||[]).includes(pid)||(s.chars||[]).some(c=>c.chara===pid||c.outfit===pid||c.action===pid||c.face===pid||(c.body||[]).includes(pid)||(c.phys||[]).includes(pid)||(c.act||[]).includes(pid))||(s.loras||[]).some(l=>l.id===pid)).length;}
-const newSlot=()=>({chara:'',phys:[],outfit:'',action:'',act:[],face:'',body:[],add:'',remove:''});
+function partUsage(pid){return S.scenes.filter(s=>s.bg===pid||s.style===pid||s.camera===pid||s.light===pid||(s.inter||[]).includes(pid)||(s.angle||[]).includes(pid)||(s.fx||[]).includes(pid)||(s.np||[]).includes(pid)||(s.chars||[]).some(c=>c.chara===pid||A_(c.outfit).includes(pid)||A_(c.action).includes(pid)||c.face===pid||(c.body||[]).includes(pid)||(c.phys||[]).includes(pid)||(c.act||[]).includes(pid))||(s.loras||[]).some(l=>l.id===pid)).length;}
+/* 服装・ポーズは、前は1つだけ（文字）、今はいくつでも（配列）。どちらでも読めるようにする */
+const A_=v=>Array.isArray(v)?v:(v?[v]:[]);
+const newSlot=()=>({chara:'',phys:[],outfit:[],action:[],act:[],face:'',body:[],add:'',remove:''});
 function newScene(){const s={id:uid(),title:'',roles:[],chars:[newSlot()],inter:[],angle:[],fx:[],np:[],bg:'',camera:'',light:'',style:defaultStyle(),loras:[],add:'',remove:'',neg:'',memo:'',images:[],created:Date.now(),updated:Date.now()};S.scenes.push(s);return s;}
 function defaultStyle(){const st=S.parts.filter(p=>p.type==='style');return st.length===1?st[0].id:'';}
 
@@ -767,7 +782,7 @@ function vScenes(c){
 /* ========== シーンの編集 ========== */
 function opts(type,sel){const ps=S.parts.filter(p=>p.type===type).sort((a,b)=>(a.name||'').localeCompare(b.name||'','ja'));return `<option value="">（なし）</option>${ps.map(p=>`<option value="${p.id}"${p.id===sel?' selected':''}>${esc(p.name||'名前なし')}</option>`).join('')}<option value="__new">＋ 新しく登録…</option>`;}
 /* 部品の種類ごとの色（シーンの欄と部品の一覧で同じ色を使う） */
-const CATC={act:'#f43f5e',chara:'#3b82f6',phys:'#0ea5a4',outfit:'#8b5cf6',action:'#f97316',face:'#ec4899',body:'#ef4444',inter:'#d946ef',bg:'#22a34a',angle:'#6366f1',camera:'#0891b2',light:'#eab308',fx:'#84cc16',np:'#64748b',style:'#a16207',lora:'#475569'};
+const CATC={add:'#9ca3af',act:'#f43f5e',chara:'#3b82f6',phys:'#0ea5a4',outfit:'#8b5cf6',action:'#f97316',face:'#ec4899',body:'#ef4444',inter:'#d946ef',bg:'#22a34a',angle:'#6366f1',camera:'#0891b2',light:'#eab308',fx:'#84cc16',np:'#64748b',style:'#a16207',lora:'#475569'};
 /* 長押し：0.5秒押し続けたら fn を呼ぶ。そのあとの「押した」はなかったことにする */
 function longPress(el,fn){let t=0,x=0,y=0,fired=false;
   const stop=()=>{clearTimeout(t);t=0;};
@@ -792,7 +807,7 @@ let wSel=null;
 function vScene(c){
   const sc=byId('scenes',c.id);if(!sc){stack.pop();return render();}
   sc.chars=sc.chars||[];sc.loras=sc.loras||[];sc.images=sc.images||[];sc.roles=sc.roles||[];sc.inter=sc.inter||[];sc.angle=sc.angle||[];sc.fx=sc.fx||[];sc.np=sc.np||[];
-  sc.chars.forEach(c=>{c.body=c.body||[];c.phys=c.phys||[];c.act=c.act||[];});
+  sc.chars.forEach(c=>{c.body=c.body||[];c.phys=c.phys||[];c.act=c.act||[];c.outfit=A_(c.outfit);c.action=A_(c.action);});
   setHead(sc.title||'無題のシーン');
   const loraParts=S.parts.filter(p=>p.type==='lora');
   const u=usedIn(sc.id);
@@ -815,8 +830,8 @@ function vScene(c){
     ${sc.chars.map((sl,i)=>`<div class="slot"><div class="sh">人物 ${i+1}<button class="btn sm danger" data-delslot="${i}">外す</button></div>
       ${partSel('人物','chara',sl.chara,`data-slot="${i}" data-f="chara"`)}
       ${chipSel('身体の特徴','phys',sl.phys,`data-chip="phys" data-slot="${i}"`)}
-      ${partSel('服装','outfit',sl.outfit,`data-slot="${i}" data-f="outfit"`)}
-      ${partSel('ポーズ','action',sl.action,`data-slot="${i}" data-f="action"`)}
+      ${chipSel('服装','outfit',sl.outfit,`data-chip="outfit" data-slot="${i}"`)}
+      ${chipSel('ポーズ','action',sl.action,`data-chip="action" data-slot="${i}"`)}
       ${chipSel('行動','act',sl.act,`data-chip="act" data-slot="${i}"`)}
       ${partSel('表情','face',sl.face,`data-slot="${i}" data-f="face"`)}
       ${chipSel('体の状態','body',sl.body,`data-chip="body" data-slot="${i}"`)}
@@ -880,7 +895,12 @@ function vScene(c){
     if(wSel&&!p.tagList.some(t=>t.key===wSel))wSel=null;
     const wOf=t=>(t.key in sc.weights)?sc.weights[t.key]:(t.own??1);
     const sel=p.tagList.find(t=>t.key===wSel);
-    box.innerHTML=`<div class="tgs">${p.tagList.map(t=>{const w=wOf(t);return `<button type="button" class="tg wt ${w>1?'up':w<1?'dn':''} ${t.key===wSel?'sel':''}" data-wk="${esc(t.key)}">${esc(t.base)}${Math.abs(w-1)>1e-9?` <b>${+(+w).toFixed(2)}</b>`:''}</button>`;}).join('')}</div>
+    /* 項目ごとの色の見本（このシーンに出てくる項目だけ） */
+    const cats=[...new Set(p.tagList.map(t=>t.cat))];
+    const legend=`<div class="wleg">${cats.map(c=>`<span style="--c:${CATC[c]||'#888'}">${CATI[c]||'＋'}${c==='add'?'足すタグ':PT[c].label}</span>`).join('')}</div>`;
+    /* 項目ごとにまとめ、行の頭に項目名、タグの頭にその項目の絵を付ける（色だけに頼らない） */
+    const chip=t=>{const w=wOf(t);return `<button type="button" class="tg wt ${w>1?'up':w<1?'dn':''} ${t.key===wSel?'sel':''}" style="--c:${CATC[t.cat]||'#888'}" data-wk="${esc(t.key)}"><i class="wi" aria-hidden="true">${CATI[t.cat]||'＋'}</i>`;};
+    box.innerHTML=`<div class="wgrp">${cats.map(c=>`<div class="wg" style="--c:${CATC[c]||'#888'}"><div class="wgl">${CATI[c]||'＋'} ${c==='add'?'足すタグ':PT[c].label}</div><div class="tgs">${p.tagList.filter(t=>t.cat===c).map(t=>{const w=wOf(t);return chip(t)+`${esc(t.base)}${Math.abs(w-1)>1e-9?` <b>${+(+w).toFixed(2)}</b>`:''}</button>`;}).join('')}</div></div>`).join('')}</div>`+`
     ${sel?`<div class="wedit">
       <div class="wtop"><b>${esc(sel.base)}</b><code id="wPrev"></code></div>
       <div class="wrow"><button class="btn ghost sm" id="wDn" aria-label="弱く">－</button><input type="range" id="wRange" min="0.5" max="1.8" step="0.05" value="${wOf(sel)}" aria-label="重み"><button class="btn ghost sm" id="wUp" aria-label="強く">＋</button></div>
@@ -893,7 +913,7 @@ function vScene(c){
     if(!sel)return;
     const setW=v=>{v=Math.round(Math.min(1.8,Math.max(0.5,v))*100)/100;if(Math.abs(v-(sel.own??1))<1e-9)delete sc.weights[sel.key];else sc.weights[sel.key]=v;save('scenes',sc);
       $('#wRange').value=v;$('#wPrev').textContent=weigh(sel.base,sc);const p2=buildPrompt(sc);$('#pPos').innerHTML=hlPrompt(p2.pos);
-      const chip=$(`[data-wk="${CSS.escape(sel.key)}"]`,box);if(chip){chip.className=`tg wt ${v>1?'up':v<1?'dn':''} sel`;chip.innerHTML=esc(sel.base)+(Math.abs(v-1)>1e-9?` <b>${v}</b>`:'');}};
+      const chip=$(`[data-wk="${CSS.escape(sel.key)}"]`,box);if(chip){chip.className=`tg wt ${v>1?'up':v<1?'dn':''} sel`;chip.innerHTML=`<i class="wi" aria-hidden="true">${CATI[sel.cat]||'＋'}</i>`+esc(sel.base)+(Math.abs(v-1)>1e-9?` <b>${v}</b>`:'');}};
     $('#wPrev').textContent=weigh(sel.base,sc);
     $('#wRange').oninput=e=>setW(+e.target.value);
     $('#wUp').onclick=()=>setW(wOf(sel)+0.05);
@@ -928,7 +948,7 @@ function vScene(c){
   /* 体の状態・絡み（いくつでも） */
   $$('[data-chip]',view).forEach(b=>b.onclick=()=>{
     const kind=b.dataset.chip,slot=b.dataset.slot;
-    const per=kind==='body'||kind==='phys'||kind==='act';/* 人物ごと */
+    const per=['body','phys','act','outfit','action'].includes(kind);/* 人物ごと */
     const arr=()=>per?(sc.chars[+slot][kind]||[]):(sc[kind]||[]);
     const setArr=a=>{if(per)sc.chars[+slot][kind]=a;else sc[kind]=a;};
     if(b.dataset.pid==='__new'){openPart(null,kind,p=>{if(p){setArr([...arr(),p.id]);saveNow('scenes',sc);}render(true);});return;}
@@ -957,7 +977,7 @@ function snapSame(sc,snap){return SNAP_KEYS.every(k=>JSON.stringify(snapVal(sc,k
 function snapSummary(snap){
   const nm=id=>{const p=byId('parts',id);return p?esc(p.name||'名前なし'):(id?'<span class="gone">（削除された部品）</span>':'');};
   const rows=[];
-  (snap.chars||[]).forEach((c,i)=>{const b=[nm(c.chara),...(c.phys||[]).map(nm),nm(c.outfit),nm(c.action),...(c.act||[]).map(nm),nm(c.face),...(c.body||[]).map(nm)].filter(Boolean).join('・');rows.push(`<tr><th>人物 ${i+1}</th><td>${b||'—'}${c.add?`<br><small>足す：${esc(c.add)}</small>`:''}${c.remove?`<br><small>外す：${esc(c.remove)}</small>`:''}</td></tr>`);});
+  (snap.chars||[]).forEach((c,i)=>{const b=[nm(c.chara),...(c.phys||[]).map(nm),...A_(c.outfit).map(nm),...A_(c.action).map(nm),...(c.act||[]).map(nm),nm(c.face),...(c.body||[]).map(nm)].filter(Boolean).join('・');rows.push(`<tr><th>人物 ${i+1}</th><td>${b||'—'}${c.add?`<br><small>足す：${esc(c.add)}</small>`:''}${c.remove?`<br><small>外す：${esc(c.remove)}</small>`:''}</td></tr>`);});
   if((snap.inter||[]).length)rows.push(`<tr><th>絡み</th><td>${snap.inter.map(nm).join('・')}</td></tr>`);
   if((snap.angle||[]).length)rows.push(`<tr><th>カメラ位置</th><td>${snap.angle.map(nm).join('・')}</td></tr>`);
   if((snap.fx||[]).length)rows.push(`<tr><th>エフェクト</th><td>${snap.fx.map(nm).join('・')}</td></tr>`);
@@ -1567,6 +1587,39 @@ function vPList(c){
   $$('.pitem',view).forEach(b=>b.onclick=()=>openPart(b.dataset.id,null,()=>render(true)));
   $('#newPart').onclick=()=>openPart(null,t,()=>render(true));
 }
+/* 日本語→英語（タグ）の辞書。よく使う言葉はここで直し、ないものはインターネットの翻訳を使う */
+const JA_DICT={
+'女の子':'girl','男の子':'boy','女性':'woman','男性':'man',
+'黒髪':'black hair','金髪':'blonde hair','茶髪':'brown hair','銀髪':'silver hair','白髪':'white hair','赤髪':'red hair','ピンク髪':'pink hair','青髪':'blue hair','緑髪':'green hair','紫髪':'purple hair','オレンジ髪':'orange hair',
+'長髪':'long hair','ロングヘア':'long hair','短髪':'short hair','ショートヘア':'short hair','セミロング':'medium hair','ボブ':'bob cut','ポニーテール':'ponytail','ツインテール':'twintails','三つ編み':'braid','おさげ':'twin braids','お団子':'hair bun','前髪ぱっつん':'blunt bangs','ぱっつん':'blunt bangs','アホ毛':'ahoge','ウェーブ':'wavy hair','ストレート':'straight hair','メッシュ':'streaked hair',
+'青い目':'blue eyes','赤い目':'red eyes','茶色の目':'brown eyes','緑の目':'green eyes','紫の目':'purple eyes','黄色い目':'yellow eyes','金色の目':'yellow eyes','黒い目':'black eyes','つり目':'tsurime','たれ目':'tareme','オッドアイ':'heterochromia',
+'巨乳':'large breasts','爆乳':'huge breasts','普通の胸':'medium breasts','貧乳':'small breasts','細身':'slender','小柄':'petite','長身':'tall','筋肉質':'muscular','ぽっちゃり':'plump','褐色':'dark skin','色白':'pale skin','白い肌':'pale skin','日焼け':'tan','日焼け跡':'tanlines','そばかす':'freckles','ほくろ':'mole',
+'セーラー服':'serafuku','ブレザー':'blazer','水着':'swimsuit','ビキニ':'bikini','スクール水着':'school swimsuit','ワンピース':'dress','ドレス':'dress','Tシャツ':'t-shirt','シャツ':'shirt','ブラウス':'blouse','パーカー':'hoodie','セーター':'sweater','カーディガン':'cardigan','ジャケット':'jacket','コート':'coat',
+'スカート':'skirt','ミニスカート':'miniskirt','ロングスカート':'long skirt','プリーツスカート':'pleated skirt','ショートパンツ':'shorts','ジーンズ':'jeans','パンツ':'pants','着物':'kimono','浴衣':'yukata','メイド服':'maid','エプロン':'apron','スーツ':'suit','パジャマ':'pajamas','ジャージ':'track suit','体操服':'gym uniform','チャイナドレス':'china dress','バニーガール':'playboy bunny',
+'眼鏡':'glasses','メガネ':'glasses','帽子':'hat','リボン':'ribbon','ネクタイ':'necktie','マフラー':'scarf','手袋':'gloves','ニーソ':'thighhighs','ニーハイ':'thighhighs','タイツ':'pantyhose','靴下':'socks','裸足':'barefoot','ハイヒール':'high heels','スニーカー':'sneakers','ブーツ':'boots','チョーカー':'choker','イヤリング':'earrings','ヘアピン':'hairclip','猫耳':'cat ears','うさ耳':'rabbit ears',
+'立つ':'standing','立っている':'standing','座る':'sitting','座っている':'sitting','寝る':'lying','寝転ぶ':'lying','横になる':'lying','仰向け':'on back','うつ伏せ':'on stomach','走る':'running','歩く':'walking','しゃがむ':'squatting','膝立ち':'kneeling','正座':'seiza','女の子座り':'wariza','体育座り':'hugging own legs','四つん這い':'all fours','前かがみ':'leaning forward','ジャンプ':'jumping','振り返る':'looking back','振り向く':'looking back',
+'手を振る':'waving','ピース':'v','ダブルピース':'double v','腕組み':'crossed arms','手を上げる':'arm up','両手を上げる':'arms up','手を後ろに':'arms behind back','頬杖':'head rest','指さし':'pointing','伸び':'stretching','こちらを見る':'looking at viewer','カメラ目線':'looking at viewer','よそ見':'looking away','上を見る':'looking up','下を見る':'looking down',
+'笑顔':'smile','微笑み':'light smile','満面の笑み':'grin','にっこり':'smile','泣く':'crying','泣き顔':'crying','涙':'tears','怒る':'angry','怒り':'angry','驚く':'surprised','驚き':'surprised','照れ':'embarrassed','恥ずかしい':'embarrassed','赤面':'blush','無表情':'expressionless','困り顔':'troubled','ジト目':'jitome','目を閉じる':'closed eyes','ウインク':'one eye closed','口を開ける':'open mouth','舌を出す':'tongue out','ドヤ顔':'smug','悲しい':'sad','眠い':'sleepy','真剣':'serious','ニヤニヤ':'smirk','ふくれっ面':'pout',
+'汗':'sweat','濡れ':'wet','濡れた':'wet','濡れた髪':'wet hair','湯気':'steam','鳥肌':'goosebumps',
+'ハグ':'hug','抱きしめる':'hug','キス':'kiss','手をつなぐ':'holding hands','見つめ合う':'eye contact','膝枕':'lap pillow','おんぶ':'piggyback','お姫様抱っこ':'princess carry',
+'海':'ocean','ビーチ':'beach','砂浜':'beach','教室':'classroom','学校':'school','寝室':'bedroom','部屋':'indoors','室内':'indoors','屋外':'outdoors','森':'forest','街':'city','公園':'park','プール':'pool','お風呂':'bath','温泉':'onsen','屋上':'rooftop','図書館':'library','駅':'train station','電車':'train interior','カフェ':'cafe','神社':'shrine','台所':'kitchen','キッチン':'kitchen','コンビニ':'convenience store','暗い部屋':'dark room',
+'夜':'night','昼':'day','朝':'morning','夕方':'evening','夕日':'sunset','夕焼け':'sunset','空':'sky','青空':'blue sky','星空':'starry sky','雨':'rain','雪':'snow','桜':'cherry blossoms','花火':'fireworks','白背景':'white background','シンプルな背景':'simple background',
+'全身':'full body','上半身':'upper body','顔アップ':'close-up','アップ':'close-up','横から':'from side','後ろから':'from behind','上から':'from above','下から':'from below','あおり':'from below','俯瞰':'from above','広角':'fisheye','背景ぼかし':'depth of field',
+'逆光':'backlighting','柔らかい光':'soft lighting','やわらかい光':'soft lighting','薄暗い':'dim lighting','木漏れ日':'dappled sunlight','光の粒':'light particles',
+'アニメ塗り':'anime coloring','水彩':'watercolor (medium)','厚塗り':'painterly','色鉛筆':'colored pencil (medium)','モノクロ':'monochrome','白黒':'greyscale','ちびキャラ':'chibi','線画':'lineart','スケッチ':'sketch',
+'キラキラ':'sparkle','ハート':'heart','風':'wind','水しぶき':'splashing','動きの線':'motion lines','スピード線':'speed lines'
+};
+const jaSplit=t=>(t||'').split(/[、,，・\n]+|\s+/).map(x=>x.trim()).filter(Boolean);
+/* インターネットの翻訳（MyMemory・無料）。日本語の文を英語にする */
+async function netTranslate(t){const u='https://api.mymemory.translated.net/get?langpair=ja|en&q='+encodeURIComponent(t);
+  const r=await fetch(u);if(!r.ok)throw new Error('net');const j=await r.json();const out=(j&&j.responseData&&j.responseData.translatedText)||'';if(!out||/MYMEMORY WARNING|INVALID/i.test(out))throw new Error('net');return out;}
+const gtLink=t=>'https://translate.google.com/?sl=ja&tl=en&op=translate&text='+encodeURIComponent(t);
+/* 日本語 → タグ（辞書を先に見て、ないものだけ翻訳） */
+async function jaToTags(t){const words=jaSplit(t);const out=[];let dict=0,net=0,fail=[];
+  for(const w of words){if(/^[\x00-\x7f]+$/.test(w)){out.push(w);continue;}
+    if(JA_DICT[w]){out.push(JA_DICT[w]);dict++;continue;}
+    try{const e=(await netTranslate(w)).toLowerCase().replace(/[.。]+$/,'').trim();if(e){out.push(e);net++;}else fail.push(w);}catch(_){fail.push(w);}}
+  return{tags:out,dict,net,fail};}
 function openPart(id,type,onSave){
   const src=id?byId('parts',id):null;
   const p=src?Object.assign(JSON.parse(JSON.stringify(Object.assign({},src,{img:null}))),{img:src.img||null}):{id:uid(),type,name:'',tags:'',subject:type==='chara'?'girl':'',weight:type==='lora'?0.7:'',loraName:'',neg:'',memo:'',text:''};
@@ -1579,14 +1632,25 @@ function openPart(id,type,onSave){
   ${p.type==='chara'?`<label class="f"><span>呼び方（プロンプトの先頭の言葉）</span><input id="pSubj" list="subjList" value="${esc(p.subject)}" placeholder="girl"><datalist id="subjList"><option value="girl"><option value="boy"><option value="woman"><option value="man"><option value="1girl"><option value="1boy"></datalist><span class="hint">girl・boy などで書くと、人数のタグ（1girl・2girls・1boy）が自動で付きます</span></label>`:''}
   ${p.type==='lora'?`<label class="f"><span>LoRA の正式な名前（PixAI で探すときの名前）</span><input id="pLname" value="${esc(p.loraName)}" placeholder="名前と同じなら空のまま"></label>
   <label class="f"><span>標準の重み</span><input id="pW" type="number" step="0.05" inputmode="decimal" value="${esc(p.weight)}"></label>`:''}
+  <div class="f jain"><span>日本語で入れる（英語に直して、下のタグに足します）</span><div class="sel"><input id="pJa" placeholder="例：黒髪、ポニーテール、笑顔"><button type="button" class="btn sm" id="pJaGo">英語に</button></div>
+    <span class="hint" id="pJaMsg">「、」で区切って入れます。よく使う言葉はアプリの辞書で、ほかはインターネットの翻訳（MyMemory）で直します。</span></div>
   <label class="f"><span>${p.type==='lora'?'トリガーワード（プロンプトに足すタグ）':p.type==='np'?'ポジティブに足すタグ（なくしたいものは no ○○ と書く）':'タグ（カンマ区切り）'}</span><textarea id="pTags" rows="3" placeholder="${esc(T.ph)}">${esc(p.tags)}</textarea><span class="hint">${esc(T.hint)}</span></label>
-  ${p.type!=='lora'?`<label class="f"><span>文章で書くとき（Tsubaki 系・英語・なくてもよい）</span><textarea id="pText" rows="2" placeholder="${esc(TEXT_PH[p.type]||'')}">${esc(p.text||'')}</textarea><span class="hint">プロンプトの形が「文章」のときだけ、タグの代わりにこの文を使います。空のままならタグから文を作ります。</span></label>`:''}
+  ${p.type!=='lora'?`<label class="f"><span>文章で書くとき（Tsubaki 系・英語・なくてもよい）</span><textarea id="pText" rows="2" placeholder="${esc(TEXT_PH[p.type]||'')}">${esc(p.text||'')}</textarea><span class="hint">プロンプトの形が「文章」のときだけ、タグの代わりにこの文を使います。空のままならタグから文を作ります。<button type="button" class="linkb" id="pTextJa">上の日本語を文章として英語にする</button></span></label>`:''}
   ${p.type==='np'?`<details class="nh" ${p.neg?'open':''}><summary>ネガティブにも足す（なくてもよい）</summary><div class="nhb"><label class="f" style="margin:0"><span>ネガティブに足すタグ</span><textarea id="pNegT" rows="2" placeholder="なくても、ポジティブだけで働きます">${esc(p.neg)}</textarea></label></div></details>`:''}
   ${p.type==='style'?`<label class="f"><span>ネガティブプロンプト</span><textarea id="pNegT" rows="3" placeholder="lowres, blurry, jpeg artifacts, text, watermark">${esc(p.neg)}</textarea></label>${negHelp()}`:''}
   <label class="f"><span>メモ</span><textarea id="pMemo" rows="2" placeholder="${p.type==='lora'?'PixAI のURL・合う重みなど':''}">${esc(p.memo)}</textarea></label>
   ${used?`<div class="banner info">この部品は ${used} 件のシーンで使っています。直すと、そのすべてのシーンのプロンプトが変わります。</div>`:''}
   <div class="row"><button class="btn" id="pSave">保存</button>${src?'<button class="btn ghost" id="pDup">複製</button><button class="btn danger" id="pDel">削除</button>':''}<button class="btn ghost" id="pCancel">やめる</button></div>`);
   setTimeout(()=>{if(!src)$('#pName')&&$('#pName').focus();},50);
+  /* 日本語 → 英語 */
+  $('#pJaGo').onclick=async()=>{const t=$('#pJa').value.trim();if(!t)return toast('日本語を入れてください');const b=$('#pJaGo'),m=$('#pJaMsg');b.disabled=true;b.textContent='直しています…';
+    try{const r=await jaToTags(t);
+      if(r.tags.length){const ta=$('#pTags');const cur=splitTags(ta.value);ta.value=uniq([...cur,...r.tags]).join(', ');}
+      if(r.fail.length){m.innerHTML=`<b style="color:var(--warn)">「${esc(r.fail.join('、'))}」は直せませんでした。</b><a href="${gtLink(r.fail.join('\n'))}" target="_blank" rel="noopener">Google翻訳で開く</a>（英語をコピーして、タグに貼ってください）`;}
+      else{m.textContent=`タグに足しました（辞書 ${r.dict}・翻訳 ${r.net}）。合っているか確かめてください。`;$('#pJa').value='';}
+    }finally{b.disabled=false;b.textContent='英語に';}};
+  const tj=$('#pTextJa');if(tj)tj.onclick=async()=>{const t=$('#pJa').value.trim();if(!t)return toast('上の「日本語で入れる」に文を入れてください');tj.disabled=true;
+    try{$('#pText').value=await netTranslate(t);toast('文章を英語にしました');}catch(_){window.open(gtLink(t),'_blank','noopener');}finally{tj.disabled=false;}};
   let tmpUrl='';
   const showImg=()=>{const ph=$('#pImgPh');if(tmpUrl){URL.revokeObjectURL(tmpUrl);tmpUrl='';}
     if(p.img){tmpUrl=URL.createObjectURL(p.img);ph.style.backgroundImage=`url(${tmpUrl})`;ph.textContent='';}else{ph.style.backgroundImage='';ph.textContent='画像なし';}
@@ -1599,7 +1663,8 @@ function openPart(id,type,onSave){
   $('#pSave').onclick=async()=>{read(p);const i=S.parts.findIndex(x=>x.id===p.id);if(i>=0)S.parts[i]=p;else S.parts.push(p);await saveNow('parts',p);closeSheet();onSave&&onSave(p);toast('保存しました');};
   const dp=$('#pDup');if(dp)dp.onclick=async()=>{const n=read(Object.assign(JSON.parse(JSON.stringify(Object.assign({},p,{img:null}))),{img:p.img||null}));n.id=uid();n.name+='（コピー）';S.parts.push(n);await saveNow('parts',n);closeSheet();setTimeout(()=>openPart(n.id,null,onSave),30);};
   const dl=$('#pDel');if(dl)dl.onclick=async()=>{if(!confirm(used?`この部品は ${used} 件のシーンで使っています。削除すると、そのシーンからも外れます。削除しますか？`:'この部品を削除しますか？'))return;
-    for(const s of S.scenes){let ch=false;for(const c of s.chars||[]){for(const f of['chara','outfit','action','face'])if(c[f]===p.id){c[f]='';ch=true;}
+    for(const s of S.scenes){let ch=false;for(const c of s.chars||[]){for(const f of['chara','face'])if(c[f]===p.id){c[f]='';ch=true;}
+        for(const f of['outfit','action'])if(A_(c[f]).includes(p.id)){c[f]=A_(c[f]).filter(x=>x!==p.id);ch=true;}
         for(const f of['body','phys','act'])if((c[f]||[]).includes(p.id)){c[f]=c[f].filter(x=>x!==p.id);ch=true;}}
       for(const f of['bg','style','camera','light'])if(s[f]===p.id){s[f]='';ch=true;}
       for(const f of['inter','angle','fx','np'])if((s[f]||[]).includes(p.id)){s[f]=s[f].filter(x=>x!==p.id);ch=true;}
@@ -1772,7 +1837,7 @@ async function insertSample(){
   const st=P('style','いつもの画風','masterpiece, best quality, anime style',{neg:'lowres, blurry, jpeg artifacts, text, watermark'});
   const lo=P('lora','水彩風（例）','watercolor',{weight:0.6,memo:'サンプルです。実際の LoRA 名に直してください'});
   const parts=[mika,sen,uni,swim,casual,stand,run,smile,surp,sweat,blush,wet,hug,hand,kiss,beach,cls,cam,st,lo,...(soft0?[]:[soft])];
-  const SC=(title,roles,chars,bg,extra)=>Object.assign({id:uid(),title,roles,chars:chars.map(c=>Object.assign(newSlot(),c)),inter:[],bg,angle:[],fx:[],np:[],camera:'',light:'',style:st.id,loras:[],add:'',remove:'',neg:'',memo:'',images:[],created:Date.now(),updated:Date.now()},extra||{});
+  const SC=(title,roles,chars,bg,extra)=>Object.assign({id:uid(),title,roles,chars:chars.map(c=>{const o=Object.assign(newSlot(),c);o.outfit=A_(o.outfit);o.action=A_(o.action);return o;}),inter:[],bg,angle:[],fx:[],np:[],camera:'',light:'',style:st.id,loras:[],add:'',remove:'',neg:'',memo:'',images:[],created:Date.now(),updated:Date.now()},extra||{});
   const s1=SC('ビーチで笑顔のミカ',['起'],[{chara:mika.id,outfit:swim.id,action:stand.id,face:smile.id,body:[wet.id]}],beach.id,{camera:cam.id,light:soft.id});
   const s2=SC('先輩が走ってくる',['承'],[{chara:sen.id,outfit:uni.id,action:run.id,face:smile.id,body:[sweat.id]}],beach.id);
   const s3=SC('驚くミカ（夕方）',['転'],[{chara:mika.id,outfit:swim.id,action:stand.id,face:surp.id,body:[sweat.id,blush.id],add:'looking back'}],beach.id,{add:'sunset, orange sky',remove:'daytime, blue sky'});
