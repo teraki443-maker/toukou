@@ -169,6 +169,15 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--acc);outline-off
 .ico{border:1px solid var(--line2);background:var(--card);border-radius:10px;width:42px;flex:0 0 42px;color:var(--acc);font-size:16px}
 .empty{text-align:center;color:var(--sub);padding:40px 12px}
 .empty b{display:block;color:var(--ink);font-size:16px;margin-bottom:6px}
+/* 重複しているタグの欄（シーンの画面のプロンプトの下） */
+.dupbox{margin-top:12px;border:1px solid #f3dfa6;background:#fff8e6;border-radius:10px;padding:10px 12px}
+.dupbox h3{margin:0 0 2px;font-size:14px}
+.dup{border-top:1px solid #f0e2b8;padding:9px 0 2px}
+.dup .dt{font-size:14px;overflow-wrap:anywhere}
+.dup .dt code{font:13px ui-monospace,Menlo,Consolas,monospace;background:rgba(0,0,0,.06);border-radius:4px;padding:0 4px}
+.dup .ds{display:block;font-size:12px;color:var(--sub);overflow-wrap:anywhere}
+.dup .new{display:inline-block;font-size:11px;background:#e8590c;color:#fff;border-radius:4px;padding:0 5px;margin-left:4px;vertical-align:1px}
+.dup .row{margin:6px 0 4px;flex-wrap:wrap}
 .banner{background:#fff8e6;border:1px solid #f3dfa6;border-radius:10px;padding:10px 12px;font-size:13px;margin:0 0 12px}
 .banner.info{background:var(--acc-l);border-color:#d4daf8}
 
@@ -317,6 +326,9 @@ details.nh .nhb .sec{border:0;padding:0;background:none;box-shadow:none}
   .pbox mark.dn,.tg.wt.dn{background:#1c2c4d;color:#a9c4ff;border-color:#33507f}
   .btn.danger{border-color:#6b2f2c}
   .banner{background:#3a3016;border-color:#5c4b1f}
+  .dupbox{background:#3a3016;border-color:#5c4b1f}
+  .dup{border-color:#5c4b1f}
+  .dup .dt code{background:rgba(255,255,255,.1)}
   .banner.info{border-color:#3a4378}
   .pbox.neg{color:#f2a49d;background:#3a1f1d}
   .loras span{background:#3a2c14;border-color:#5c4620}
@@ -547,7 +559,9 @@ const norm=t=>parseTag(t).base.toLowerCase().replace(/\s+/g,' ').trim();
 const baseOf=t=>parseTag(t).base;
 /* シーンの重みを当てる */
 function weigh(t,sc){const p=parseTag(t);const k=norm(t);const ws=(sc&&sc.weights)||{};const w=(k in ws)?ws[k]:p.w;return(w!=null&&Math.abs(w-1)>1e-9)?`(${p.base}:${+(+w).toFixed(2)})`:p.base;}
-function uniq(arr,remove){const rm=new Set((remove||[]).map(norm));const seen=new Set();return arr.filter(t=>{const k=norm(t);if(rm.has(k)||seen.has(k))return false;seen.add(k);return true;});}
+/* KEEP：重複の欄で「残す」にしたタグ。プロンプトを組み立てている間だけ入る */
+let KEEP=null;
+function uniq(arr,remove){const rm=new Set((remove||[]).map(norm));const seen=new Set();return arr.filter(t=>{const k=norm(t);if(rm.has(k)||(seen.has(k)&&!(KEEP&&KEEP.has(k))))return false;seen.add(k);return true;});}
 const P_=id=>byId('parts',id);
 const T_=id=>splitTags(P_(id)&&P_(id).tags);
 const TX_=id=>((P_(id)&&P_(id).text)||'').trim();
@@ -564,7 +578,56 @@ const NUMW=['','One','Two','Three','Four','Five','Six'];
 const ORD=['first','second','third','fourth','fifth','sixth'];
 const art=w=>/^[aeiou]/i.test(w)?'an':'a';
 const sent=s=>{s=String(s||'').trim().replace(/[,\s]+$/,'');if(!s)return'';s=s[0].toUpperCase()+s.slice(1);return /[.!?]$/.test(s)?s:s+'.';};
+/* ===== 重複しているタグ =====
+   シーンの部品・足すタグを集めて、次の4つを調べる。選んだものは sc.dups に { id: 選んだもの } で入る
+   ・same（id は p:タグ）：同じタグが2回以上。del＝1つにする（ふつう）／keep＝2回とも入れる
+   ・sim（s:語幹）：単数と複数など、似たタグ（muted color と muted colors）。keep＝両方（ふつう）／del＝後のほうを消す
+   ・conf（c:タグ）：ポジティブとネガティブの両方にある。keep＝両方（ふつう）／pos＝ポジから消す／neg＝ネガから消す
+   ・nsame（n:タグ）：ネガティブの中で2回以上。del＝1つにする（ふつう）／keep＝2回とも入れる
+   文章の形では、ポジティブの重複は調べない（文章の中にタグがそのまま並ばないため） */
+const DUP_DEF={same:'del',sim:'keep',conf:'keep',nsame:'del'};
+function stemOf(k){return k.split(' ').map(w=>w.length<4||/ss$/.test(w)?w:/ies$/.test(w)?w.slice(0,-3)+'y':/(x|ch|sh)es$/.test(w)?w.slice(0,-2):/s$/.test(w)?w.slice(0,-1):w).join(' ');}
+function dupScan(sc){
+  const fmt=S.meta.fmt||'tag',ch=sc.dups||{},prose=fmt==='prose';
+  const lab=id=>{const p=P_(id);return p?`${(PT[p.type]||{}).label||''}「${p.name||'名前なし'}」`:'';};
+  const src=[];
+  const addIds=(ids,rm,scope,pre)=>{for(const id of ids)if(id)for(const t of T_(id))if(!rm.has(norm(t)))src.push({t,label:pre+lab(id),scope});};
+  const addT=(tags,label,rm,scope)=>{for(const t of tags)if(!rm.has(norm(t)))src.push({t,label,scope});};
+  for(const l of sc.loras||[])addIds([l.id],new Set(),'g','');
+  const multi=(sc.chars||[]).length>1;
+  (sc.chars||[]).forEach((sl,i)=>{const rm=new Set(splitTags(sl.remove).map(norm)),scope=fmt==='group'?'s'+i:'g',pre=multi?`人物${i+1}の`:'';
+    addIds([sl.chara,...(sl.phys||[]),...A_(sl.outfit),...A_(sl.action),...(sl.act||[]),sl.face,...(sl.body||[])],rm,scope,pre);addT(splitTags(sl.add),pre+'足すタグ',rm,scope);});
+  const srm=new Set(splitTags(sc.remove).map(norm));
+  addIds([...(sc.inter||[]),sc.bg,...(sc.angle||[]),sc.camera,sc.light,...(sc.fx||[]),...(sc.np||[]),sc.style],srm,'g','');
+  addT(splitTags(sc.add),'足すタグ（人物以外）',srm,'g');
+  const nsrc=[];const negOf=(id,suf)=>{const p=P_(id);if(p)for(const t of splitTags(p.neg))nsrc.push({t,label:lab(id)+suf});};
+  if(sc.style)negOf(sc.style,'のネガティブ');for(const id of sc.np||[])negOf(id,'のネガティブ');for(const t of splitTags(sc.neg))nsrc.push({t,label:'ネガティブに足すタグ'});
+  const wt=t=>{const w=parseTag(t).w;return w!=null?`（${w}）`:'';};
+  const list=[],keepPos=new Set(),keepNeg=new Set(),simDel=new Set(),posDrop=new Set(),negDrop=new Set();
+  const item=(kind,id,o)=>{const c=ch[id]||'';list.push(Object.assign({kind,id,choice:c||DUP_DEF[kind],decided:!!c},o));return c||DUP_DEF[kind];};
+  if(!prose){
+    const by=new Map();for(const x of src){const k=norm(x.t),g=x.scope+'|'+k;if(!by.has(g))by.set(g,{k,scope:x.scope,base:baseOf(x.t),items:[]});by.get(g).items.push(x);}
+    const done=new Set();
+    for(const g of by.values())if(g.items.length>1&&!done.has(g.k)){done.add(g.k);if(item('same','p:'+g.k,{base:g.base,n:g.items.length,srcs:g.items.map(x=>x.label+wt(x.t))})==='keep')keepPos.add(g.k);}
+    const st=new Map();for(const g of by.values()){const sk=g.scope+'|'+stemOf(g.k);if(!st.has(sk))st.set(sk,{stem:stemOf(g.k),gs:[]});st.get(sk).gs.push(g);}
+    const done2=new Set();
+    for(const x of st.values())if(x.gs.length>1&&!done2.has(x.stem)){done2.add(x.stem);if(item('sim','s:'+x.stem,{bases:x.gs.map(g=>g.base),srcs:x.gs.map(g=>`${g.base}：${g.items[0].label}`)})==='del')simDel.add(x.stem);}
+    const posK=new Map();for(const x of src){const k=norm(x.t);if(!posK.has(k))posK.set(k,x);}
+    const done3=new Set();
+    for(const y of nsrc){const k=norm(y.t);if(!posK.has(k)||done3.has(k))continue;done3.add(k);const c=item('conf','c:'+k,{base:baseOf(y.t),srcs:['ポジ：'+posK.get(k).label,'ネガ：'+y.label]});if(c==='pos')posDrop.add(k);if(c==='neg')negDrop.add(k);}
+  }
+  const nb=new Map();for(const y of nsrc){const k=norm(y.t);if(!nb.has(k))nb.set(k,{base:baseOf(y.t),items:[]});nb.get(k).items.push(y);}
+  for(const[k,g]of nb)if(g.items.length>1&&item('nsame','n:'+k,{base:g.base,n:g.items.length,srcs:g.items.map(y=>y.label+wt(y.t))})==='keep')keepNeg.add(k);
+  return{list,keepPos,
+    /* ポジティブのタグを通すか（似たタグの後のほう・ポジから消すタグを落とす）。並びの順に1回ずつ呼ぶ */
+    pf:()=>{const first=new Map();return t=>{const k=norm(t);if(posDrop.has(k))return false;const s=stemOf(k);if(simDel.has(s)){if(!first.has(s))first.set(s,k);else if(first.get(s)!==k)return false;}return true;};},
+    neg:arr=>{const seen=new Set();return arr.filter(t=>{const k=norm(t);if(negDrop.has(k))return false;if(seen.has(k)&&!keepNeg.has(k))return false;seen.add(k);return true;});}};
+}
 function buildPrompt(sc){
+  const D=dupScan(sc);KEEP=(S.meta.fmt||'tag')==='prose'?null:D.keepPos;
+  try{const r=buildPrompt0(sc,D);r.dups=D.list;return r;}finally{KEEP=null;}
+}
+function buildPrompt0(sc,D){
   const fmt=S.meta.fmt||'tag';
   const slots=(sc.chars||[]).map(slotInfo);
   const srm=splitTags(sc.remove);
@@ -584,16 +647,16 @@ function buildPrompt(sc){
   const catOf={};const mark=(arr,c)=>{for(const t of arr){const k=norm(t);if(!(k in catOf))catOf[k]=c;}};
   mark(trig,'lora');for(const s of slots){mark(s.feat,'chara');mark(s.phys,'phys');mark(s.out,'outfit');mark(s.pose,'action');mark(s.act,'act');mark(s.face,'face');mark(s.body,'body');mark(s.add,'add');}
   mark(inter,'inter');mark(bg,'bg');mark(ang,'angle');mark(add,'add');mark(cam,'camera');mark(lit,'light');mark(fx,'fx');mark(npP,'np');mark(style,'style');
-  const tagList=uniq(all).map(t=>({base:baseOf(t),key:norm(t),own:parseTag(t).w,cat:catOf[norm(t)]||'add'}));
+  const tl=new Set();const tagList=uniq(all).filter(t=>{const k=norm(t);if(tl.has(k))return false;tl.add(k);return true;}).filter(D.pf()).map(t=>({base:baseOf(t),key:norm(t),own:parseTag(t).w,cat:catOf[norm(t)]||'add'}));
   const W=t=>weigh(t,sc);
   if(fmt==='group'){
-    const out=slots.map(s=>{const t=uniq([...s.feat,...s.phys,...s.out,...s.pose,...s.act,...s.face,...s.body,...s.add]).map(W);return t.length?`${s.subj}(${t.join(', ')})`:s.subj;});
-    pos=[...out,...uniq([...inter,...bg,...ang,...add,...cam,...lit,...fx,...npP,...style,...trig]).map(W),...loraTxt].join(', ');
+    const out=slots.map(s=>{const t=uniq([...s.feat,...s.phys,...s.out,...s.pose,...s.act,...s.face,...s.body,...s.add]).filter(D.pf()).map(W);return t.length?`${s.subj}(${t.join(', ')})`:s.subj;});
+    pos=[...out,...uniq([...inter,...bg,...ang,...add,...cam,...lit,...fx,...npP,...style,...trig]).filter(D.pf()).map(W),...loraTxt].join(', ');
   }else if(fmt==='tag'){
     const t=[...trig];
     for(const s of slots)t.push(...s.feat,...s.phys,...s.out,...s.pose,...s.act,...s.face,...s.body,...s.add);
     t.push(...inter,...bg,...ang,...add,...cam,...lit,...fx,...npP,...style);
-    pos=[...countTags(slots.map(s=>s.subj)),...uniq(t).map(W),...loraTxt].join(', ');
+    pos=[...countTags(slots.map(s=>s.subj)),...uniq(t).filter(D.pf()).map(W),...loraTxt].join(', ');
   }else{
     /* 文章の形では重みを使わない（PixAI の DiT ガイドで、(tag:1.2) は効かないとされているため） */
     const B=a=>a.map(baseOf);
@@ -627,7 +690,7 @@ function buildPrompt(sc){
     const sty=TX_(sc.style)||style.join(', ');if(sty)S2.push(sent(TX_(sc.style)?sty:'Style: '+sty));
     pos=[S2.join(' '),...loraTxt].filter(Boolean).join(' ');
   }
-  const neg=uniq([...splitTags(P_(sc.style)&&P_(sc.style).neg),...(sc.np||[]).flatMap(id=>splitTags(P_(id)&&P_(id).neg)),...splitTags(sc.neg)]);
+  const neg=D.neg([...splitTags(P_(sc.style)&&P_(sc.style).neg),...(sc.np||[]).flatMap(id=>splitTags(P_(id)&&P_(id).neg)),...splitTags(sc.neg)]);
   return{pos,neg:neg.join(', '),loras,tagList,fmt};
 }
 /* プレビュー：重みを付けたタグに色を付ける */
@@ -825,6 +888,7 @@ function vScene(c){
     <pre class="pbox" id="pPos"></pre>
     <div id="negWrap"><div class="plabel">ネガティブ <button class="btn sm ghost" id="cpNeg">コピー</button></div><pre class="pbox neg" id="pNeg"></pre></div>
     <div class="loras" id="pLora"></div>
+    <div id="dupBox"></div>
   </div>
 
   <div class="sec" id="wSec"><h2>重み <small>タグを押して、強く・弱くする</small></h2>
@@ -926,7 +990,28 @@ function vScene(c){
     $$('[data-wv]',box).forEach(b=>b.onclick=()=>{setW(+b.dataset.wv);$$('[data-wv]',box).forEach(x=>x.classList.toggle('on',x===b));});
     $('#wReset').onclick=()=>setW(sel.own??1);
   };
+  /* 重複しているタグの欄。ボタンを押すと sc.dups に入れて、プロンプトを作り直す */
+  const drawDup=p=>{
+    const box=$('#dupBox'),L=p.dups||[];
+    if(!L.length){box.innerHTML='';return;}
+    const nNew=L.filter(d=>!d.decided).length;
+    const B=(d,v,t)=>`<button type="button" class="btn sm ${d.choice===v?'onb':'ghost'}" data-dup="${esc(d.id)}" data-dv="${v}">${t}</button>`;
+    const C=x=>`<code>${esc(x)}</code>`;
+    const row=d=>{
+      const nw=d.decided?'':'<span class="new">未確認</span>';
+      const ss=`<span class="ds">${d.srcs.map(esc).join('／')}</span>`;
+      if(d.kind==='same')return `<div class="dup"><div class="dt">${C(d.base)} が ${d.n} 回${nw}</div>${ss}<div class="row">${B(d,'del','消す（1つにする）')}${B(d,'keep',`残す（${d.n}回入れる）`)}</div></div>`;
+      if(d.kind==='sim')return `<div class="dup"><div class="dt">似たタグ：${d.bases.map(C).join(' と ')}${nw}</div>${ss}<div class="row">${B(d,'del','後のほうを消す')}${B(d,'keep','両方残す')}</div></div>`;
+      if(d.kind==='conf')return `<div class="dup"><div class="dt">${C(d.base)} がポジティブとネガティブの両方にあります${nw}</div>${ss}<div class="row">${B(d,'pos','ポジから消す')}${B(d,'neg','ネガから消す')}${B(d,'keep','両方残す')}</div></div>`;
+      return `<div class="dup"><div class="dt">ネガティブ：${C(d.base)} が ${d.n} 回${nw}</div>${ss}<div class="row">${B(d,'del','消す（1つにする）')}${B(d,'keep',`残す（${d.n}回入れる）`)}</div></div>`;
+    };
+    box.innerHTML=`<div class="dupbox"><h3>重複しているタグ（${L.length}）${nNew?`<span class="hint">　未確認 ${nNew}</span>`:''}</h3>
+      <span class="hint">濃い色のボタンが、いまの入れ方です。同じタグを2回入れると、そのタグが少し強く効きます。このシーンだけの設定です。</span>
+      ${L.map(row).join('')}</div>`;
+    $$('[data-dup]',box).forEach(b=>b.onclick=()=>{sc.dups=sc.dups||{};sc.dups[b.dataset.dup]=b.dataset.dv;save('scenes',sc);upd();});
+  };
   const upd=()=>{const p=buildPrompt(sc);if(p.pos)$('#pPos').innerHTML=hlPrompt(p.pos);else $('#pPos').textContent='（部品を選ぶと、ここにプロンプトができます）';$('#pNeg').textContent=p.neg;$('#negWrap').hidden=!p.neg;drawW(p);
+    drawDup(p);
     $('#pLora').innerHTML=p.loras.length?'PixAI で選ぶ LoRA：'+p.loras.map(l=>`<span>${esc(l.name)}（${esc(l.weight===''?'—':l.weight)}）</span>`).join(''):'';};
   upd();
   $('#cpPos').onclick=()=>copyText(buildPrompt(sc).pos);
@@ -974,8 +1059,8 @@ function vScene(c){
     const imgs=sc.images;S.scenes=S.scenes.filter(x=>x.id!==sc.id);await dbDel('scenes',sc.id);markDeleted(sc.id);for(const id of imgs)await deleteImageIfUnused(id);goBack();};
 }
 /* 画像ごとに、そのときのプロンプトの設定を記録する */
-const SNAP_KEYS=['chars','inter','angle','fx','np','bg','camera','light','style','loras','add','remove','neg','weights'];
-const snapDef=k=>(k==='chars'||k==='inter'||k==='angle'||k==='fx'||k==='np'||k==='loras')?[]:k==='weights'?{}:'';
+const SNAP_KEYS=['chars','inter','angle','fx','np','bg','camera','light','style','loras','add','remove','neg','weights','dups'];
+const snapDef=k=>(k==='chars'||k==='inter'||k==='angle'||k==='fx'||k==='np'||k==='loras')?[]:(k==='weights'||k==='dups')?{}:'';
 const snapVal=(o,k)=>JSON.parse(JSON.stringify(o[k]??snapDef(k)));
 function recordSnap(sc,id){sc.imgMeta=sc.imgMeta||{};const snap={};for(const k of SNAP_KEYS)snap[k]=snapVal(sc,k);const p=buildPrompt(sc);sc.imgMeta[id]={snap,pos:p.pos,neg:p.neg,loras:p.loras,fmt:p.fmt,at:Date.now()};}
 function snapSame(sc,snap){return SNAP_KEYS.every(k=>JSON.stringify(snapVal(sc,k))===JSON.stringify(snapVal(snap,k)));}
