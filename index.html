@@ -15,6 +15,8 @@
   ・シーンを4つ選んで起承転結の作品にする
   ・データはこの端末のブラウザの中（IndexedDB）だけに保存。外部のサービスは使わない
   ・設定の「バックアップを書き出す」で、全データを1つのファイルにして保存できる
+  ・スマホとPCで使うときは、書き出したファイルを相手の端末で「読み込む（合わせる）」。
+    同じものは直した日時の新しい方を残し、消したものは S.meta.deleted（id と消した日時）で相手にも伝える
 -->
 <style>
 :root{
@@ -522,6 +524,8 @@ const IMG_TYPES=['face','style'];/* 見本を並べて選べる種類 */
 function makeThumb(blob,max){return new Promise(res=>{const u=URL.createObjectURL(blob);const im=new Image();im.onload=()=>{const s=Math.min(1,max/Math.max(im.width,im.height));const c=document.createElement('canvas');c.width=Math.max(1,Math.round(im.width*s));c.height=Math.max(1,Math.round(im.height*s));c.getContext('2d').drawImage(im,0,0,c.width,c.height);c.toBlob(b=>{URL.revokeObjectURL(u);res(b||blob);},'image/jpeg',.82);};im.onerror=()=>{URL.revokeObjectURL(u);res(blob);};im.src=u;});}
 async function addImage(file){const blob=new Blob([file],{type:file.type||'image/png'});const thumb=await makeThumb(blob,480);const id=uid();await dbPut('images',{id,blob,thumb,name:file.name||'image',type:blob.type});return id;}
 function hydrate(root){$$('img[data-img]',root).forEach(img=>{if(img.src)return;imgURL(img.dataset.img,!img.dataset.full).then(u=>{if(u)img.src=u;});});}
+/* 消したものの記録。スマホとPCでファイルを受け渡したとき、相手の端末でも消すために使う */
+function markDeleted(id){if(!S.meta.deleted)S.meta.deleted={};S.meta.deleted[id]=Date.now();dbPut('meta',S.meta);}
 async function deleteImageIfUnused(id){if(S.scenes.some(s=>(s.images||[]).includes(id)))return;await dbDel('images',id);for(const k of[id+':t',id+':f'])if(urlCache[k]){URL.revokeObjectURL(urlCache[k]);delete urlCache[k];}}
 
 /* ========== タグとプロンプト ========== */
@@ -733,7 +737,7 @@ function vWork(c){
   const[EW,EH]=expWH();
   $$('canvas[data-pv]',view).forEach(cv=>{const i=+cv.dataset.pv;const W=300,H=Math.round(W*EH/EW);cv.width=W;cv.height=H;const ctx=cv.getContext('2d');drawPanel(ctx,W,H,w,i,null);loadImg(compImg(w,i)).then(im=>{if(im)drawPanel(ctx,W,H,w,i,im);});});
   $('#wDup').onclick=async()=>{const n=JSON.parse(JSON.stringify(w));n.id=uid();n.title=(w.title||'無題の4コマ')+'（コピー）';n.created=Date.now();S.works.push(n);await saveNow('works',n);stack.pop();history.replaceState({n:stack.length+1},'');stack.push({v:'work',id:n.id});render();toast('複製しました');};
-  $('#wDel').onclick=async()=>{if(!confirm('この作品を削除しますか？（シーンと画像は残ります）'))return;S.works=S.works.filter(x=>x.id!==w.id);await dbDel('works',w.id);goBack();};
+  $('#wDel').onclick=async()=>{if(!confirm('この作品を削除しますか？（シーンと画像は残ります）'))return;S.works=S.works.filter(x=>x.id!==w.id);await dbDel('works',w.id);markDeleted(w.id);goBack();};
 }
 
 /* ========== シーン一覧（選ぶ画面を兼ねる） ========== */
@@ -967,7 +971,7 @@ function vScene(c){
   $('#sDup').onclick=async()=>{const n=JSON.parse(JSON.stringify(sc));n.id=uid();n.title=(sc.title||'無題のシーン')+'（コピー）';n.images=[];n.created=Date.now();S.scenes.push(n);await saveNow('scenes',n);stack.pop();history.replaceState({n:stack.length+1},'');stack.push({v:'scene',id:n.id});render();toast('複製しました。変えたいところだけ直してください');};
   $('#sDel').onclick=async()=>{const uu=usedIn(sc.id);if(!confirm(uu.length?`このシーンは ${uu.length} か所の作品で使っています。削除すると作品からも外れます。削除しますか？`:'このシーンを削除しますか？'))return;
     for(const x of uu){x.w.panels[x.i]='';await saveNow('works',x.w);}
-    const imgs=sc.images;S.scenes=S.scenes.filter(x=>x.id!==sc.id);await dbDel('scenes',sc.id);for(const id of imgs)await deleteImageIfUnused(id);goBack();};
+    const imgs=sc.images;S.scenes=S.scenes.filter(x=>x.id!==sc.id);await dbDel('scenes',sc.id);markDeleted(sc.id);for(const id of imgs)await deleteImageIfUnused(id);goBack();};
 }
 /* 画像ごとに、そのときのプロンプトの設定を記録する */
 const SNAP_KEYS=['chars','inter','angle','fx','np','bg','camera','light','style','loras','add','remove','neg','weights'];
@@ -1103,7 +1107,7 @@ function openStamps(onPick){
   $$('[data-stren]').forEach(b=>b.onclick=async()=>{const r=STAMPS.find(x=>x.id===b.dataset.stren);const nm=prompt('新しい名前',r.name);if(nm===null)return;r.name=nm.trim()||r.name;await dbPut('stamps',r);openStamps(onPick);});
   $$('[data-stdel]').forEach(b=>b.onclick=async()=>{const id=b.dataset.stdel;const r=STAMPS.find(x=>x.id===id);const n=stampUses(id);
     if(!confirm(n?`「${r.name}」は ${n} か所のコマに置いてあります。削除すると、コマからも消えます。削除しますか？`:`「${r.name}」を削除しますか？`))return;
-    await dbDel('stamps',id);STAMPS=STAMPS.filter(x=>x.id!==id);delete stampImg[id];if(stampUrl[id]){URL.revokeObjectURL(stampUrl[id]);delete stampUrl[id];}
+    await dbDel('stamps',id);markDeleted(id);STAMPS=STAMPS.filter(x=>x.id!==id);delete stampImg[id];if(stampUrl[id]){URL.revokeObjectURL(stampUrl[id]);delete stampUrl[id];}
     for(const w of S.works){let ch=false;for(const c of w.comps||[]){if(!c||!c.bubbles)continue;const before=c.bubbles.length;c.bubbles=c.bubbles.filter(x=>!(x.type==='img'&&x.stamp===id));if(c.bubbles.length!==before)ch=true;}if(ch)await saveNow('works',w);}
     if(Array.isArray(S.meta.bsets)){S.meta.bsets=S.meta.bsets.map(s=>Object.assign(s,{bubbles:s.bubbles.filter(x=>!(x.type==='img'&&x.stamp===id))})).filter(s=>s.bubbles.length);dbPut('meta',S.meta);}
     if(onPick&&typeof cSel!=='undefined')cSel=null;openStamps(onPick);});
@@ -1671,7 +1675,7 @@ function openPart(id,type,onSave){
       for(const f of['inter','angle','fx','np'])if((s[f]||[]).includes(p.id)){s[f]=s[f].filter(x=>x!==p.id);ch=true;}
       if((s.loras||[]).some(l=>l.id===p.id)){s.loras=s.loras.filter(l=>l.id!==p.id);ch=true;}
       if(ch)await saveNow('scenes',s);}
-    S.parts=S.parts.filter(x=>x.id!==p.id);await dbDel('parts',p.id);closeSheet();onSave&&onSave(null);};
+    S.parts=S.parts.filter(x=>x.id!==p.id);await dbDel('parts',p.id);markDeleted(p.id);closeSheet();onSave&&onSave(null);};
 }
 
 /* ========== 保存・設定 ========== */
@@ -1682,11 +1686,11 @@ function vSettings(){
     <div class="stat"><div><b>${S.works.length}</b><small>作品</small></div><div><b>${S.scenes.length}</b><small>シーン</small></div><div><b>${S.parts.length}</b><small>部品</small></div><div><b id="imgN">…</b><small>画像</small></div></div>
     <p class="hint" id="usage"></p>
   </div>
-  <div class="sec"><h2>バックアップ</h2>
-    <p class="hint" style="margin:0 0 10px">データはこのスマホのブラウザの中だけにあります。ブラウザのデータを消すと消えるので、ときどき書き出して保存してください（画像も入ります）。機種変更のときも、このファイルで戻せます。<br>前回の書き出し：${S.meta.lastBackup?fmtDate(S.meta.lastBackup):'まだありません'}</p>
-    <div class="row"><button class="btn" id="exp">バックアップを書き出す</button></div>
-    <div class="row"><label class="btn ghost">読み込む（足す）<input type="file" accept=".json,application/json" hidden id="impAdd"></label><label class="btn danger">読み込む（置き換え）<input type="file" accept=".json,application/json" hidden id="impRep"></label></div>
-    <span class="hint">「足す」は今のデータを残したまま加えます（同じものは上書き）。「置き換え」は今のデータを消してから読み込みます。</span>
+  <div class="sec"><h2>バックアップ・スマホとPCで使う</h2>
+    <p class="hint" style="margin:0 0 10px">データは、この端末のブラウザの中だけにあります。ブラウザのデータを消すと消えるので、ときどき書き出して保存してください。機種変更のときも、このファイルで戻せます。<br>前回の書き出し（画像入り）：${S.meta.lastBackup?fmtDate(S.meta.lastBackup):'まだありません'}</p>
+    <div class="row"><button class="btn" id="exp">書き出す</button><label class="btn ghost">読み込む（合わせる）<input type="file" accept=".json,.txt,application/json,text/plain" hidden id="impAdd"></label></div>
+    <div class="row"><button class="btn ghost sm" id="syncHelp">スマホとPCで使うときの手順</button><label class="btn danger sm">読み込む（置き換え）<input type="file" accept=".json,.txt,application/json,text/plain" hidden id="impRep"></label></div>
+    <span class="hint">「合わせる」は今のデータを残したまま加えます。同じシーン・作品・部品は、直した日時の新しい方を残します。相手の端末で消したものは、こちらでも消えます。「置き換え」は今のデータを消してから読み込みます。</span>
   </div>
   <div class="sec"><h2>データを消されにくくする</h2>
     <p class="hint" style="margin:0 0 10px">ブラウザに「このサイトのデータを消さない」ように頼みます。ホーム画面に追加して使うと、さらに消されにくくなります。</p>
@@ -1712,11 +1716,12 @@ function vSettings(){
   </div>
   <div class="sec"><h2>サンプル</h2><p class="hint" style="margin:0 0 10px">使い方を試すための部品・シーン・作品を足します（今のデータは消えません）。</p><button class="btn ghost" id="sample">サンプルを入れる</button></div>
   <p class="hint" style="text-align:center;margin:4px 0 0">アプリの版：${APP_VER}</p>
-  <p class="hint">投稿（4コマ漫画づくりのアプリ）。外部のサービスにはつながず、この端末の中だけで動きます。</p>`;
+  <p class="hint">投稿（4コマ漫画づくりのアプリ）。外部のサービスにはつながず、この端末の中だけで動きます。スマホとPCの受け渡しは、書き出したファイルで行います。</p>`;
   dbAll('images').then(a=>{$('#imgN').textContent=a.length;});
   if(navigator.storage&&navigator.storage.estimate)navigator.storage.estimate().then(e=>{$('#usage').textContent=`使っている容量：約 ${(e.usage/1048576).toFixed(1)} MB`;});
   if(navigator.storage&&navigator.storage.persisted)navigator.storage.persisted().then(v=>{$('#pst').textContent=v?'いまは「消されにくい」状態です。':'いまは通常の状態です。';});
-  $('#exp').onclick=exportAll;
+  $('#exp').onclick=openExport;
+  $('#syncHelp').onclick=openSyncHelp;
   $('#impAdd').onchange=e=>{const f=e.target.files[0];if(f)importAll(f,false);e.target.value='';};
   $('#impRep').onchange=e=>{const f=e.target.files[0];if(f)importAll(f,true);e.target.value='';};
   $('#persist').onclick=async()=>{if(!(navigator.storage&&navigator.storage.persist))return toast('このブラウザでは使えません');const ok=await navigator.storage.persist();$('#pst').textContent=ok?'「消されにくい」状態になりました。':'ブラウザに断られました。ホーム画面に追加してから、もう一度押してください。';};
@@ -1729,7 +1734,7 @@ function vSettings(){
   $$('[data-fdef]',view).forEach(b=>b.onclick=async()=>{S.meta.jpFont=b.dataset.fdef;await dbPut('meta',S.meta);render(true);});
   $$('[data-fdel]',view).forEach(b=>b.onclick=async()=>{const id=b.dataset.fdel;const used=S.works.reduce((n,w)=>n+(w.comps||[]).reduce((m,c)=>m+((c&&c.bubbles)||[]).filter(x=>x.font===id).length,0),0);
     if(!confirm(used?`この字体は ${used} 個の吹き出しで使っています。削除すると、その吹き出しは基本の字体になります。削除しますか？`:'この字体を削除しますか？'))return;
-    await dbDel('fonts',id);FONTS=FONTS.filter(f=>f.id!==id);if(S.meta.jpFont===id){S.meta.jpFont='';await dbPut('meta',S.meta);}
+    await dbDel('fonts',id);markDeleted(id);FONTS=FONTS.filter(f=>f.id!==id);if(S.meta.jpFont===id){S.meta.jpFont='';await dbPut('meta',S.meta);}
     for(const w of S.works){let ch=false;for(const c of w.comps||[])for(const x of(c&&c.bubbles)||[])if(x.font===id){x.font='';ch=true;}if(ch)await saveNow('works',w);}render(true);});
 }
 /* 字体の入れ方の説明（Pixel 7a・Chrome の場合）。文を直すときは、この中の文章を書き換える */
@@ -1783,34 +1788,138 @@ function openFontHelp(){
 }
 const b64=blob=>new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result);r.onerror=()=>rej(r.error);r.readAsDataURL(blob);});
 const unb64=d=>fetch(d).then(r=>r.blob());
-async function exportAll(){
-  flush();toast('書き出しています…');
-  try{
-    const images=[];for(const r of await dbAll('images'))images.push({id:r.id,name:r.name,type:r.type,data:await b64(r.blob),thumb:r.thumb?await b64(r.thumb):null});
-    const fonts=[];for(const f of await dbAll('fonts'))fonts.push({id:f.id,name:f.name,file:f.file,size:f.size,created:f.created,data:await b64(f.blob)});
-    const stamps=[];for(const r of await dbAll('stamps'))stamps.push({id:r.id,name:r.name,w:r.w,h:r.h,created:r.created,data:await b64(r.blob)});
-    const data={app:'4koma-kobo',version:1,exported:new Date().toISOString(),meta:S.meta,parts:await Promise.all(S.parts.map(async p=>p.img?Object.assign({},p,{img:await b64(p.img)}):p)),scenes:S.scenes,works:S.works,images,fonts,stamps};
-    const blob=new Blob([JSON.stringify(data)],{type:'application/json'});
-    const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`4koma-backup-${ymd()}.json`;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},10000);
-    S.meta.lastBackup=Date.now();await dbPut('meta',S.meta);toast('書き出しました（ダウンロードのフォルダ）');render(true);
-  }catch(e){toast('書き出せませんでした');}
+/* ===== 書き出し =====
+   ・スマホは「共有」で Googleドライブなどへ送る。PCは「この端末に保存」でダウンロードのフォルダへ
+   ・スマホの共有は .json のファイルを送れないので、中身は同じ JSON のまま .txt の名前にする（読み込みはどちらも使える）
+   ・共有はボタンを押してすぐに呼ばないと断られるので、シートを開いたときに先にファイルを作っておく */
+function ymdhm(){const d=new Date(),z=n=>String(n).padStart(2,'0');return `${ymd()}-${z(d.getHours())}${z(d.getMinutes())}`;}
+async function buildExport(withImg){
+  flush();
+  const images=[],fonts=[],stamps=[];
+  if(withImg){
+    for(const r of await dbAll('stamps'))stamps.push({id:r.id,name:r.name,w:r.w,h:r.h,created:r.created,data:await b64(r.blob)});
+    for(const r of await dbAll('images'))images.push({id:r.id,name:r.name,type:r.type,data:await b64(r.blob),thumb:r.thumb?await b64(r.thumb):null});
+    for(const f of await dbAll('fonts'))fonts.push({id:f.id,name:f.name,file:f.file,size:f.size,created:f.created,data:await b64(f.blob)});
+  }
+  const data={app:'4koma-kobo',version:1,exported:new Date().toISOString(),textOnly:!withImg,meta:S.meta,parts:await Promise.all(S.parts.map(async p=>p.img?Object.assign({},p,{img:await b64(p.img)}):p)),scenes:S.scenes,works:S.works,images,fonts,stamps};
+  return JSON.stringify(data);
 }
+function openExport(){
+  const tf=new File(['x'],'t.txt',{type:'text/plain'});
+  const canShare=!!(navigator.canShare&&navigator.share&&navigator.canShare({files:[tf]}));
+  const mobile=matchMedia('(pointer:coarse)').matches;
+  openSheet(`<h2>書き出す</h2>
+  <label class="switch"><input type="checkbox" id="exImg" checked><span>画像・字体・スタンプも入れる<span class="hint">外すと、部品・シーン・作品・設定（文字のデータ）だけになり、ファイルが小さくなります。プロンプトだけを急いで渡したいときに。画像のない端末では、そのシーンの画像は出ません。</span></span></label>
+  <p class="hint" id="exInfo">ファイルを作っています…</p>
+  <div class="row">${canShare?`<button class="btn ${mobile?'':'ghost'}" id="exShare" disabled>共有する（Googleドライブなど）</button>`:''}<button class="btn ${canShare&&mobile?'ghost':''}" id="exSave" disabled>この端末に保存</button></div>
+  <p class="hint">${canShare?'スマホは「共有する」→「ドライブ」を選ぶと、Googleドライブに保存されます。PCでは drive.google.com からダウンロードして「読み込む（合わせる）」で取り込みます。':'PCでは「この端末に保存」でダウンロードのフォルダに入ります。スマホへ渡すときは、そのファイルを Googleドライブに上げてください。'}</p>
+  <div class="row"><button class="btn ghost wide" id="exClose">閉じる</button></div>`);
+  let ready=null,seq=0;
+  const prep=async()=>{
+    const my=++seq,withImg=$('#exImg').checked;ready=null;
+    $$('#exShare,#exSave').forEach(x=>x.disabled=true);$('#exInfo').textContent='ファイルを作っています…';
+    try{
+      const json=await buildExport(withImg);if(my!==seq)return;
+      const base=`toukou-${withImg?'backup':'moji'}-${ymdhm()}`;
+      ready={withImg,json,base};
+      $('#exInfo').textContent=`準備ができました（約 ${json.length<1048576?Math.max(1,Math.round(json.length/1024))+' KB':(json.length/1048576).toFixed(1)+' MB'}${withImg?'・画像など入り':'・文字だけ'}）`;
+      $$('#exShare,#exSave').forEach(x=>x.disabled=false);
+    }catch(e){if(my===seq)$('#exInfo').textContent='ファイルを作れませんでした';}
+  };
+  const done=async r=>{if(r.withImg){S.meta.lastBackup=Date.now();await dbPut('meta',S.meta);}};
+  $('#exImg').onchange=prep;
+  $('#exClose').onclick=()=>{closeSheet();render(true);};
+  if($('#exShare'))$('#exShare').onclick=async()=>{
+    const r=ready;if(!r)return;
+    const f=new File([r.json],r.base+'.txt',{type:'text/plain'});
+    try{await navigator.share({files:[f],title:r.base});await done(r);toast('共有しました');}
+    catch(e){if(e&&e.name==='AbortError')return;toast('共有できませんでした。「この端末に保存」を使ってください');}
+  };
+  $('#exSave').onclick=async()=>{
+    const r=ready;if(!r)return;
+    const blob=new Blob([r.json],{type:'application/json'});
+    const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=r.base+'.json';document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},10000);
+    await done(r);toast('保存しました（ダウンロードのフォルダ）');
+  };
+  prep();
+}
+/* スマホとPCで使うときの手順。文を直すときは、この中の文章を書き換える */
+function openSyncHelp(){
+  const step=(n,t,body)=>`<div class="hstep"><div class="hnum">${n}</div><div class="hbody"><b>${t}</b>${body}</div></div>`;
+  openSheet(`<h2>スマホとPCで使うとき</h2>
+  <p class="hint" style="margin:-6px 0 14px">データは自動ではつながりません。<b>作業する端末を替えるときに、ファイルを1回受け渡します</b>。Googleドライブを使うと楽です。</p>
+  <div class="hsec"><h3>スマホ → PC</h3>
+  ${step(1,'スマホで書き出す','<p>「保存・設定」→「<b>書き出す</b>」→ 準備ができたら「<b>共有する</b>」→「<b>ドライブ</b>」→「保存」。</p>')}
+  ${step(2,'PCで取り込む','<p>PCで drive.google.com を開き、<code>toukou-…</code> のファイルをダウンロードします。このアプリの「保存・設定」→「<b>読み込む（合わせる）</b>」で、そのファイルを選びます。</p>')}
+  </div>
+  <div class="hsec"><h3>PC → スマホ</h3>
+  ${step(1,'PCで書き出す','<p>「<b>書き出す</b>」→「<b>この端末に保存</b>」。できたファイルを drive.google.com に上げます（画面に引っぱって入れる）。</p>')}
+  ${step(2,'スマホで取り込む','<p>「<b>読み込む（合わせる）</b>」→ ファイルを選ぶ画面の左上「≡」→「<b>ドライブ</b>」→ そのファイルを選びます。</p>')}
+  </div>
+  <div class="hsec"><h3>知っておくこと</h3>
+  <dl class="hfaq">
+    <dt>両方の端末で同じシーンを直したとき</dt><dd>直した日時の<b>新しい方</b>が残ります。古い方の直しは消えるので、なるべく片方の端末で作業を終えてから受け渡してください。</dd>
+    <dt>消したもの</dt><dd>相手の端末でも消えます（消したあとで、こちらで直していたものは残ります）。</dd>
+    <dt>画像・字体・スタンプを入れない書き出し</dt><dd>プロンプトや吹き出しの文字だけを急いで渡したいときに。2回目からは画像が相手にあるので、文字だけでも足ります。新しく追加した画像を渡すときは、画像入りで書き出してください。</dd>
+    <dt>古いファイルを読み込んでしまった</dt><dd>「合わせる」なら、古いものでこちらの新しい直しが消えることはありません。</dd>
+    <dt>ドライブのファイル</dt><dd>受け渡しが済んだら、ドライブの古いファイルは消してかまいません。最新の画像入りのファイルを1つ残しておくと、バックアップになります。</dd>
+  </dl></div>
+  <div class="row"><button class="btn wide" id="shClose">閉じる</button></div>`);
+  $('#shClose').onclick=closeSheet;
+}
+/* ===== 読み込み =====
+   replace=false（合わせる）：同じ id は updated（直した日時）の新しい方を残す。消した記録（meta.deleted）もお互いに反映する
+   replace=true（置き換え）：今のデータを消してから、ファイルの内容をそのまま入れる */
 async function importAll(file,replace){
   let data;try{data=JSON.parse(await file.text());}catch(e){return toast('読み込めないファイルです');}
   if(!data||data.app!=='4koma-kobo')return toast('このアプリのバックアップではありません');
-  if(replace&&!confirm('今のデータをすべて消して、バックアップの内容に置き換えます。よろしいですか？'))return;
+  if(replace&&!confirm('今のデータをすべて消して、ファイルの内容に置き換えます。よろしいですか？'))return;
   toast('読み込んでいます…');
+  const cnt={add:0,upd:0,keep:0,del:0,img:0};
   try{
     flush();
-    if(replace)for(const s of['parts','scenes','works','images','fonts','stamps'])await tx(s,'readwrite',st=>st.clear());
-    for(const r of data.images||[])await dbPut('images',{id:r.id,name:r.name,type:r.type,blob:await unb64(r.data),thumb:r.thumb?await unb64(r.thumb):null});
-    for(const r of data.stamps||[])await dbPut('stamps',{id:r.id,name:r.name,w:r.w,h:r.h,created:r.created,blob:await unb64(r.data)});
-    for(const r of data.fonts||[])await dbPut('fonts',{id:r.id,name:r.name,file:r.file,size:r.size,created:r.created,blob:await unb64(r.data)});
+    const inDel=(data.meta&&data.meta.deleted)||{};
+    const tomb=replace?Object.assign({},inDel):Object.assign({},S.meta.deleted||{});
+    if(!replace)for(const id in inDel)if(!(tomb[id]>=inDel[id]))tomb[id]=inDel[id];
+    if(replace)for(const st of['parts','scenes','works','images','fonts','stamps'])await tx(st,'readwrite',x=>x.clear());
+    const haveImg=new Set(replace?[]:(await tx('images','readonly',x=>x.getAllKeys())||[]));
+    const haveFont=new Set(replace?[]:(await tx('fonts','readonly',x=>x.getAllKeys())||[]));
+    for(const r of data.images||[]){if(haveImg.has(r.id))continue;await dbPut('images',{id:r.id,name:r.name,type:r.type,blob:await unb64(r.data),thumb:r.thumb?await unb64(r.thumb):null});cnt.img++;}
+    const haveSt=new Set(replace?[]:(await tx('stamps','readonly',x=>x.getAllKeys())||[]));
+    for(const r of data.stamps||[]){if(haveSt.has(r.id)||(!replace&&tomb[r.id]))continue;await dbPut('stamps',{id:r.id,name:r.name,w:r.w,h:r.h,created:r.created,blob:await unb64(r.data)});}
+    for(const r of data.fonts||[]){if(haveFont.has(r.id)||(!replace&&tomb[r.id]))continue;await dbPut('fonts',{id:r.id,name:r.name,file:r.file,size:r.size,created:r.created,blob:await unb64(r.data)});}
     if(data.meta&&Array.isArray(data.meta.bsets)){const have=new Set((S.meta.bsets||[]).map(s=>s.id));S.meta.bsets=replace?data.meta.bsets:[...(S.meta.bsets||[]),...data.meta.bsets.filter(s=>!have.has(s.id))];}
-    if(data.meta){for(const k of['jpFont','expSize','expType','fmt','loraInPrompt'])if(data.meta[k]!==undefined&&(replace||S.meta[k]===undefined))S.meta[k]=data.meta[k];await dbPut('meta',S.meta);}
-    for(const k of['parts','scenes','works'])for(const o of data[k]||[]){if(k==='parts'&&typeof o.img==='string')o.img=await unb64(o.img);await dbPut(k,o);}
+    if(data.meta){for(const k of['jpFont','expSize','expType','fmt','loraInPrompt'])if(data.meta[k]!==undefined&&(replace||S.meta[k]===undefined))S.meta[k]=data.meta[k];}
+    const freeImgs=[];
+    for(const k of['parts','scenes','works']){
+      for(const o of data[k]||[]){
+        if(k==='parts'&&typeof o.img==='string')o.img=await unb64(o.img);
+        const ou=o.updated||0;
+        if(replace){await dbPut(k,o);cnt.add++;continue;}
+        if(tomb[o.id]&&tomb[o.id]>=ou)continue;
+        const cur=byId(k,o.id),cu=cur?(cur.updated||0):-1;
+        if(cur&&cu>ou){cnt.keep++;continue;}
+        const nm=x=>JSON.stringify(x.img?Object.assign({},x,{img:x.img.size||1}):x);
+        if(cur&&cu===ou&&(cu>0||nm(cur)===nm(o)))continue;
+        await dbPut(k,o);cur?cnt.upd++:cnt.add++;
+      }
+      if(!replace)for(const cur of S[k]){const t=inDel[cur.id];if(t&&t>=(cur.updated||0)){await dbDel(k,cur.id);cnt.del++;if(k==='scenes')freeImgs.push(...(cur.images||[]));}}
+    }
+    if(!replace)for(const id of haveFont)if(inDel[id]){await dbDel('fonts',id);if(S.meta.jpFont===id)S.meta.jpFont='';}
+    if(!replace)for(const id of haveSt)if(inDel[id])await dbDel('stamps',id);
+    const old=Date.now()-180*864e5;for(const id in tomb)if(tomb[id]<old)delete tomb[id];
+    S.meta.deleted=tomb;await dbPut('meta',S.meta);
     for(const k in urlCache){URL.revokeObjectURL(urlCache[k]);delete urlCache[k];}
-    await loadAll();for(const k in imgCache)delete imgCache[k];for(const k in stampImg)delete stampImg[k];for(const k in stampCv)delete stampCv[k];await loadStamps().catch(()=>{});await loadFonts().catch(()=>{});toast('読み込みました');render();
+    await loadAll();for(const id of freeImgs)await deleteImageIfUnused(id);
+    for(const k in imgCache)delete imgCache[k];for(const k in stampImg)delete stampImg[k];for(const k in stampCv)delete stampCv[k];await loadStamps().catch(()=>{});await loadFonts().catch(()=>{});
+    if(replace){toast('読み込みました');render();return;}
+    render();
+    openSheet(`<h2>読み込みました</h2>
+    <p class="hint" style="margin:-6px 0 12px">ファイル：${esc(file.name)}${data.exported?`（${fmtDate(Date.parse(data.exported))} に書き出したもの${data.textOnly?'・文字だけ':''}）`:''}</p>
+    <div class="stat"><div><b>${cnt.add}</b><small>新しく足した</small></div><div><b>${cnt.upd}</b><small>新しい方に更新</small></div><div><b>${cnt.keep}</b><small>こちらが新しいので残した</small></div><div><b>${cnt.del}</b><small>相手で消したので消した</small></div></div>
+    <p class="hint">画像：${cnt.img} 枚を足しました。数はシーン・作品・部品を合わせたものです。</p>
+    <div class="row"><button class="btn wide" id="imClose">閉じる</button></div>`);
+    $('#imClose').onclick=closeSheet;
   }catch(e){toast('読み込みの途中で失敗しました');}
 }
 
