@@ -241,6 +241,7 @@ body.editing #toast{bottom:calc(24px + env(safe-area-inset-bottom))}
 .rolepick button{border:1px solid var(--line2);background:var(--card);border-radius:8px;width:44px;height:36px;font-weight:700;color:var(--sub)}
 .rolepick button.on{color:#fff;border-color:transparent}
 .rolepick button.on.r0{background:var(--r0)}.rolepick button.on.r1{background:var(--r1)}.rolepick button.on.r2{background:var(--r2)}.rolepick button.on.r3{background:var(--r3)}
+.psep{display:block;height:7px}
 .pbox{background:var(--soft);border-radius:8px;padding:10px;font:13px/1.55 ui-monospace,Menlo,Consolas,monospace;overflow-wrap:anywhere;white-space:pre-wrap;margin:0;user-select:text;-webkit-user-select:text}
 .pbox.neg{color:#8a4b47;background:#fbf2f1}
 .plabel{display:flex;align-items:center;justify-content:space-between;font-size:12px;color:var(--sub);font-weight:700;margin:8px 0 4px}
@@ -571,10 +572,13 @@ const T_=id=>splitTags(P_(id)&&P_(id).tags);
 const TX_=id=>((P_(id)&&P_(id).text)||'').trim();
 function subjKind(s){s=(s||'').toLowerCase();if(/girl|woman|female/.test(s))return'girl';if(/boy|man|male/.test(s))return'boy';return'';}
 /* 人数のタグ：1girl・2girls・1boy など */
-function countTags(subs){const g=subs.filter(s=>subjKind(s)==='girl').length,b=subs.filter(s=>subjKind(s)==='boy').length;const o=[];if(g)o.push(g===1?'1girl':g+'girls');if(b)o.push(b===1?'1boy':b+'boys');return o;}
+function countTags(subs){const g=subs.filter(s=>subjKind(s)==='girl').length,b=subs.filter(s=>subjKind(s)==='boy').length;const o=[];if(g)o.push(g===1?'1girl':g+'girls');if(b)o.push(b===1?'1boy':b+'boys');
+  /* girl・boy 以外の呼び方（例：mature male・robot）は、人数のタグの後ろにそのまま入れる */
+  for(const s of subs)if(s&&!/^(girl|boy)$/i.test(s)&&!o.includes(s))o.push(s);return o;}
 function slotInfo(sl){
   const c=P_(sl.chara),rm=splitTags(sl.remove);
-  const subj=(((c&&c.subject)||'girl').trim()||'girl').replace(/^\d+\s*/,'');
+  /* 呼び方：シーンの人物の欄（sl.subj）に書いたものを先に使う。空なら部品の呼び方、それもなければ girl */
+  const subj=((sl.subj||'').trim()||((c&&c.subject)||'').trim()||'girl').replace(/^\d+\s*/,'');
   return{sl,c,subj,rm,feat:uniq(T_(sl.chara),rm),phys:uniq((sl.phys||[]).flatMap(T_),rm),out:uniq(A_(sl.outfit).flatMap(T_),rm),pose:uniq(A_(sl.action).flatMap(T_),rm),act:uniq((sl.act||[]).flatMap(T_),rm),face:uniq(T_(sl.face),rm),
     body:uniq((sl.body||[]).flatMap(T_),rm),add:uniq(splitTags(sl.add),rm)};
 }
@@ -648,21 +652,27 @@ function buildPrompt0(sc,D){
   /* タグを { t:タグ, si:人物の番号（人物以外は null）, cat:項目 } にして並べる。
      人物が2人以上のときだけ、人物のタグに番号を付けて、人物ごとに重みを付けられるようにする */
   const multi=slots.length>1;
-  const I=(arr,cat,si)=>arr.map(t=>({t,cat,si:multi?si:null}));
+  const I=(arr,cat,si)=>arr.map(t=>({t,cat,si:multi?si:null,p:si}));
   const slotItems=(s,i)=>[...I(s.feat,'chara',i),...I(s.phys,'phys',i),...I(s.out,'outfit',i),...I(s.pose,'action',i),...I(s.act,'act',i),...I(s.face,'face',i),...I(s.body,'body',i),...I(s.add,'add',i)];
   const restItems=()=>[...I(inter,'inter'),...I(bg,'bg'),...I(ang,'angle'),...I(add,'add'),...I(cam,'camera'),...I(lit,'light'),...I(fx,'fx'),...I(npP,'np'),...I(style,'style')];
   /* uniq と同じ決まりで、同じタグを1つにする（重複の欄で「残す」にしたものは残す） */
   const uniqI=arr=>{const seen=new Set();return arr.filter(x=>{const k=norm(x.t);if(seen.has(k)&&!(KEEP&&KEEP.has(k)))return false;seen.add(k);return true;});};
   const pfI=()=>{const f=D.pf();return x=>f(x.t);};
   const W=x=>weigh(x.t,sc,x.si);
+  /* 見やすくするため、項目（セクション）が変わるところで改行する。コピーしたプロンプトにも改行が入る（カンマは残すので、タグの区切りは変わらない） */
+  const secOf=x=>x.si!=null?'p'+x.si:x.cat;
+  const secs=L=>{const o=[];let k=null;for(const x of L){const s=secOf(x);if(s!==k){o.push([]);k=s;}o[o.length-1].push(W(x));}return o.map(a=>a.join(', '));};
+  const SEP=',\n';
   let used=[];
   if(fmt==='group'){
     const out=slots.map((s,i)=>{const t=uniqI(slotItems(s,i)).filter(pfI());used.push(...t);return t.length?`${s.subj}(${t.map(W).join(', ')})`:s.subj;});
     const r=uniqI([...restItems(),...I(trig,'lora')]).filter(pfI());used.push(...r);
-    pos=[...out,...r.map(W),...loraTxt].join(', ');
+    pos=[...out,...secs(r),loraTxt.join(', ')].filter(Boolean).join(SEP);
   }else if(fmt==='tag'){
     used=uniqI([...I(trig,'lora'),...slots.flatMap(slotItems),...restItems()]).filter(pfI());
-    pos=[...countTags(slots.map(s=>s.subj)),...used.map(W),...loraTxt].join(', ');
+    /* 人物が1人のときも、人物のタグを1つのセクションにする */
+    const secOf2=x=>x.p!=null?'p'+x.p:x.cat;let k=null;const o=[];for(const x of used){const s=secOf2(x);if(s!==k){o.push([]);k=s;}o[o.length-1].push(W(x));}
+    pos=[countTags(slots.map(s=>s.subj)).join(', '),...o.map(a=>a.join(', ')),loraTxt.join(', ')].filter(Boolean).join(SEP);
   }
   /* 重みを付けられるタグの一覧（プロンプトに入ったタグを、入った順に1回ずつ） */
   const tl=new Set();const tagList=used.filter(x=>{const k=wKey(x.t,x.si);if(tl.has(k))return false;tl.add(k);return true;})
@@ -704,7 +714,7 @@ function buildPrompt0(sc,D){
   return{pos,neg:neg.join(', '),loras,tagList,fmt};
 }
 /* プレビュー：重みを付けたタグに色を付ける */
-function hlPrompt(pos){return esc(pos).replace(/\(([^()]+):(-?[\d.]+)\)/g,(m,b,w)=>`<mark class="${+w>1?'up':'dn'}">${m}</mark>`);}
+function hlPrompt(pos){return esc(pos).replace(/\(([^()]+):(-?[\d.]+)\)/g,(m,b,w)=>`<mark class="${+w>1?'up':'dn'}">${m}</mark>`).replace(/\n/g,'\n<span class="psep"></span>');}
 async function copyText(t){
   if(!t)return toast('コピーする文字がありません');
   try{await navigator.clipboard.writeText(t);toast('コピーしました');}
@@ -906,8 +916,10 @@ function vScene(c){
   </div>
 
   <div class="sec"><h2>人物 <small>人数のタグ（1girl・2girls など）は自動で付きます</small></h2>
+    <datalist id="subjList2"><option value="girl"><option value="boy"><option value="woman"><option value="man"><option value="mature female"><option value="mature male"><option value="old man"><option value="old woman"></datalist>
     ${sc.chars.map((sl,i)=>`<div class="slot"><div class="sh">人物 ${i+1}<button class="btn sm danger" data-delslot="${i}">外す</button></div>
       ${partSel('人物','chara',sl.chara,`data-slot="${i}" data-f="chara"`)}
+      <label class="f"><span>呼び方 <small class="hint">空のときは部品の呼び方（${esc((P_(sl.chara)&&P_(sl.chara).subject)||'girl')}）</small></span><input data-slot="${i}" data-t="subj" list="subjList2" value="${esc(sl.subj||'')}" placeholder="${esc((P_(sl.chara)&&P_(sl.chara).subject)||'girl')}"></label>
       ${chipSel('身体の特徴','phys',sl.phys,`data-chip="phys" data-slot="${i}"`)}
       ${chipSel('服装','outfit',sl.outfit,`data-chip="outfit" data-slot="${i}"`)}
       ${chipSel('ポーズ','action',sl.action,`data-chip="action" data-slot="${i}"`)}
@@ -1086,7 +1098,7 @@ function snapSame(sc,snap){return SNAP_KEYS.every(k=>JSON.stringify(snapVal(sc,k
 function snapSummary(snap){
   const nm=id=>{const p=byId('parts',id);return p?esc(p.name||'名前なし'):(id?'<span class="gone">（削除された部品）</span>':'');};
   const rows=[];
-  (snap.chars||[]).forEach((c,i)=>{const b=[nm(c.chara),...(c.phys||[]).map(nm),...A_(c.outfit).map(nm),...A_(c.action).map(nm),...(c.act||[]).map(nm),nm(c.face),...(c.body||[]).map(nm)].filter(Boolean).join('・');rows.push(`<tr><th>人物 ${i+1}</th><td>${b||'—'}${c.add?`<br><small>足す：${esc(c.add)}</small>`:''}${c.remove?`<br><small>外す：${esc(c.remove)}</small>`:''}</td></tr>`);});
+  (snap.chars||[]).forEach((c,i)=>{const b=[nm(c.chara),...(c.phys||[]).map(nm),...A_(c.outfit).map(nm),...A_(c.action).map(nm),...(c.act||[]).map(nm),nm(c.face),...(c.body||[]).map(nm)].filter(Boolean).join('・');rows.push(`<tr><th>人物 ${i+1}</th><td>${b||'—'}${c.subj?`<br><small>呼び方：${esc(c.subj)}</small>`:''}${c.add?`<br><small>足す：${esc(c.add)}</small>`:''}${c.remove?`<br><small>外す：${esc(c.remove)}</small>`:''}</td></tr>`);});
   if((snap.inter||[]).length)rows.push(`<tr><th>絡み</th><td>${snap.inter.map(nm).join('・')}</td></tr>`);
   if((snap.angle||[]).length)rows.push(`<tr><th>カメラ位置</th><td>${snap.angle.map(nm).join('・')}</td></tr>`);
   if((snap.fx||[]).length)rows.push(`<tr><th>エフェクト</th><td>${snap.fx.map(nm).join('・')}</td></tr>`);
