@@ -55,12 +55,14 @@ nav#tabs button.on{color:var(--acc);font-weight:700}
 .tg .vn{font-size:10px;opacity:.7}
 .pvar{color:var(--sub)}
 .tg.wt.off{text-decoration:line-through;opacity:.5}
-.lkrow{display:grid;grid-template-columns:1fr 1fr auto;gap:4px;padding:6px 0 6px 8px;border-left:3px solid var(--line);margin:0 0 6px}
+.lkrow{display:grid;grid-template-columns:1fr 1fr auto auto;gap:4px;padding:6px 0 6px 8px;border-left:3px solid var(--line);margin:0 0 6px}
 .lkrow select{min-width:0}
 .lkrow [data-lkp],.lkrow [data-lkt]{grid-column:1/-1}
 .lkh{margin:-4px 0 6px}
 .pool{border:1px dashed var(--line3,var(--line));border-radius:10px;padding:8px 10px;margin:0 0 8px}
 .poolh{font-size:13px;font-weight:700;margin:0 0 8px}
+.poolto{display:grid;grid-template-columns:1fr 1fr auto;gap:4px}
+.poolto select{min-width:0}
 .poolh small{display:block;font-weight:400;color:var(--sub);font-size:12px;margin-top:2px}
 .simg{border:1px solid var(--line);border-radius:10px;padding:8px 10px;margin:0 0 10px}
 .simh,.simr{display:grid;grid-template-columns:34px 34px 1fr;gap:4px;align-items:center}
@@ -463,7 +465,7 @@ const FMT={
 
 /* ========== データベース（IndexedDB） ========== */
 let db=null;
-const APP_VER='v51';/* sw.js の VERSION と同じにする */
+const APP_VER='v52';/* sw.js の VERSION と同じにする */
 const STORES=['parts','scenes','works','images','meta','fonts','stamps'];
 function openDB(){return new Promise((res,rej)=>{const r=indexedDB.open('manga4koma',3);r.onupgradeneeded=()=>{const d=r.result;for(const s of STORES)if(!d.objectStoreNames.contains(s))d.createObjectStore(s,{keyPath:'id'});};r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error);});}
 function tx(store,mode,fn){return new Promise((res,rej)=>{if(!db)return res(undefined);const t=db.transaction(store,mode);const req=fn(t.objectStore(store));let out;if(req)req.onsuccess=()=>{out=req.result;};t.oncomplete=()=>res(out);t.onerror=()=>rej(t.error);t.onabort=()=>rej(t.error);});}
@@ -943,12 +945,14 @@ function removeLinks(sc,L){for(const l of L){const o=lkObj(sc,l);if(!o)continue;
   else if(l.f==='subj'){if((o.subj||'').trim()===(l.tx||'').trim())o.subj='';}
   else if(LK_ONE.includes(l.f)){if(o[l.f]===l.id)o[l.f]='';}else o[l.f]=A_(o[l.f]).filter(x=>x!==l.id);}}
 /* シーンの設定（光・背景・画風・絡み・LoRA を除く）を、絡みに登録する形にする */
-function linksFromScene(sc){const L=[];
+function linksFromScene(sc,selfId,withInter){const L=[];
   (sc.chars||[]).forEach((c,i)=>{const w=i+1;if(c.chara)L.push({w,f:'chara',id:c.chara});for(const f of['phys','outfit','action','act'])for(const id of A_(c[f]))L.push({w,f,id});if(c.face)L.push({w,f:'face',id:c.face});for(const id of A_(c.body))L.push({w,f:'body',id});for(const id of A_(c.other))L.push({w,f:'other',id});
     if((c.add||'').trim())L.push({w,f:'add',tx:c.add.trim()});if((c.subj||'').trim())L.push({w,f:'subj',tx:c.subj.trim()});});
   for(const id of sc.angle||[])L.push({w:0,f:'angle',id});for(const f of['camera','light','bg'])if(sc[f])L.push({w:0,f,id:sc[f]});for(const f of['fx','np','other'])for(const id of sc[f]||[])L.push({w:0,f,id});if(sc.style)L.push({w:0,f:'style',id:sc.style});
   for(const f of['add','neg'])if((sc[f]||'').trim())L.push({w:0,f,tx:sc[f].trim()});
   try{const P=picTags(sc);(P.per||[]).forEach((a,i)=>{if(a&&a.length)L.push({w:i+1,f:'add',tx:a.join(', ')});});if(P.scene&&P.scene.length)L.push({w:0,f:'add',tx:P.scene.join(', ')});}catch(_){}
+  /* シーンで選んでいる絡み（いま直している絡みは除く）のタグ。部品の画面で、タグに分けて振り分ける */
+  if(withInter)for(const id of sc.inter||[]){if(vBase(id)===selfId)continue;const ip=P_(id);if(ip&&(ip.tags||'').trim())L.push({w:0,f:'itag',tx:ip.tags.trim(),src:id});}
   return L;}
 function newScene(){const s={id:uid(),title:'',roles:[],chars:[newSlot()],inter:[],angle:[],fx:[],np:[],other:[],bg:'',camera:'',light:'',style:defaultStyle(),loras:[],add:'',remove:'',neg:'',memo:'',images:[],created:Date.now(),updated:Date.now()};S.scenes.push(s);return s;}
 function defaultStyle(){const st=S.parts.filter(p=>p.type==='style');return st.length===1?st[0].id:'';}
@@ -2067,8 +2071,9 @@ function openPart(id,type,onSave){
     <span class="hint">例：「正座」の中に「手を下げた正座」「手を上げた正座」。派生のプロンプトは、上のタグの代わりに使います（足したときは上のタグが入るので、変えるところだけ直してください）。シーンでこの部品を選ぶと、派生も選べます。最後に「保存」を押してください。</span></div>`:''}
   ${p.type==='inter'?`<div class="f plinks"><span>呼び出す設定（シーンでこの絡みを選ぶと、ここの設定を当てます）</span>
     <div class="sel" style="margin:0 0 8px"><select id="pLinkScene" aria-label="シーンから取り込む"><option value="">📥 シーンの設定から取り込む…</option>${S.scenes.slice().sort((a,b)=>(b.updated||0)-(a.updated||0)).map(x=>`<option value="${x.id}">${esc(x.title||'無題のシーン')}</option>`).join('')}</select></div>
+    <div class="row" style="margin:0 0 8px"><button type="button" class="btn ghost sm" id="pLinkX">✂ 部品をすべてタグにバラす</button></div>
     <div id="pLinks"></div><div id="pPool"></div><button type="button" class="btn ghost sm" id="pLinkAdd">＋ 設定を1つ足す</button>
-    <span class="hint">「シーンの設定から取り込む」を選ぶと、そのシーンの設定をいったんすべて読み込みます（人物ごとの部品・足すタグ・呼び方、カメラ位置・構図・光・背景・エフェクト・ネガポジ・画風・足すタグ・ネガティブに足すタグ）。いらない行は ✕ で外してから「保存」を押してください。シーンでこの絡みを選ぶと、1つだけ選ぶ項目（人物・表情・構図・光・背景・画風）と呼び方は置きかえ、ほかは足します。人物が足りないときは人物を足します。絡みを外すときは、一緒に外すか聞きます。</span></div>`:''}
+    <span class="hint">「シーンの設定から取り込む」を選ぶと、そのシーンの設定をいったんすべて読み込みます（人物ごとの部品・足すタグ・呼び方、カメラ位置・構図・光・背景・エフェクト・ネガポジ・画風・足すタグ・ネガティブに足すタグ）。いらない行は ✕ で外してから「保存」を押してください。シーンでこの絡みを選ぶと、1つだけ選ぶ項目（人物・表情・構図・光・背景・画風）と呼び方は置きかえ、ほかは足します。人物が足りないときは人物を足します。絡みを外すときは、一緒に外すか聞きます。<br>シーンで選んでいるほかの絡みのタグも読み込みます（「この絡みのタグ」に入ります）。部品の行の ✂ を押すと、その部品をタグ1つずつにバラして、下の枠でほかの項目に振り分けられます。</span></div>`:''}
   ${p.type!=='lora'?`<label class="f"><span>文章で書くとき（Tsubaki 系・英語・なくてもよい）</span><textarea id="pText" rows="2" placeholder="${esc(TEXT_PH[p.type]||'')}">${esc(p.text||'')}</textarea><span class="hint">プロンプトの形が「文章」のときだけ、タグの代わりにこの文を使います。空のままならタグから文を作ります。<button type="button" class="linkb" id="pTextJa">上の日本語を文章として英語にする</button></span></label>`:''}
   ${p.type==='np'?`<details class="nh" ${p.neg?'open':''}><summary>ネガティブにも足す（なくてもよい）</summary><div class="nhb"><label class="f" style="margin:0"><span>ネガティブに足すタグ</span><textarea id="pNegT" rows="2" placeholder="なくても、ポジティブだけで働きます">${esc(p.neg)}</textarea></label></div></details>`:''}
   ${p.type==='style'?`<label class="f"><span>ネガティブプロンプト</span><textarea id="pNegT" rows="3" placeholder="lowres, blurry, jpeg artifacts, text, watermark">${esc(p.neg)}</textarea></label>${negHelp()}`:''}
@@ -2091,48 +2096,64 @@ function openPart(id,type,onSave){
   const lkOpts=(f,sel)=>S.parts.filter(x=>x.type===f).sort((a,b)=>(a.name||'').localeCompare(b.name||'','ja')).map(x=>`<option value="${x.id}"${x.id===sel?' selected':''}>${esc(x.name||'名前なし')}</option>`+(x.vars||[]).map(v=>`<option value="${x.id}${VSEP}${v.id}"${x.id+VSEP+v.id===sel?' selected':''}>　└ ${esc(v.name||'派生')}</option>`).join('')).join('');
   const drawLinks=()=>{const box=$('#pLinks');if(!box)return;
     const ws=[...new Set([1,2,3,...LINKS.map(l=>l.w).filter(w=>w>3)])].sort((a,b)=>a-b);
-    box.innerHTML=LINKS.map((l,i)=>{const fs=l.w?LK_PER:LK_SCN;const fs2=fs.includes(l.f)?fs:[l.f,...fs];return `<div class="lkrow"><select data-lkw="${i}" aria-label="だれに">${[...ws,0].map(w=>`<option value="${w}"${l.w===w?' selected':''}>${w?'人物'+w:'シーン全体'}</option>`).join('')}</select><select data-lkf="${i}" aria-label="項目">${fs2.map(f=>`<option value="${f}"${l.f===f?' selected':''}>${CATI[f]||(f==='add'?'＋':f==='subj'?'🏷':f==='neg'?'🚫':'')}${lkLab(f,l.w)}</option>`).join('')}</select><button type="button" class="ico" data-lkdel="${i}" title="外す" aria-label="外す">✕</button>${LK_TX.includes(l.f)?`<input data-lkt="${i}" value="${esc(l.tx||'')}" placeholder="${l.f==='subj'?'girl・boy など':l.f==='neg'?'text, watermark':'looking up, blush'}" aria-label="${lkLab(l.f,l.w)}">`:`<select data-lkp="${i}" aria-label="部品"><option value="">（部品を選ぶ）</option>${lkOpts(l.f,l.id)}</select>`}</div>`;}).join('');
+    box.innerHTML=LINKS.map((l,i)=>{const fs=l.w?LK_PER:LK_SCN;const fs2=fs.includes(l.f)?fs:[l.f,...fs];return `<div class="lkrow"><select data-lkw="${i}" aria-label="だれに">${[...ws,0].map(w=>`<option value="${w}"${l.w===w?' selected':''}>${w?'人物'+w:'シーン全体'}</option>`).join('')}</select><select data-lkf="${i}" aria-label="項目">${fs2.map(f=>`<option value="${f}"${l.f===f?' selected':''}>${CATI[f]||(f==='add'?'＋':f==='subj'?'🏷':f==='neg'?'🚫':'')}${lkLab(f,l.w)}</option>`).join('')}</select>${LK_TX.includes(l.f)?'<span></span>':`<button type="button" class="ico" data-lkx="${i}" title="タグにバラす" aria-label="タグにバラす">✂</button>`}<button type="button" class="ico" data-lkdel="${i}" title="外す" aria-label="外す">✕</button>${LK_TX.includes(l.f)?`<input data-lkt="${i}" value="${esc(l.tx||'')}" placeholder="${l.f==='subj'?'girl・boy など':l.f==='neg'?'text, watermark':'looking up, blush'}" aria-label="${lkLab(l.f,l.w)}">`:`<select data-lkp="${i}" aria-label="部品"><option value="">（部品を選ぶ）</option>${lkOpts(l.f,l.id)}</select>`}</div>`;}).join('');
     $$('[data-lkt]',box).forEach(x=>x.oninput=()=>{LINKS[+x.dataset.lkt].tx=x.value;});
     $$('[data-lkw]',box).forEach(x=>x.onchange=()=>{const l=LINKS[+x.dataset.lkw];l.w=+x.value;const fs=l.w?LK_PER:LK_SCN;if(!fs.includes(l.f)){l.f=l.w?'action':'angle';l.id='';l.tx='';}drawLinks();});
     $$('[data-lkf]',box).forEach(x=>x.onchange=()=>{const l=LINKS[+x.dataset.lkf];l.f=x.value;l.id='';l.tx='';drawLinks();});
     $$('[data-lkp]',box).forEach(x=>x.onchange=()=>{LINKS[+x.dataset.lkp].id=x.value;});
-    $$('[data-lkdel]',box).forEach(x=>x.onclick=()=>{LINKS.splice(+x.dataset.lkdel,1);drawLinks();});};
+    $$('[data-lkdel]',box).forEach(x=>x.onclick=()=>{LINKS.splice(+x.dataset.lkdel,1);drawLinks();});
+    $$('[data-lkx]',box).forEach(x=>x.onclick=()=>{explode(+x.dataset.lkx);drawLinks();drawPool();});};
   /* ===== 部品になっていないタグ =====
      足すタグ・向き・位置のタグは、重みの画面のようにタグを並べる。押して選び、入れる項目を決めると、
      保存したときにその項目の部品を作って、呼び出す設定に入れる。決めないものは「足すタグ」のまま */
   const POOL=[];let poolSel=new Set();
-  const toPool=L=>{for(let k=L.length-1;k>=0;k--){const l=L[k];if(l.f!=='add')continue;const ts=splitTags(l.tx);for(let j=ts.length-1;j>=0;j--){const t=ts[j];if(!POOL.some(x=>x.w===l.w&&norm(x.t)===norm(t)))POOL.unshift({t,w:l.w,f:'add'});}L.splice(k,1);}};
+  /* POOL の f：部品の項目／'add'＝足すタグ／'self'＝この絡みのタグに足す。src は元の部品（バラした部品・絡み） */
+  const toPool=L=>{for(let k=L.length-1;k>=0;k--){const l=L[k];if(l.f!=='add'&&l.f!=='itag')continue;const f=l.f==='itag'?'self':'add';const ts=splitTags(l.tx);for(let j=ts.length-1;j>=0;j--){const t=ts[j];if(!POOL.some(x=>x.w===l.w&&norm(x.t)===norm(t)))POOL.unshift({t,w:l.w,f,src:l.src||''});}L.splice(k,1);}};
   toPool(LINKS);
-  const poolLab=(f,w)=>f==='add'?lkLab('add',w):PT[f].label;
+  /* 部品の行をタグ1つずつにバラす（何もしなければ、保存のとき元の部品のまま） */
+  const explode=i=>{const l=LINKS[i];const pp=l&&P_(l.id);if(!pp)return;for(const t of splitTags(pp.tags))if(!POOL.some(x=>x.w===l.w&&norm(x.t)===norm(t)))POOL.push({t,w:l.w,f:l.f,src:l.id});LINKS.splice(i,1);};
+  const lx=$('#pLinkX');if(lx)lx.onclick=()=>{let n=0;for(let i=LINKS.length-1;i>=0;i--)if(!LK_TX.includes(LINKS[i].f)&&LINKS[i].id){explode(i);n++;}drawLinks();drawPool();toast(n?`${n} 件の部品をタグにバラしました`:'バラす部品はありません');};
+  const poolLab=(f,w)=>f==='add'?lkLab('add',w):f==='self'?'この絡みのタグ':PT[f].label;
+  const poolIco=f=>f==='self'?CATI.inter:CATI[f]||'＋';
+  const fsOf=w=>[...(w?LK_PER:LK_SCN).filter(f=>!LK_TX.includes(f)),'self','add'];
+  /* 保存のときの組：同じ だれ・項目 のタグを1つの部品にする。バラした部品のタグが全部そのままなら、元の部品を使う */
+  const poolGroups=()=>{const G=new Map();for(const x of POOL){if(x.f==='add')continue;const k=x.w+'|'+x.f;if(!G.has(k))G.set(k,{w:x.w,f:x.f,t:[],src:new Set()});const g=G.get(k);g.t.push(x.t);g.src.add(x.src||'');}
+    for(const g of G.values()){g.keep='';if(g.f!=='self'&&g.src.size===1){const sid=[...g.src][0],sp=sid&&P_(sid);if(sp&&sp.type===g.f){const a=new Set(splitTags(sp.tags).map(norm)),b=new Set(g.t.map(norm));if(a.size===b.size&&[...a].every(x=>b.has(x)))g.keep=sid;}}}
+    return[...G.values()];};
   const drawPool=()=>{const box=$('#pPool');if(!box)return;if(!POOL.length){box.innerHTML='';return;}
     const ws=[...new Set(POOL.map(x=>x.w))].sort((a,b)=>(a||99)-(b||99));
-    const sel=[...poolSel],selW=sel.length?POOL[sel[0]].w:null;
-    const fs=selW==null?[]:(selW?LK_PER:LK_SCN).filter(f=>!LK_TX.includes(f));
-    const chip=(x,i)=>`<button type="button" class="tg wt ${poolSel.has(i)?'sel':''}" style="--c:${CATC[x.f]||'#9ca3af'}" data-pi="${i}"><i class="wi" aria-hidden="true">${CATI[x.f]||'＋'}</i>${esc(baseOf(x.t))}${x.f!=='add'?` <b>${esc(PT[x.f].label)}</b>`:''}</button>`;
-    const G=new Map();for(const x of POOL){if(x.f==='add')continue;const k=x.w+'|'+x.f;if(!G.has(k))G.set(k,{w:x.w,f:x.f,t:[]});G.get(k).t.push(baseOf(x.t));}
+    const sel=[...poolSel],selW=sel.length?POOL[sel[0]].w:null,selF=sel.length?POOL[sel[0]].f:'add';
+    const whos=[...new Set([1,2,3,...POOL.map(x=>x.w).filter(w=>w>3)])].sort((a,b)=>a-b);
+    const fOpts=(w,cur)=>fsOf(w).map(f=>`<option value="${f}"${f===cur?' selected':''}>${poolIco(f)} ${esc(poolLab(f,w))}</option>`).join('');
+    const chip=(x,i)=>`<button type="button" class="tg wt ${poolSel.has(i)?'sel':''}" style="--c:${x.f==='self'?CATC.inter:CATC[x.f]||'#9ca3af'}" data-pi="${i}"><i class="wi" aria-hidden="true">${poolIco(x.f)}</i>${esc(baseOf(x.t))}${x.f!=='add'?` <b>${esc(poolLab(x.f,x.w))}</b>`:''}</button>`;
+    const G=poolGroups();
     box.innerHTML=`<div class="pool"><div class="poolh">部品になっていないタグ<small>足すタグ・向き・位置のタグです。押して選び、入れる項目を決めると、保存したときにその項目の部品を作ります。決めないものは「足すタグ」のまま呼び出します。</small></div>
       <div class="wgrp">${ws.map(w=>`<div class="wg ${w?'wper':''}" style="${w?'':'--c:#64748b'}"><div class="wgl">${w?'👤 人物'+w:'🎬 シーン全体'}</div><div class="tgs">${POOL.map((x,i)=>x.w===w?chip(x,i):'').join('')}</div></div>`).join('')}</div>
-      ${sel.length?`<div class="wedit"><div class="wtop"><b>${selW?'人物'+selW+'の':'シーン全体の'}タグ ${sel.length} 個を</b></div>
-        <div class="sel"><select id="poolF" aria-label="入れる項目">${fs.map(f=>`<option value="${f}">${CATI[f]||''}${PT[f].label}</option>`).join('')}</select><button type="button" class="btn sm" id="poolSet">の部品にする</button></div>
+      ${sel.length?`<div class="wedit"><div class="wtop"><b>選んだタグ ${sel.length} 個（${sel.map(i=>esc(baseOf(POOL[i].t))).join(', ')}）を</b></div>
+        <div class="poolto"><select id="poolW" aria-label="だれに">${[...whos,0].map(w=>`<option value="${w}"${w===selW?' selected':''}>${w?'人物'+w:'シーン全体'}</option>`).join('')}</select><select id="poolF" aria-label="入れる項目">${fOpts(selW,selF)}</select><button type="button" class="btn sm" id="poolSet">にする</button></div>
         <div class="row" style="margin:6px 0 0"><button type="button" class="btn ghost sm" id="poolBack">足すタグに戻す</button><button type="button" class="btn ghost sm danger" id="poolDel">外す（呼び出さない）</button><button type="button" class="btn ghost sm" id="poolNone">選ぶのをやめる</button></div></div>`
-        :'<p class="hint" style="margin:8px 0 0">タグを押すと選べます（同じ人物のタグなら、いくつでも）。</p>'}
-      ${G.size?`<p class="hint" style="margin:8px 0 0">保存すると、${[...G.values()].map(g=>`${g.w?'人物'+g.w+'の':''}${PT[g.f].label}の部品（${esc(g.t.join(', '))}）`).join('・')}を作ります。</p>`:''}</div>`;
-    $$('[data-pi]',box).forEach(b=>b.onclick=()=>{const i=+b.dataset.pi;if(selW!=null&&POOL[i].w!==selW)poolSel=new Set([i]);else if(poolSel.has(i))poolSel.delete(i);else poolSel.add(i);drawPool();});
-    const setF=f=>{for(const i of poolSel)POOL[i].f=f;poolSel=new Set();drawPool();};
+        :'<p class="hint" style="margin:8px 0 0">タグを押すと選べます（いくつでも）。選んだら、だれの・どの項目にするかを決めます。</p>'}
+      ${G.length?`<p class="hint" style="margin:8px 0 0">保存すると：${G.map(g=>g.f==='self'?`この絡みのタグに足す（${esc(g.t.map(baseOf).join(', '))}）`:g.keep?`${g.w?'人物'+g.w+'の':''}${PT[g.f].label}は元の部品「${esc((P_(g.keep)||{}).name||'')}」のまま`:`${g.w?'人物'+g.w+'の':''}${PT[g.f].label}の部品を作る（${esc(g.t.map(baseOf).join(', '))}）`).join('・')}</p>`:''}</div>`;
+    $$('[data-pi]',box).forEach(b=>b.onclick=()=>{const i=+b.dataset.pi;if(poolSel.has(i))poolSel.delete(i);else poolSel.add(i);drawPool();});
+    const pw=$('#poolW');if(pw)pw.onchange=()=>{const f=$('#poolF').value;$('#poolF').innerHTML=fOpts(+pw.value,fsOf(+pw.value).includes(f)?f:'add');};
+    const setF=f=>{const w=pw?+pw.value:null;for(const i of poolSel){if(w!=null)POOL[i].w=w;POOL[i].f=f;}poolSel=new Set();drawPool();};
     const ps=$('#poolSet');if(ps)ps.onclick=()=>setF($('#poolF').value);
     const pb=$('#poolBack');if(pb)pb.onclick=()=>setF('add');
     const pd=$('#poolDel');if(pd)pd.onclick=()=>{[...poolSel].sort((a,b)=>b-a).forEach(i=>POOL.splice(i,1));poolSel=new Set();drawPool();};
     const pn=$('#poolNone');if(pn)pn.onclick=()=>{poolSel=new Set();drawPool();};
   };
   /* 保存のとき：項目を決めたタグから部品を作り、呼び出す設定に入れる */
-  const poolMake=async()=>{const G=new Map();for(const x of POOL){if(x.f==='add')continue;const k=x.w+'|'+x.f;if(!G.has(k))G.set(k,{w:x.w,f:x.f,t:[]});G.get(k).t.push(x.t);}
+  const poolMake=async()=>{const G=poolGroups();
     const nm0=($('#pName')&&$('#pName').value.trim())||'絡み';const made=[];
-    for(const g of G.values()){const n={id:uid(),type:g.f,name:`${nm0}：${g.w?'人物'+g.w+'の':''}${PT[g.f].label}`,tags:uniq(g.t).join(', '),subject:'',weight:'',loraName:'',neg:'',memo:`絡み「${nm0}」のシーンから作った部品`,text:'',created:Date.now()};
+    for(const g of G){
+      if(g.f==='self'){const ta=$('#pTags');ta.value=uniq([...splitTags(ta.value),...g.t]).join(', ');continue;}
+      if(g.keep){LINKS.push({w:g.w,f:g.f,id:g.keep});continue;}
+      const n={id:uid(),type:g.f,name:`${nm0}：${g.w?'人物'+g.w+'の':''}${PT[g.f].label}`,tags:uniq(g.t).join(', '),subject:'',weight:'',loraName:'',neg:'',memo:`絡み「${nm0}」のシーンから作った部品`,text:'',created:Date.now()};
       S.parts.push(n);await saveNow('parts',n);LINKS.push({w:g.w,f:g.f,id:n.id});made.push(n.name);}
     for(let k=POOL.length-1;k>=0;k--)if(POOL[k].f!=='add')POOL.splice(k,1);return made;};
   drawLinks();drawPool();
   const la=$('#pLinkAdd');if(la)la.onclick=()=>{LINKS.push({w:1,f:'action',id:''});drawLinks();};
-  const ls=$('#pLinkScene');if(ls)ls.onchange=()=>{const sc2=byId('scenes',ls.value);ls.value='';if(!sc2)return;const L=linksFromScene(sc2);if(!L.length)return toast('そのシーンには、取り込む設定がありません');
+  const ls=$('#pLinkScene');if(ls)ls.onchange=()=>{const sc2=byId('scenes',ls.value);ls.value='';if(!sc2)return;const L=linksFromScene(sc2,p.id,true);if(!L.length)return toast('そのシーンには、取り込む設定がありません');
     if(LINKS.length&&!confirm(`今の設定を、シーン「${sc2.title||'無題のシーン'}」の設定に置きかえますか？`))return;LINKS.splice(0,LINKS.length,...L);POOL.length=0;poolSel=new Set();toPool(LINKS);drawLinks();drawPool();toast(`${L.length} 件を取り込みました。保存を押すと登録します`);};
   const va=$('#pVarAdd');if(va)va.onclick=()=>{VARS.push({id:'v'+uid(),name:'',tags:$('#pTags').value.trim()});drawVars();const ins=$$('#pVars [data-vn]');ins[ins.length-1].focus();};
   /* 日本語 → 英語 */
