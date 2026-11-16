@@ -57,6 +57,9 @@ nav#tabs button.on{color:var(--acc);font-weight:700}
 .slot.fold>.sh{margin-bottom:0}
 .fsum{display:block;flex-basis:100%;font-size:12px;font-weight:400;color:var(--sub);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .foldall{display:flex;justify-content:flex-end;gap:6px;margin:0 0 8px}
+/* プロンプトの見出しのコピー（たたんでいるときだけ出す。開いているときは中のコピーを使う） */
+.sec.prompt>h2 .pcp{display:inline-flex;gap:6px;margin-left:auto}
+.sec.prompt:not(.fold)>h2 .pcp{display:none}
 .f{display:block;margin:0 0 12px}
 .f>span{display:block;font-size:12px;color:var(--sub);margin-bottom:4px;font-weight:600}
 .tgs{display:flex;flex-wrap:wrap;gap:6px}
@@ -338,6 +341,17 @@ details.nh .nhb .sec{border:0;padding:0;background:none;box-shadow:none}
 .piclg{display:flex;flex-wrap:wrap;gap:4px 12px;font-size:11px;color:var(--sub)}
 .piclg i{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:4px;vertical-align:-1px}
 .picop{display:block;max-width:38%;border-radius:6px;border:1px solid var(--line);margin:0 0 8px;background:#000}
+/* ピクトグラムから作ったタグの欄 */
+.pmenu{flex-basis:100%;width:100%;border:1px solid var(--line);border-radius:10px;padding:8px;margin-top:4px;background:var(--card)}
+.pgtabs{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 8px;background:none;padding:0}
+.pgtabs button{flex:none;border:1px solid var(--line);background:var(--card);border-radius:999px;padding:4px 11px;font-size:12px;font-weight:700;color:var(--ink)}
+.pgtabs button.on{background:var(--acc);border-color:var(--acc);color:#fff}
+.picout{background:var(--soft);border-radius:8px;padding:8px 10px;margin:0 0 10px}
+.picout .pt{font-size:12px;font-weight:700;margin-bottom:4px}
+.picout .pr{display:flex;gap:8px;align-items:baseline;padding:3px 0;font-size:13px}
+.picout .pr b{flex:none;font-size:12px}
+.picout .pr span{overflow-wrap:anywhere}
+.picout code{font:12px ui-monospace,Menlo,Consolas,monospace;background:rgba(0,0,0,.06);border-radius:4px;padding:0 4px;display:inline-block;margin:1px 0}
 .ptabs button.on{opacity:1}
 
 /* ===== ダークモード（スマホの設定が「ダーク」のとき） ===== */
@@ -986,11 +1000,9 @@ function chipSel(label,type,arr,attrs){const ps=S.parts.filter(p=>p.type===type)
   return `<div class="f cat" ${catAttr(type)}><span>${pic(type)}${label}（いくつでも・長押しで直す）</span><div class="tgs">${ps.map(p=>`<button type="button" class="tg ${arr.includes(p.id)?'on':''}" ${attrs} data-pid="${p.id}">${esc(p.name||'名前なし')}</button>`).join('')}<button type="button" class="tg new" ${attrs} data-pid="__new">＋ 登録</button></div></div>`;}
 let wSel=null;
 /* ===== シーンの画面の欄をたたむ =====
-   見出し（人物・絡み・背景など）を押すと、たたむ・ひらく。人物は1人ずつたためる。
-   たたんだ状態は、この端末に覚えておく（localStorage の toukou-fold。シーンが変わっても同じ） */
-const FOLD_KEY='toukou-fold';
-function foldGet(){try{return JSON.parse(localStorage.getItem(FOLD_KEY)||'{}')||{};}catch(_){return{};}}
-function foldSet(o){try{localStorage.setItem(FOLD_KEY,JSON.stringify(o));}catch(_){}}
+   見出し（プロンプト・人物・絡み・背景など）を押すと、たたむ・ひらく。人物は1人ずつたためる。
+   シーンを開いたときは、すべてたたんだ状態から始まる。開いた欄は、そのシーンを開いている間だけ覚えておく
+   （画面の記録 c.fold に、開いた欄の名前を入れる） */
 /* たたんだ欄の中で選んでいるもの（部品の名前・足すタグ）を短く並べる */
 function foldSum(el){const a=[];
   $$('select',el).forEach(x=>{if(x.value){const o=x.options[x.selectedIndex];if(o)a.push(o.textContent.trim());}});
@@ -999,13 +1011,13 @@ function foldSum(el){const a=[];
   $$('input[data-lora]:checked',el).forEach(x=>{const n=x.closest('.lrow');const ln=n&&$('.ln',n);if(ln)a.push(ln.firstChild.textContent.trim());});
   $$('.im img',el).length&&a.push(`画像 ${$$('.im img',el).length} 枚`);
   return a.join('・')||'（なし）';}
-function setupFold(){
-  const st=foldGet();
+function setupFold(c){
+  const open=c.fold||(c.fold=new Set());
   const wire=(box,head,key)=>{
     head.classList.add('fh');head.setAttribute('role','button');head.tabIndex=0;
-    const show=()=>{const f=!!st[key];box.classList.toggle('fold',f);head.setAttribute('aria-expanded',f?'false':'true');
-      let sm=$(':scope>.fsum',head);if(f){if(!sm){sm=document.createElement('span');sm.className='fsum';head.appendChild(sm);}sm.textContent=foldSum(box);}else if(sm)sm.remove();};
-    const tog=()=>{if(st[key])delete st[key];else st[key]=1;foldSet(st);show();};
+    const show=()=>{const f=!open.has(key);box.classList.toggle('fold',f);head.setAttribute('aria-expanded',f?'false':'true');
+      let sm=$(':scope>.fsum',head);if(f&&!box.hasAttribute('data-nosum')){if(!sm){sm=document.createElement('span');sm.className='fsum';head.appendChild(sm);}sm.textContent=foldSum(box);}else if(sm)sm.remove();};
+    const tog=()=>{if(open.has(key))open.delete(key);else open.add(key);show();};
     head.onclick=e=>{if(e.target.closest('button,input,select,a,label'))return;tog();};
     head.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();tog();}};
     show();};
@@ -1026,7 +1038,8 @@ function vScene(c){
   <label class="f"><span>シーンの名前</span><input id="sTitle" value="${esc(sc.title)}" placeholder="例：ビーチで振り向くミカ"></label>
   <label class="f"><span>向いている場面（いくつでも）</span><div class="rolepick">${ROLE.map((r,i)=>`<button class="r${i} ${sc.roles.includes(r)?'on':''}" data-role="${r}">${r}</button>`).join('')}</div></label>
 
-  <div class="sec prompt">
+  <div class="foldall" id="foldAll"><button type="button" class="btn ghost sm" data-fa="close">すべてたたむ</button><button type="button" class="btn ghost sm" data-fa="open">すべてひらく</button></div>
+  <div class="sec prompt" data-nosum="1"><h2>プロンプト <span class="pcp"><button type="button" class="btn sm" data-cp="pos">ポジをコピー</button><button type="button" class="btn sm ghost" data-cp="neg">ネガをコピー</button></span></h2>
     <div class="plabel"><select class="fmtsel" id="fmtSel" aria-label="プロンプトの形">${Object.entries(FMT).map(([k,v])=>`<option value="${k}"${(S.meta.fmt||'tag')===k?' selected':''}>${v.label}</option>`).join('')}</select><button class="btn sm" id="cpPos">コピー</button></div>
     <pre class="pbox" id="pPos"></pre>
     <div id="negWrap"><div class="plabel">ネガティブ <button class="btn sm ghost" id="cpNeg">コピー</button></div><pre class="pbox neg" id="pNeg"></pre></div>
@@ -1034,7 +1047,6 @@ function vScene(c){
     <div id="dupBox"></div>
   </div>
 
-  <div class="foldall" id="foldAll"><button type="button" class="btn ghost sm" data-fa="close">すべてたたむ</button><button type="button" class="btn ghost sm" data-fa="open">すべてひらく</button></div>
   <div class="sec" id="wSec"><h2>重み <small>タグを押して、強く・弱くする</small></h2>
     <div id="wBody"></div>
   </div>
@@ -1173,7 +1185,9 @@ function vScene(c){
     $('#pLora').innerHTML=p.loras.length?'PixAI で選ぶ LoRA：'+p.loras.map(l=>`<span>${esc(l.name)}（${esc(l.weight===''?'—':l.weight)}）</span>`).join(''):'';};
   upd();
   picWire(sc,upd);
-  setupFold();
+  setupFold(c);
+  /* たたんだままでもコピーできる、見出しのボタン */
+  $$('[data-cp]',view).forEach(b=>b.onclick=()=>{const p=buildPrompt(sc);copyText(b.dataset.cp==='neg'?p.neg:p.pos);});
   $$('[data-picon]',view).forEach(cb=>cb.onchange=()=>{const i=+cb.dataset.picon,sl=sc.chars[i];if(cb.checked){if(sl.pic)sl.pic.on=true;else sl.pic=picNew(sc,i);picSel=i;}else if(sl.pic)sl.pic.on=false;picCfg(sc);save('scenes',sc);render(true);});
   $('#cpPos').onclick=()=>copyText(buildPrompt(sc).pos);
   $('#cpNeg').onclick=()=>copyText(buildPrompt(sc).neg);
@@ -1836,6 +1850,8 @@ function vPList(c){
     return p.img?`<button class="pitem hasimg" data-id="${p.id}"><img class="pim" src="${partImgUrl(p)}" alt=""><div>${inner}</div></button>`:`<button class="pitem" data-id="${p.id}">${inner}</button>`;}).join('')
   :`<div class="empty"><b>${T.label}はまだありません</b>「＋ 新しい${T.label}」で登録します。</div>`}
   <button class="fab" id="newPart">＋ 新しい${T.label}</button>`;
+  if(t==='action'){const h=$('p.hint',view);if(h)h.insertAdjacentHTML('afterend','<div class="row" style="margin:-4px 0 12px"><button class="btn sm" id="newPicPose">🕴 ピクトグラムでポーズを作る</button></div>');
+    $('#newPicPose').onclick=()=>openPoseEditor(null,0,null,()=>render(true));}
   $$('.pitem',view).forEach(b=>b.onclick=()=>openPart(b.dataset.id,null,()=>render(true)));
   $('#newPart').onclick=()=>openPart(null,t,()=>render(true));
   mergeWire(t);
@@ -1894,7 +1910,9 @@ function openPart(id,type,onSave){
   ${p.type==='style'?`<label class="f"><span>ネガティブプロンプト</span><textarea id="pNegT" rows="3" placeholder="lowres, blurry, jpeg artifacts, text, watermark">${esc(p.neg)}</textarea></label>${negHelp()}`:''}
   <label class="f"><span>メモ</span><textarea id="pMemo" rows="2" placeholder="${p.type==='lora'?'PixAI のURL・合う重みなど':''}">${esc(p.memo)}</textarea></label>
   ${used?`<div class="banner info">この部品は ${used} 件のシーンで使っています。直すと、そのすべてのシーンのプロンプトが変わります。</div>`:''}
+  ${p.type==='action'&&src?`<div class="row" style="margin:-4px 0 12px"><button type="button" class="btn ghost sm" id="pPic">🕴 ピクトグラムで形を${src.skel?'直す':'作る'}</button></div>`:''}
   <div class="row"><button class="btn" id="pSave">保存</button>${src?'<button class="btn ghost" id="pDup">複製</button><button class="btn danger" id="pDel">削除</button>':''}<button class="btn ghost" id="pCancel">やめる</button></div>`);
+  const pp=$('#pPic');if(pp)pp.onclick=()=>{closeSheet();setTimeout(()=>openPoseEditor(null,0,src.id,()=>{onSave&&onSave(byId('parts',src.id));}),30);};
   setTimeout(()=>{if(!src)$('#pName')&&$('#pName').focus();},50);
   /* 日本語 → 英語 */
   $('#pJaGo').onclick=async()=>{const t=$('#pJa').value.trim();if(!t)return toast('日本語を入れてください');const b=$('#pJaGo'),m=$('#pJaMsg');b.disabled=true;b.textContent='直しています…';
@@ -2260,24 +2278,139 @@ function negHelp(){return `<details class="nh"><summary>ネガティブの効か
    ・タグは PixAI の Haruka 系・Tsubaki 系の両方で効きやすい Danbooru のタグにしている */
 const PIC_AR={'800x912':[800,912],'9:16':[900,1600],'3:4':[900,1200],'1:1':[1000,1000],'4:3':[1200,900],'16:9':[1600,900]};
 const PIC_ARL={'800x912':'800×912','9:16':'9:16','3:4':'3:4','1:1':'1:1','4:3':'4:3','16:9':'16:9'};
-const PIC_PRESETS={stand:['立ち','standing'],walk:['歩き','walking'],sit:['座り','sitting, chair'],wave:['手を振る','waving, arm up'],cross:['腕組み','crossed arms'],point:['指差し','pointing, pointing forward']};
+/* PIC_PRESETS は下の「ピクトグラムのポーズ」にある */
 const PIC_COL={t:'#d9dde4',r:'#5fb3ff',l:'#ffb35f'};
 const PIC_PC=['#ff8a3d','#4cc764','#ff5c9a','#4aa8ff','#b48cff','#2dd4bf'];
 const picDeg=a=>{a=((a+180)%360+360)%360-180;return a===-180?180:a;};
 const picClamp=(v,a,b)=>Math.min(b,Math.max(a,v));
+/* ピクトグラムのポーズ。[名前, タグ]。
+   「よく使う」の6つのほかは、rin87.com「全身のポーズ（基本姿勢）」で紹介されているポーズ（名前とタグはそのページのまま。
+   同じものがある「座る」「立つ」「歩く」は、よく使うの「座り」「立ち」「歩き」を使う）。
+   ポーズを足すときは、ここに1行、PIC_GROUPS に名前、picPresetSkel の PIC_SHAPE に形を足す */
+const PIC_PRESETS={stand:['立ち','standing'],walk:['歩き','walking'],sit:['座り','sitting, chair'],wave:['手を振る','waving, arm up'],cross:['腕組み','crossed arms'],point:['指差し','pointing, pointing forward'],
+  lying:['横たわる','lying'],onback:['仰向け','on back'],onside:['横向き','on side'],onstomach:['うつ伏せ','on stomach'],thepose:['うつ伏せで足を立てる','the pose'],sleeping:['眠る','sleeping'],fetal:['胎児の姿勢','fetal position'],
+  kneel:['ひざまずく、膝立ち','kneeling'],oneknee:['片膝をつく','on one knee'],squat:['しゃがむ','squatting'],crosslegs:['足を組む','crossed legs'],butterfly:['蝶々座り','butterfly sitting'],indian:['あぐらをかく','indian style'],
+  hugknees:['膝を抱える、体育座り','hugging own legs'],seiza:['正座','seiza'],wariza:['割座','wariza'],yokozuwari:['横座り','yokozuwari'],reclining:['もたれかかる、もたれる','reclining'],sitback:['後ろ向きに座る','sitting backwards'],airchair:['空気椅子','invisible chair'],
+  legsapart:['脚を広げる','legs apart'],oneleg:['片足立ち','standing on one leg'],contra:['コントラポスト','contrapposto'],sway:['スウェイバック','sway back'],wall:['壁にもたれかかる','against wall'],
+  run:['走る','running'],jump:['ジャンプする','jumping'],hop:['ホッピング','hopping'],fly:['空を飛ぶ','flying'],ride:['乗る','riding'],stretch:['ストレッチする','stretching'],yoga:['ヨガ','yoga'],balance:['バランスをとる','balancing'],
+  punch:['パンチ','punching'],fallen:['転ぶ','fallen down'],bow:['お辞儀する','bowing'],curtsey:['カーテシー','curtsey'],cheer:['応援する','cheering'],yawn:['あくびをする','yawning'],wake:['寝起き','waking up'],
+  eat:['食べる','eating'],drink:['飲む','drinking'],cook:['料理する','cooking'],smoke:['タバコを吸う','smoking'],selfie:['自撮り','selfie'],photo:['写真を撮る','taking picture'],read:['読書する','reading'],study:['勉強する','studying'],
+  instrument:['楽器を演奏する','playing instrument'],sing:['歌う','singing'],
+  arched:['背中を反らせる','arched back'],bent:['前屈み（前かがみ）','bent over'],leanback:['後ろに寄りかかる','leaning back'],armsupport:['手をつく、腕で体を支える','arm support'],leanfwd:['前に寄りかかる、前かがみ','leaning forward'],leanside:['体を横に傾ける','leaning to the side'],peek:['物陰から覗く','peeking out'],slouch:['猫背','slouching'],
+  landing:['三点着地','superhero landing'],fight:['戦闘態勢、ファイティングポーズ','fighting stance'],dual:['二刀流','dual wielding'],aim:['狙う','aiming'],twist:['体をひねる、振り返る','twisted torso'],dynamic:['ダイナミックポーズ','dynamic pose'],action:['アクションシーン','action shot']};
+/* ポーズのボタンの分け方 */
+const PIC_GROUPS=[['よく使う',['stand','walk','sit','wave','cross','point']],
+  ['寝る',['lying','onback','onside','onstomach','thepose','sleeping','fetal']],
+  ['座る',['kneel','oneknee','squat','crosslegs','butterfly','indian','hugknees','seiza','wariza','yokozuwari','reclining','sitback','airchair']],
+  ['立つ・動く',['legsapart','oneleg','contra','sway','wall','run','jump','hop','fly','ride','stretch','yoga','balance']],
+  ['しぐさ',['punch','fallen','bow','curtsey','cheer','yawn','wake','eat','drink','cook','smoke','selfie','photo','read','study','instrument','sing']],
+  ['体の傾き',['arched','bent','leanback','armsupport','leanfwd','leanside','peek','slouch']],
+  ['アクション',['landing','fight','dual','aim','twist','dynamic','action']]];
+const picGroupOf=k=>{const g=PIC_GROUPS.find(g=>g[1].includes(k));return g?g[0]:null;};
+/* ポーズの名前を、日本語→英語の辞書にも入れる（「、」で分けた言葉ごと） */
+for(const[k,[n,t]]of Object.entries(PIC_PRESETS))for(const w of n.split(/[、（）()]/).map(x=>x.trim()).filter(Boolean))if(!JA_DICT[w])JA_DICT[w]=t;
+/* 骨組みを作る道具。関節 J から先を、親の関節（pivot を書いたときはその関節）を軸に deg 度まわす。
+   pl：'f' 正面から見た回転（＋で人物の左へ）、's' 横から見た回転（下を向いた手足は＋で前へ、上を向いた体は－で前へ）、't' 上から見た回転 */
+function picRot(P,J,deg,pl,pivot){const pv=P[pivot||PIC_PARENT[J]||J].slice();const[ia,ib]=pl==='s'?[2,1]:pl==='t'?[0,2]:[0,1];const r=deg*Math.PI/180,c=Math.cos(r),s=Math.sin(r);
+  for(const n of picSub(J)){const v=P[n];if(!v)continue;const a=v[ia]-pv[ia],b=v[ib]-pv[ib];v[ia]=pv[ia]+a*c-b*s;v[ib]=pv[ib]+a*s+b*c;}}
+const PIC_LEGS=['rK','lK','rF','lF','rT','lT'];
+/* 上半身（腰から上）を、腰の高さ y・前後 z に動かす（足はそのまま。あとで足を置く） */
+function picUpper(P,y,z){const dy=y-P.pel[1],dz=(z||0)-P.pel[2];for(const n in P)if(!PIC_LEGS.includes(n)){P[n][1]+=dy;P[n][2]+=dz;}}
+/* いちばん低い関節を床（y=0）に合わせる。lift で浮かせる */
+function picGround(P,lift){let m=1e9;for(const n in P)m=Math.min(m,P[n][1]);for(const n in P)P[n][1]+=-m+(lift||0);}
+/* 腰に対する位置で関節を置く */
+function picAt(P,o){const b=P.pel;for(const n in o)P[n]=[b[0]+o[n][0],b[1]+o[n][1],b[2]+o[n][2]];}
+/* 椅子に座る（よく使うの「座り」と同じ形） */
+function picChair(P){for(const n in P)if(P[n][1]>3.5)P[n]=[P[n][0],P[n][1]-1.7,P[n][2]];
+  Object.assign(P,{pel:[0,2.25,0],rP:[-.5,2.2,0],lP:[.5,2.2,0],rK:[-.55,2.3,1.85],lK:[.55,2.3,1.85],rF:[-.55,.1,1.85],lF:[.55,.1,1.85],
+    rT:[-.6,0,2.4],lT:[.6,0,2.4],rH:[-.8,2.45,1.1],lH:[.8,2.45,1.1],rE:[-1.1,3.4,.35],lE:[1.1,3.4,.35]});}
+/* 床に座る（脚を前に伸ばす） */
+function picFloor(P){picUpper(P,.5);Object.assign(P,{rK:[-.55,.45,1.9],lK:[.55,.45,1.9],rF:[-.55,.3,3.75],lF:[.55,.3,3.75],rT:[-.6,.75,4],lT:[.6,.75,4]});}
+const pR=picRot;
+/* それぞれのポーズの形（立ちの形から動かす） */
+const PIC_SHAPE={
+  walk:P=>Object.assign(P,{rK:[-.5,2.05,.55],rF:[-.5,.25,.75],rT:[-.52,.15,1.3],lK:[.5,2,-.25],lF:[.5,.35,-.85],lT:[.52,.05,-.4],lE:[1.1,5,.45],lH:[1.1,3.9,.85],rE:[-1.1,5,-.4],rH:[-1.1,3.85,-.75]}),
+  sit:P=>picChair(P),
+  wave:P=>{P.rE=[-1.75,6.6,.1];P.rH=[-1.6,7.9,.2];},
+  cross:P=>Object.assign(P,{rE:[-1,5.1,.45],rH:[.55,5.5,.7],lE:[1,5.1,.45],lH:[-.55,5.55,.8]}),
+  point:P=>{P.rE=[-.95,6,.95];P.rH=[-.85,6.15,2.05];},
+  /* 寝る */
+  lying:P=>{pR(P,'pel',90,'s','pel');pR(P,'pel',90,'t','pel');picGround(P);},
+  onback:P=>{pR(P,'rE',-20,'f');pR(P,'lE',20,'f');pR(P,'pel',90,'s','pel');pR(P,'pel',90,'t','pel');picGround(P);},
+  onside:P=>{pR(P,'rE',40,'s');pR(P,'rH',50,'s');pR(P,'lK',15,'s');pR(P,'lF',-25,'s');pR(P,'pel',90,'f','pel');picGround(P);},
+  onstomach:P=>{pR(P,'rE',160,'s');pR(P,'lE',160,'s');pR(P,'pel',-90,'s','pel');pR(P,'pel',90,'t','pel');picGround(P);},
+  thepose:P=>{pR(P,'rE',150,'s');pR(P,'rH',70,'s');pR(P,'lE',150,'s');pR(P,'lH',70,'s');pR(P,'rF',-110,'s');pR(P,'lF',-80,'s');pR(P,'pel',-80,'s','pel');pR(P,'pel',90,'t','pel');picGround(P);},
+  sleeping:P=>{pR(P,'rE',60,'s');pR(P,'rH',80,'s');pR(P,'lE',40,'s');pR(P,'lH',60,'s');pR(P,'rK',35,'s');pR(P,'rF',-50,'s');pR(P,'lK',25,'s');pR(P,'lF',-40,'s');pR(P,'pel',90,'f','pel');picGround(P);},
+  fetal:P=>{pR(P,'neck',-30,'s');pR(P,'head',-20,'s');pR(P,'rE',60,'s');pR(P,'rH',100,'s');pR(P,'lE',60,'s');pR(P,'lH',100,'s');pR(P,'rK',100,'s');pR(P,'lK',100,'s');pR(P,'rF',-120,'s');pR(P,'lF',-120,'s');pR(P,'pel',90,'f','pel');picGround(P);},
+  /* 座る */
+  kneel:P=>{pR(P,'rF',-90,'s');pR(P,'lF',-90,'s');picGround(P);},
+  oneknee:P=>{pR(P,'rF',-90,'s');pR(P,'lK',90,'s');pR(P,'lF',-90,'s');picGround(P);},
+  squat:P=>{pR(P,'rK',115,'s');pR(P,'rF',-150,'s');pR(P,'lK',115,'s');pR(P,'lF',-150,'s');pR(P,'rK',-10,'f');pR(P,'lK',10,'f');pR(P,'neck',-20,'s');pR(P,'rE',45,'s');pR(P,'lE',45,'s');picGround(P);},
+  crosslegs:P=>{picChair(P);Object.assign(P,{lK:[-.1,2.75,1.8],lF:[-.45,.95,2.05],lT:[-.6,.85,2.55]});},
+  butterfly:P=>{picUpper(P,.5);picAt(P,{rK:[-1.6,0,1.2],lK:[1.6,0,1.2],rF:[-.2,-.3,1.9],lF:[.2,-.3,1.9],rT:[-.1,-.2,2.3],lT:[.1,-.2,2.3],rE:[-1.1,1.1,.9],lE:[1.1,1.1,.9],rH:[-.35,.05,1.8],lH:[.35,.05,1.8]});picGround(P);},
+  indian:P=>{picUpper(P,.5);picAt(P,{rK:[-1.5,0,.9],lK:[1.5,0,.9],rF:[.35,-.25,1.2],lF:[-.35,-.25,1],rT:[.6,-.2,1.5],lT:[-.6,-.2,1.3],rE:[-1.3,1,.5],lE:[1.3,1,.5],rH:[-1.35,.45,.95],lH:[1.35,.45,.95]});picGround(P);},
+  hugknees:P=>{pR(P,'neck',-15,'s');picUpper(P,.5);picAt(P,{rK:[-.45,1.6,1.3],lK:[.45,1.6,1.3],rF:[-.45,-.35,1.6],lF:[.45,-.35,1.6],rT:[-.5,-.45,2.1],lT:[.5,-.45,2.1],rE:[-1,1.9,.9],lE:[1,1.9,.9],rH:[-.2,1.3,1.75],lH:[.2,1.3,1.75]});picGround(P);},
+  seiza:P=>{picUpper(P,1.2);picAt(P,{rK:[-.5,-.95,1.8],lK:[.5,-.95,1.8],rF:[-.5,-1.05,-.1],lF:[.5,-1.05,-.1],rT:[-.5,-1.15,-.5],lT:[.5,-1.15,-.5],rE:[-1,.9,.5],lE:[1,.9,.5],rH:[-.6,.35,1.2],lH:[.6,.35,1.2]});picGround(P);},
+  wariza:P=>{picUpper(P,.45);picAt(P,{rK:[-.5,-.2,1.6],lK:[.5,-.2,1.6],rF:[-1.5,-.3,.1],lF:[1.5,-.3,.1],rT:[-1.9,-.4,-.2],lT:[1.9,-.4,-.2],rE:[-.9,1.1,.6],lE:[.9,1.1,.6],rH:[-.4,-.15,.95],lH:[.4,-.15,.95]});picGround(P);},
+  yokozuwari:P=>{pR(P,'neck',-10,'f');picUpper(P,.45);picAt(P,{rK:[.3,-.2,1.5],lK:[.9,-.2,1.2],rF:[1.4,-.3,.2],lF:[1.9,-.3,-.2],rT:[1.8,-.4,0],lT:[2.3,-.4,-.4],rE:[-1.3,1.1,.2],rH:[-1.4,-.4,.3]});picGround(P);},
+  reclining:P=>{picChair(P);pR(P,'neck',28,'s');pR(P,'rE',-20,'s');pR(P,'lE',-20,'s');},
+  sitback:P=>{picChair(P);Object.assign(P,{rK:[-1,2.3,1.6],lK:[1,2.3,1.6],rF:[-1.1,.1,1.7],lF:[1.1,.1,1.7],rT:[-1.15,0,2.2],lT:[1.15,0,2.2],rE:[-1,3.4,.9],lE:[1,3.4,.9],rH:[-.2,3.8,1.4],lH:[.2,3.8,1.4]});},
+  airchair:P=>{picChair(P);pR(P,'rE',80,'s');pR(P,'lE',80,'s');},
+  /* 立つ・動く */
+  legsapart:P=>{pR(P,'rK',-14,'f');pR(P,'lK',14,'f');picGround(P);},
+  oneleg:P=>{pR(P,'lK',75,'s');pR(P,'lF',-115,'s');pR(P,'rE',-55,'f');pR(P,'lE',55,'f');picGround(P);},
+  contra:P=>{for(const n in P)if(!PIC_LEGS.includes(n)&&!['rP','lP'].includes(n))P[n][0]-=.15;P.rP[1]+=.1;P.lP[1]-=.1;pR(P,'lK',12,'s');pR(P,'lF',-25,'s');pR(P,'lK',-6,'f');pR(P,'neck',5,'f');P.lE=[1.25,5.1,-.1];P.lH=[.75,4.2,.2];picGround(P);},
+  sway:P=>{for(const n of['pel','rP','lP'])P[n][2]+=.35;pR(P,'neck',16,'s');pR(P,'head',-22,'s');pR(P,'rK',8,'s');pR(P,'lK',8,'s');picGround(P);},
+  wall:P=>{pR(P,'pel',6,'s','rF');pR(P,'lK',45,'s');pR(P,'lF',-100,'s');pR(P,'rE',-25,'s');pR(P,'lE',-25,'s');pR(P,'rH',-20,'s');pR(P,'lH',-20,'s');picGround(P);},
+  run:P=>{pR(P,'neck',-12,'s');pR(P,'rK',65,'s');pR(P,'rF',-95,'s');pR(P,'lK',-35,'s');pR(P,'lF',-70,'s');pR(P,'rE',-50,'s');pR(P,'rH',95,'s');pR(P,'lE',50,'s');pR(P,'lH',90,'s');picGround(P,.35);},
+  jump:P=>{pR(P,'rK',25,'s');pR(P,'rF',-75,'s');pR(P,'lK',25,'s');pR(P,'lF',-75,'s');pR(P,'rE',-150,'f');pR(P,'lE',150,'f');picGround(P,1.2);},
+  hop:P=>{pR(P,'rK',45,'s');pR(P,'rF',-70,'s');pR(P,'lF',-25,'s');pR(P,'rE',30,'s');pR(P,'lE',-30,'s');pR(P,'rE',-25,'f');pR(P,'lE',25,'f');picGround(P,.6);},
+  fly:P=>{pR(P,'rE',170,'s');pR(P,'lE',170,'s');pR(P,'lF',-40,'s');pR(P,'pel',-65,'s','pel');picGround(P,2);},
+  ride:P=>{picChair(P);Object.assign(P,{rK:[-1,2.2,1.4],lK:[1,2.2,1.4],rF:[-1,.45,1.6],lF:[1,.45,1.6],rT:[-1.05,.35,2.1],lT:[1.05,.35,2.1],rE:[-1,3.2,.7],lE:[1,3.2,.7],rH:[-.4,3.3,1.6],lH:[.4,3.3,1.6]});},
+  stretch:P=>{pR(P,'rE',-168,'f');pR(P,'lE',168,'f');P.rH[0]=-.25;P.lH[0]=.25;},
+  yoga:P=>{Object.assign(P,{lK:[1.5,2.3,.2],lF:[-.25,2.1,.1],lT:[-.3,2.05,.6]});Object.assign(P,{rE:[-1.15,7.2,.1],lE:[1.15,7.2,.1],rH:[-.12,8.5,.15],lH:[.12,8.5,.15]});picGround(P);},
+  balance:P=>{pR(P,'neck',-30,'s');pR(P,'lK',-70,'s');pR(P,'rE',-90,'f');pR(P,'lE',90,'f');picGround(P);},
+  punch:P=>{pR(P,'rE',90,'s');pR(P,'lE',40,'s');pR(P,'lH',115,'s');pR(P,'rK',18,'s');pR(P,'rF',-20,'s');pR(P,'lK',-18,'s');pR(P,'neck',-6,'s');picGround(P);},
+  fallen:P=>{picFloor(P);pR(P,'neck',30,'s');Object.assign(P,{rK:[-.7,1.3,1.5],rF:[-.75,.15,2.6],rT:[-.8,.45,3]});picAt(P,{rH:[-1.1,-.4,-1.1],lH:[1.1,-.4,-1.1]});picGround(P);},
+  bow:P=>{pR(P,'neck',-45,'s');pR(P,'rE',45,'s');pR(P,'lE',45,'s');P.rH[0]=-.3;P.lH[0]=.3;picGround(P);},
+  curtsey:P=>{pR(P,'neck',-10,'s');pR(P,'rK',18,'s');pR(P,'rF',-30,'s');pR(P,'lK',-25,'s');pR(P,'lF',-35,'s');pR(P,'lK',-8,'f');pR(P,'rE',-35,'f');pR(P,'lE',35,'f');picGround(P);},
+  cheer:P=>{pR(P,'rE',-140,'f');pR(P,'lE',140,'f');},
+  yawn:P=>{pR(P,'rE',-165,'f');Object.assign(P,{lE:[.95,5.35,.65],lH:[.15,6.95,.75]});},
+  wake:P=>{picFloor(P);pR(P,'rE',-165,'f');picAt(P,{lE:[.95,1.9,.6],lH:[.25,3.35,.65]});picGround(P);},
+  eat:P=>Object.assign(P,{rE:[-.9,5.2,.7],rH:[-.1,6.9,.8],lE:[.95,5.1,.5],lH:[.3,5.25,1.1]}),
+  drink:P=>{Object.assign(P,{rE:[-.9,5.3,.7],rH:[-.1,6.95,.8]});pR(P,'head',12,'s');},
+  cook:P=>Object.assign(P,{rE:[-.95,5,.6],rH:[-.4,4.6,1.4],lE:[.95,5,.6],lH:[.4,4.6,1.4]}),
+  smoke:P=>Object.assign(P,{rE:[-.95,5.3,.5],rH:[-.2,6.95,.8],lE:[1,5,.4],lH:[-.2,4.6,.6]}),
+  selfie:P=>Object.assign(P,{rE:[-1.4,6.6,1],rH:[-1.3,7.6,1.9],lE:[1.2,5.8,.5],lH:[.6,7,.6]}),
+  photo:P=>Object.assign(P,{rE:[-1,5.6,.7],rH:[-.35,7.1,1.1],lE:[1,5.6,.7],lH:[.35,7.1,1.1]}),
+  read:P=>{Object.assign(P,{rE:[-.95,5,.5],rH:[-.35,5.6,1.3],lE:[.95,5,.5],lH:[.35,5.6,1.3]});pR(P,'head',-20,'s');},
+  study:P=>{picChair(P);Object.assign(P,{rE:[-1,3.6,.9],rH:[-.4,3.5,1.7],lE:[1,3.6,.9],lH:[.4,3.5,1.7]});pR(P,'head',-22,'s');},
+  instrument:P=>Object.assign(P,{rE:[-1,5,.6],rH:[-.1,4.6,1],lE:[1.3,5.4,.6],lH:[1.4,5.8,1.2]}),
+  sing:P=>{Object.assign(P,{rE:[-.9,5.3,.7],rH:[-.15,6.8,.9]});pR(P,'lE',70,'f');pR(P,'head',8,'s');},
+  /* 体の傾き */
+  arched:P=>{for(const n of['pel','rP','lP'])P[n][2]+=.25;pR(P,'neck',25,'s');pR(P,'head',15,'s');picGround(P);},
+  bent:P=>{pR(P,'neck',-80,'s');pR(P,'rE',80,'s');pR(P,'lE',80,'s');picGround(P);},
+  leanback:P=>{pR(P,'neck',20,'s');pR(P,'rE',-30,'s');pR(P,'lE',-30,'s');picGround(P);},
+  armsupport:P=>{picFloor(P);pR(P,'neck',25,'s');picAt(P,{rE:[-1.15,1.2,-.7],lE:[1.15,1.2,-.7],rH:[-1.1,-.35,-1.2],lH:[1.1,-.35,-1.2]});picGround(P);},
+  leanfwd:P=>{pR(P,'neck',-30,'s');pR(P,'rE',30,'s');pR(P,'lE',30,'s');picGround(P);},
+  leanside:P=>{pR(P,'neck',18,'f');pR(P,'lE',-18,'f');picGround(P);},
+  peek:P=>{pR(P,'neck',-28,'f');pR(P,'head',-12,'f');pR(P,'rE',-40,'f');pR(P,'rE',40,'s');pR(P,'lK',10,'f');picGround(P);},
+  slouch:P=>{pR(P,'neck',-15,'s');pR(P,'head',-18,'s');for(const n of['rS','lS'])P[n][2]+=.25;pR(P,'rE',15,'s');pR(P,'lE',15,'s');picGround(P);},
+  /* アクション */
+  landing:P=>{pR(P,'rF',-90,'s');pR(P,'lK',95,'s');pR(P,'lF',-110,'s');pR(P,'neck',-40,'s');pR(P,'lE',-70,'s');picGround(P);const b=P.pel;P.rE=[b[0]-1.1,b[1]-.3,b[2]+.5];P.rH=[b[0]-1.1,0,b[2]+.9];},
+  fight:P=>{Object.assign(P,{rE:[-1.1,5.3,.6],rH:[-.5,6.4,1.2],lE:[1.1,5.3,.6],lH:[.4,6.6,1.4]});pR(P,'rK',20,'s');pR(P,'rF',-30,'s');pR(P,'lK',-20,'s');pR(P,'lF',-10,'s');pR(P,'rK',-8,'f');pR(P,'lK',8,'f');picGround(P);},
+  dual:P=>{pR(P,'rE',-50,'f');pR(P,'lE',50,'f');pR(P,'rK',-12,'f');pR(P,'lK',12,'f');picGround(P);},
+  aim:P=>{pR(P,'rE',90,'s');pR(P,'lE',90,'s');P.rH[0]=-.15;P.lH[0]=.15;P.rE[0]=-.7;P.lE[0]=.7;},
+  twist:P=>{pR(P,'neck',45,'t','pel');pR(P,'head',30,'t','neck');},
+  dynamic:P=>{pR(P,'rK',50,'s');pR(P,'rF',-60,'s');pR(P,'lK',-35,'s');pR(P,'rE',-150,'f');pR(P,'lE',40,'f');pR(P,'neck',-10,'s');pR(P,'neck',10,'f');picGround(P);},
+  action:P=>{pR(P,'rK',80,'s');pR(P,'lF',-100,'s');pR(P,'rE',-120,'f');pR(P,'lE',-40,'s');pR(P,'neck',-10,'s');picGround(P,.8);}
+};
 /* 骨組み（z の＋がカメラ側、x の－が人物の右側。高さ 8 で全身） */
 function picPresetSkel(pose){
   const P={head:[0,7.25,0],neck:[0,6.55,0],rS:[-.95,6.25,0],lS:[.95,6.25,0],rE:[-1.15,4.95,0],lE:[1.15,4.95,0],
     rH:[-1.2,3.75,.15],lH:[1.2,3.75,.15],pel:[0,3.95,0],rP:[-.5,3.9,0],lP:[.5,3.9,0],rK:[-.55,2,.05],lK:[.55,2,.05],
     rF:[-.55,.1,0],lF:[.55,.1,0],rT:[-.6,0,.6],lT:[.6,0,.6],eyeR:[-.2,7.33,.5],eyeL:[.2,7.33,.5],nose:[0,7.2,.58],earR:[-.55,7.25,-.05],earL:[.55,7.25,-.05]};
-  if(pose==='walk')Object.assign(P,{rK:[-.5,2.05,.55],rF:[-.5,.25,.75],rT:[-.52,.15,1.3],lK:[.5,2,-.25],lF:[.5,.35,-.85],lT:[.52,.05,-.4],
-    lE:[1.1,5,.45],lH:[1.1,3.9,.85],rE:[-1.1,5,-.4],rH:[-1.1,3.85,-.75]});
-  if(pose==='sit'){for(const n in P)if(P[n][1]>3.5)P[n]=[P[n][0],P[n][1]-1.7,P[n][2]];
-    Object.assign(P,{pel:[0,2.25,0],rP:[-.5,2.2,0],lP:[.5,2.2,0],rK:[-.55,2.3,1.85],lK:[.55,2.3,1.85],rF:[-.55,.1,1.85],lF:[.55,.1,1.85],
-      rT:[-.6,0,2.4],lT:[.6,0,2.4],rH:[-.8,2.45,1.1],lH:[.8,2.45,1.1],rE:[-1.1,3.4,.35],lE:[1.1,3.4,.35]});}
-  if(pose==='wave'){P.rE=[-1.75,6.6,.1];P.rH=[-1.6,7.9,.2];}
-  if(pose==='cross')Object.assign(P,{rE:[-1,5.1,.45],rH:[.55,5.5,.7],lE:[1,5.1,.45],lH:[-.55,5.55,.8]});
-  if(pose==='point'){P.rE=[-.95,6,.95];P.rH=[-.85,6.15,2.05];}
+  const f=PIC_SHAPE[pose];if(f)f(P);
   return P;
 }
 function picFill(P){const h=P.head;if(!P.nose)P.nose=[h[0],h[1]-.05,h[2]+.58];if(!P.earR)P.earR=[h[0]-.55,h[1],h[2]-.05];if(!P.earL)P.earL=[h[0]+.55,h[1],h[2]-.05];return P;}
@@ -2334,6 +2467,13 @@ function picTags(sc){
     if(it.p.gaze)t.push(a<112.5?'looking at viewer':'looking back, looking at viewer');
     else if(o&&toward(it,o))t.push('facing another, looking at another');
     else if(a<112.5)t.push('looking away');
+  }
+  /* 手前・奥：sc.pic.front（人物の番号）で決める。なければ大きさがはっきり違うとき（1.35倍より大きい）だけ、いちばん大きい人物を手前にする */
+  /* 「手前・奥のタグを入れる」（sc.pic.depth）がオフなら入れない */
+  if(L.items.length>1&&sc.pic&&sc.pic.depth){
+    const fr=sc.pic&&typeof sc.pic.front==='number'&&L.items.some(it=>it.i===sc.pic.front)?sc.pic.front:null;let front=fr;
+    if(front==null){const sz=L.items.map(it=>it.p.scale||.6),mx=Math.max(...sz),mn=Math.min(...sz);if(mx/mn>1.35)front=L.items[sz.indexOf(mx)].i;}
+    if(front!=null)for(const it of L.items)per[it.i].push(it.i===front?'in foreground, close to viewer':'in background');
   }
   /* 2人ずつの距離と向き合い方 */
   for(let x=0;x<L.items.length;x++)for(let y=x+1;y<L.items.length;y++){
@@ -2397,6 +2537,16 @@ function picSaveOpenPose(sc,ov){const cv=picOpenPose(sc,ov);cv.toBlob(b=>{if(!b)
 
 /* ===== シーンの画面の「向き・位置」の欄 ===== */
 let picSel=0,picMode='move';const picUndo={};
+/* カメラの高さ・体の向き・大きさのバーを出しているか（ふだんは出さない） */
+let picBarsOn=false;
+/* ポーズのメニューを開いているか・開いている分類 */
+let picMenu=false,picGrp='よく使う';
+/* 最近使ったポーズ（S.meta.picRecent。新しい順、20個まで覚える）。10個に足りないときは「よく使う」で埋める */
+function picRecent(){const r=(S.meta.picRecent||[]).filter(k=>PIC_PRESETS[k]||picPart(k));for(const k of PIC_GROUPS[0][1])if(!r.includes(k))r.push(k);return r.slice(0,10);}
+function picUseRecent(k){const r=(S.meta.picRecent||[]).filter(x=>x!==k);r.unshift(k);S.meta.picRecent=r.slice(0,20);dbPut('meta',S.meta);}
+/* 分類のタブ（自分で作ったポーズがあれば「自分のポーズ」も） */
+function picGroupTabs(cur,nMine){return `<div class="ptabs pgtabs">${[...(nMine?['自分のポーズ']:[]),...PIC_GROUPS.map(g=>g[0])].map(g=>`<button type="button" data-pgrp="${g}" class="${g===cur?'on':''}">${g}</button>`).join('')}</div>`;}
+function picGroupKeys(g,mine){if(g==='自分のポーズ')return mine.map(p=>p.id);const x=PIC_GROUPS.find(y=>y[0]===g);return x?x[1]:[];}
 function picSecHTML(sc){
   if(!picOn(sc).length)return'';
   return `<div class="sec" id="picSec"><h2>🕴 向き・位置 <small>ピクトグラムを指で動かす</small></h2>
@@ -2406,15 +2556,20 @@ function picSecHTML(sc){
     <div class="picstage" id="picStage"><svg id="picSvg" xmlns="http://www.w3.org/2000/svg"></svg></div>
     <div class="piclg"><span><i style="background:#5fb3ff"></i>右手・右足</span><span><i style="background:#ffb35f"></i>左手・左足</span><span>枠の外は写らない</span></div>
     <p class="hint" id="picHint" style="margin:2px 0 10px"></p>
-    <div class="row" style="margin:0 0 8px"><button type="button" class="btn ghost sm" id="picUndo">↶ 戻す</button><button type="button" class="btn ghost sm" id="picHome">選んでいる人物を真ん中に戻す</button></div>
+    <div class="row" style="margin:0 0 8px"><button type="button" class="btn ghost sm" id="picUndo">↶ 戻す</button><button type="button" class="btn ghost sm" id="picHome">選んでいる人物を真ん中に戻す</button><button type="button" class="btn ghost sm" id="picBarB" aria-expanded="false">🎚 バーで調整</button></div>
+    <!-- カメラの高さ・体の向き・大きさのバー。ふだんは隠し、「バーで調整」を押したときだけ出す -->
+    <div id="picBars" hidden>
     <div class="rg"><span>カメラの高さ<br><b id="picPv"></b></span><input type="range" id="picPitch" min="-50" max="70" step="1"></div>
     <div id="picOne"><div class="rg"><span>体の向き<br><b id="picYv"></b></span><input type="range" id="picYaw" min="-180" max="180" step="1"></div>
     <div class="rg"><span>大きさ（寄り・引き）<br><b id="picSv"></b></span><input type="range" id="picScale" min="15" max="500" step="1"></div></div>
+    </div>
     <div class="f" style="margin:10px 0 8px"><span>ポーズ</span><div class="tgs" id="picPoses"></div></div>
     <label class="switch" style="margin-bottom:10px"><input type="checkbox" id="picGaze"><span>カメラ目線</span></label>
     <p class="hint" id="picDist" style="margin:0 0 8px"></p>
+    <div id="picFrontW" style="margin:0 0 10px"><label class="switch" style="margin-bottom:6px"><input type="checkbox" id="picDepth"><span>手前・奥のタグを入れる</span></label>
+      <div class="f" id="picFrontB" style="margin:0"><span>手前の人物</span><div class="tgs" id="picFront"></div><span class="hint">「自動」は、大きさで決めます（はっきり大きさが違うときだけ、手前・奥のタグを入れます）。</span></div></div>
+    <div class="picout" id="picOut"></div>
     <div class="row" style="margin-bottom:6px"><button class="btn ghost sm" id="picOpB">OpenPose 画像を保存</button></div>
-    <img id="picOpImg" alt="OpenPose の見本" class="picop">
     <span class="hint">ここで決めた構図・向き・ポーズのタグは、その人物のタグ（「かっこでまとめる」形では かっこの中）に入ります。上の「ポーズ」「構図」の部品とぶつかるときは、プロンプトの下の「重複・反対のタグ」で選べます。<br>左右どちら向きかと、画面のどこにいるかは、タグではほとんど効きません。左右を決めたいときは OpenPose の画像を一緒に使うのが確実です。</span>
   </div>`;
 }
@@ -2437,7 +2592,9 @@ function picWire(sc,upd){
     svg.setAttribute('viewBox',`${-MX} ${-MY} ${W+2*MX} ${H+2*MY}`);
     let grid='';for(const f of[1/3,2/3])grid+=`<line x1="${W*f}" y1="0" x2="${W*f}" y2="${H}"/><line x1="0" y1="${H*f}" x2="${W}" y2="${H*f}"/>`;
     let figs='',labels='';
-    for(const it of L.items.slice().sort((a,b)=>(a.p.scale||0)-(b.p.scale||0))){const{p,k,sp}=it.c,g=p.ground,dim=picSel!=='all'&&picSel!==it.i;
+    /* 奥から順に描く。「手前の人物」を選んでいれば、その人物をいちばん手前に */
+    const z=it=>(it.p.scale||0)+(cfg.front===it.i?1e3:0);
+    for(const it of L.items.slice().sort((a,b)=>z(a)-z(b))){const{p,k,sp}=it.c,g=p.ground,dim=picSel!=='all'&&picSel!==it.i;
       figs+=`<g opacity="${dim?.5:1}"><ellipse cx="${g.X}" cy="${g.Y}" rx="${1.4*k*g.s}" ry="${k*g.s*Math.max(.14,1.4*Math.abs(sp))}" fill="#000" opacity=".35"/>${picFigSVG(p,k,e=>e.z1>.12)}</g>`;
       const hd=p.head,hr=.62*k*hd.s,fs=Math.max(W*.034,Math.min(hr*.85,W*.06));
       labels+=`<text x="${hd.X}" y="${hd.Y-hr-fs*.45}" text-anchor="middle" font-size="${fs}" font-weight="700" fill="${PIC_PC[it.i%PIC_PC.length]}" ${dim?'opacity=".6"':''}>人物${it.i+1}</text>`;}
@@ -2452,18 +2609,31 @@ function picWire(sc,upd){
     const all=picSel==='all',cur=targets()[0];
     const pv=cur?pitchOf(cur):cfg.pitch;$('#picPitch').value=pv;$('#picPv').textContent=(pv>0?'見下ろし ':pv<0?'見上げ ':'目の高さ ')+Math.abs(Math.round(pv))+'°';
     const ub=$('#picUndo'),un=undoSt().length;ub.disabled=!un;ub.textContent=un?`↶ 戻す（あと${un}回）`:'↶ 戻す';$('#picHome').hidden=all;
+    $('#picBars').hidden=!picBarsOn;const bb=$('#picBarB');bb.classList.toggle('on',picBarsOn);bb.setAttribute('aria-expanded',picBarsOn?'true':'false');bb.textContent=picBarsOn?'🎚 バーを閉じる':'🎚 バーで調整';
+    /* 手前の人物（2人以上のときだけ） */
+    $('#picFrontW').hidden=a.length<2;$('#picDepth').checked=!!cfg.depth;$('#picFrontB').hidden=!cfg.depth;
+    const fr=typeof cfg.front==='number'&&a.some(o=>o.i===cfg.front)?cfg.front:'auto';
+    $('#picFront').innerHTML=`<button type="button" class="tg ${fr==='auto'?'on':''}" data-pfront="auto">自動</button>`+a.map(o=>`<button type="button" class="tg ${fr===o.i?'on':''}" data-pfront="${o.i}">人物${o.i+1}</button>`).join('');
     $('#picOne').hidden=all;
     if(cur){const y=picDeg(cur.yaw||0);$('#picYaw').value=y;$('#picYv').textContent=(y>0?'右 ':y<0?'左 ':'正面 ')+Math.abs(Math.round(y))+'°';
       $('#picScale').value=Math.round((cur.scale||.6)*100);$('#picSv').textContent=Math.round((cur.scale||.6)*100)+'%';$('#picGaze').checked=!!cur.gaze;}
     const cp=all?null:cur&&cur.pose;const mine=S.parts.filter(p=>p.type==='action'&&p.skel).sort((a,b)=>(a.name||'').localeCompare(b.name||'','ja'));
-    $('#picPoses').innerHTML=Object.entries(PIC_PRESETS).map(([k,v])=>`<button type="button" class="tg ${cp===k?'on':''}" data-ppose="${k}">${v[0]}</button>`).join('')
-      +mine.map(p=>`<button type="button" class="tg ${cp===p.id?'on':''}" data-ppose="${p.id}">★${esc(p.name||'名前なし')}</button>`).join('')
-      +`<button type="button" class="tg new" data-pnew="1">＋ ポーズを作る</button>`+(!all&&picPart(cp)?`<button type="button" class="tg new" data-pedit="1">✎ このポーズを直す</button>`:'');
+    /* 最近使ったポーズ（10個まで）。ほかはメニューを開いて選ぶ */
+    const pb=k=>`<button type="button" class="tg ${cp===k?'on':''}" data-ppose="${esc(k)}">${picPart(k)?'★':''}${esc(picPoseName(k))}</button>`;
+    const rec=picRecent();if(cp&&!rec.includes(cp)&&(PIC_PRESETS[cp]||picPart(cp)))rec.unshift(cp);
+    $('#picPoses').innerHTML=rec.slice(0,10).map(pb).join('')
+      +`<button type="button" class="tg new" data-pmenu="1" aria-expanded="${picMenu?'true':'false'}">${picMenu?'▲ メニューを閉じる':'▼ ほかのポーズ'}</button>`
+      +`<button type="button" class="tg new" data-pnew="1">＋ ポーズを作る</button>`+(!all&&picPart(cp)?`<button type="button" class="tg new" data-pedit="1">✎ このポーズを直す</button>`:'')
+      +(picMenu?`<div class="pmenu">${picGroupTabs(picGrp,mine.length)}<div class="tgs">${picGroupKeys(picGrp,mine).map(pb).join('')||'<span class="hint">まだありません。「＋ ポーズを作る」で作れます。</span>'}</div></div>`:'');
     const pt=picPairText(sc);$('#picDist').textContent=pt.length?'人物の距離：'+pt.join('／'):'';
   };
-  const opPrev=()=>{clearTimeout(opT);opT=setTimeout(()=>{const im=$('#picOpImg');if(im&&im.isConnected)im.src=picOpenPose(sc).toDataURL('image/png');},300);};
+  /* ピクトグラムから作ったタグを見せる（OpenPose の見本の画像は出さない。保存はボタンで） */
+  const opPrev=()=>{const box=$('#picOut');if(!box||!box.isConnected)return;const T=picTags(sc),C=a=>a.map(t=>`<code>${esc(t)}</code>`).join(' ');
+    const rows=on().map(o=>`<div class="pr"><b style="color:${PIC_PC[o.i%PIC_PC.length]}">人物${o.i+1}</b><span>${(T.per[o.i]||[]).length?C(T.per[o.i]):'—'}</span></div>`);
+    if(T.scene.length)rows.push(`<div class="pr"><b>2人の関係</b><span>${C(T.scene)}</span></div>`);
+    box.innerHTML=`<div class="pt">ピクトグラムから作ったタグ</div>${rows.join('')}<span class="hint">ほかの部品に同じタグがあるときは、プロンプトでは1つにまとまります。</span>`;};
   let raf=0;
-  const live=()=>{if(raf)return;raf=requestAnimationFrame(()=>{raf=0;draw();sync();upd();save('scenes',sc);opPrev();});};
+  const live=()=>{if(raf)return;raf=requestAnimationFrame(()=>{raf=0;if(!sec.isConnected){save('scenes',sc);return;}/* 画面を離れたあとは描かない */draw();sync();upd();save('scenes',sc);opPrev();});};
   draw();sync();opPrev();
   sec.addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;
     if(b.id==='picUndo'){const st=undoSt();if(!st.length)return;const v=JSON.parse(st.pop());(sc.chars||[]).forEach((c,k)=>{if(v.c[k]!==undefined)c.pic=v.c[k];});sc.pic=v.s;Object.assign(cfg,picCfg(sc));sc.pic=cfg;fixSel();live();return;}
@@ -2471,7 +2641,11 @@ function picWire(sc,upd){
     if(b.dataset.par){mark();cfg.ar=b.dataset.par;live();}
     else if(b.dataset.ptg){picSel=b.dataset.ptg==='all'?'all':+b.dataset.ptg;draw();sync();}
     else if(b.dataset.pm){picMode=b.dataset.pm;sync();}
-    else if(b.dataset.ppose){mark();targets().forEach(t=>t.pose=b.dataset.ppose);live();}
+    else if(b.id==='picBarB'){picBarsOn=!picBarsOn;sync();}
+    else if(b.dataset.pfront){mark();if(b.dataset.pfront==='auto')delete cfg.front;else cfg.front=+b.dataset.pfront;live();}
+    else if(b.dataset.ppose){mark();targets().forEach(t=>t.pose=b.dataset.ppose);picUseRecent(b.dataset.ppose);live();}
+    else if(b.dataset.pmenu){picMenu=!picMenu;sync();}
+    else if(b.dataset.pgrp){picGrp=b.dataset.pgrp;sync();}
     else if(b.dataset.pnew){const i=picSel==='all'?on()[0].i:picSel;openPoseEditor(sc,i,null);}
     else if(b.dataset.pedit){const t=targets()[0];if(t)openPoseEditor(sc,picSel,t.pose);}
     else if(b.id==='picOpB')picSaveOpenPose(sc);
@@ -2481,6 +2655,7 @@ function picWire(sc,upd){
   $('#picScale').oninput=e=>{markOnce();targets().forEach(t=>t.scale=e.target.value/100);live();};
   ['picPitch','picYaw','picScale'].forEach(id=>$('#'+id).addEventListener('change',()=>{sliding=false;}));
   $('#picGaze').onchange=e=>{mark();targets().forEach(t=>t.gaze=e.target.checked);live();};
+  $('#picDepth').onchange=e=>{mark();cfg.depth=e.target.checked;live();};
   /* 指での操作（1本指：移動か回転、2本指：大きさ） */
   const ptrs=new Map();let pinch=null;
   const toSvg=e=>{const r=svg.getBoundingClientRect();return{x:-MX+(e.clientX-r.left)/r.width*(W+2*MX),y:-MY+(e.clientY-r.top)/r.height*(H+2*MY)};};
@@ -2508,45 +2683,98 @@ const PIC_PARENT={head:'neck',neck:'pel',rE:'rS',rH:'rE',lE:'lS',lH:'lE',rK:'rP'
 const PIC_KIDS={pel:['neck','rP','lP'],neck:['head','rS','lS'],head:['eyeR','eyeL','nose','earR','earL'],rS:['rE'],rE:['rH'],lS:['lE'],lE:['lH'],rP:['rK'],rK:['rF'],rF:['rT'],lP:['lK'],lK:['lF'],lF:['lT']};
 const PIC_HANDLES=['head','neck','rE','rH','lE','lH','rK','rF','lK','lF'];
 function picSub(n,acc){acc=acc||[];acc.push(n);(PIC_KIDS[n]||[]).forEach(c=>picSub(c,acc));return acc;}
-function openPoseEditor(sc,slotI,partId){
-  const part=partId?picPart(partId):null,pc=sc.chars[slotI]&&sc.chars[slotI].pic;
-  const ED={P:part?picFill(picClone(part.skel)):picSkelOf(pc?pc.pose:'stand'),view:'front',drag:null};
+/* ポーズを作るときに固定できる部位：[名前, 白い丸, 付け根の関節, 動く関節] */
+const PIC_LOCKS={head:['頭',['head'],'neck',picSub('head')],body:['上半身',['neck'],'pel',picSub('neck')],
+  rArm:['右腕',['rE','rH'],'rS',['rE','rH']],lArm:['左腕',['lE','lH'],'lS',['lE','lH']],rLeg:['右脚',['rK','rF'],'rP',['rK','rF','rT']],lLeg:['左脚',['lK','lF'],'lP',['lK','lF','lT']]};
+const PIC_LOCK_OF={};for(const g in PIC_LOCKS)for(const h of PIC_LOCKS[g][1])PIC_LOCK_OF[h]=g;
+/* 新しいポーズ nw に替えるとき、固定した部位だけ今の形 old を残す（付け根からの位置をそのまま写す）。
+   上半身を固定したときは、固定していない頭・腕を、新しいポーズの形で今の上半身に付けなおす */
+function picKeepLocks(old,nw,lock){if(!lock.size)return nw;const R=picClone(nw);
+  const put=(names,base,from,fb)=>{for(const n of names)if(from[n])R[n]=[R[base][0]+from[n][0]-from[fb||base][0],R[base][1]+from[n][1]-from[fb||base][1],R[base][2]+from[n][2]-from[fb||base][2]];};
+  if(lock.has('body')){put(picSub('neck'),'pel',old);for(const g of['head','rArm','lArm'])if(!lock.has(g)){const[, ,b,ns]=PIC_LOCKS[g];put(ns.filter(n=>n!==b),b,nw);}}
+  for(const g of['head','rArm','lArm','rLeg','lLeg'])if(lock.has(g)){const[, ,b,ns]=PIC_LOCKS[g];put(ns,b,old);}
+  return R;}
+/* sc がないとき（部品の画面から）は、シーンに付けずにポーズの部品だけを作る・直す。onDone は保存のあとに呼ぶ */
+function openPoseEditor(sc,slotI,partId,onDone){
+  const part=partId?P_(partId):null,pc=sc&&sc.chars[slotI]&&sc.chars[slotI].pic;
+  const ED={P:part&&part.skel?picFill(picClone(part.skel)):picSkelOf(pc?pc.pose:'stand'),view:'front',drag:null,grp:'よく使う',lock:new Set()};
   const K=70,OX=300,GY=640;
-  openSheet(`<h2>${part?'ポーズを直す':'ポーズを作る'}</h2>
-  <div class="f"><span>元にするポーズ</span><div class="tgs">${Object.entries(PIC_PRESETS).map(([k,v])=>`<button type="button" class="tg" data-eb="${k}">${v[0]}</button>`).join('')}</div></div>
+  openSheet(`<h2>${part&&part.skel?'ポーズを直す':'ポーズを作る'}</h2>
+  <div class="f"><span>元にするポーズ</span><div id="edBase"></div></div>
   <div class="ptabs" id="edView"><button data-ev="front" class="on">正面から</button><button data-ev="side">横から</button></div>
+  <div class="f" style="margin:8px 0 6px"><span>固定する部位</span><div class="tgs" id="edLock"></div>
+    <span class="hint">固定した部位は白い丸を動かせなくなり（灰色の四角になります）、「元にするポーズ」を選び直しても今の形のまま残ります。</span></div>
   <div class="picstage" id="edStage" style="max-width:340px;margin:0 auto 4px"><svg id="edSvg" viewBox="0 0 600 680" xmlns="http://www.w3.org/2000/svg"></svg></div>
   <p class="hint" style="margin:0 0 12px">白い丸を動かすと、関節を軸に手足・頭・上半身が回ります。腕を前に出すなど前後の動きは「横から」で動かします。</p>
+  <div class="f jain"><span>日本語で入れる（英語に直して、下のタグに足します）</span><div class="sel"><input id="edJa" placeholder="例：片手を腰に当てる、振り返る"><button type="button" class="btn sm" id="edJaGo">英語に</button></div>
+    <span class="hint" id="edJaMsg">「、」で区切って入れます。よく使う言葉はアプリの辞書で、ほかはインターネットの翻訳（MyMemory）で直します。名前が空なら、この日本語を名前にします。</span></div>
   <label class="f"><span>名前</span><input id="edName" value="${esc(part?part.name:'')}" placeholder="例：片手を腰に当てる"></label>
   <label class="f"><span>タグ（英語・カンマ区切り）</span><textarea id="edTags" rows="2" placeholder="hand on hip, standing">${esc(part?part.tags:'')}</textarea><span class="hint">このポーズを選んだ人物のタグに入ります。「ポーズ」の部品として保存するので、ほかのシーンでも選べます。</span></label>
-  <div class="row"><button class="btn" id="edSave">${part?'保存':'登録して使う'}</button><button class="btn ghost" id="edOp">OpenPose 画像を保存</button><button class="btn ghost" id="edCancel">やめる</button></div>`);
+  <div class="f edmemo"><span>メモ（組み合わせ用・一時置き）</span><textarea id="edMemo" rows="4" placeholder="ひざまずく：kneeling&#10;応援する：cheering"></textarea>
+    <div class="row" style="margin:6px 0 0"><button type="button" class="btn ghost sm" id="edMemoIn">↓ 今のタグをメモに足す</button><button type="button" class="btn ghost sm" id="edMemoOut">↑ メモをタグに足す</button><button type="button" class="btn ghost sm" id="edMemoClr">メモを消す</button></div>
+    <span class="hint">「今のタグをメモに足す」を押すと、「名前：タグ」の形で1行足します（元にするポーズを選んだだけでは足しません）。「メモをタグに足す」は、各行の「：」のあとのタグを足します。メモは、この画面を閉じると消えます。</span></div>
+  <div class="row"><button class="btn" id="edSave">${part?'保存':sc?'登録して使う':'登録'}</button><button class="btn ghost" id="edOp">OpenPose 画像を保存</button><button class="btn ghost" id="edCancel">やめる</button></div>`);
   const svg=$('#edSvg'),st=$('#edStage');
   const proj=()=>{const o={};for(const n in ED.P){const[x,y,z]=ED.P[n];o[n]=ED.view==='front'?{X:OX+x*K,Y:GY-y*K,d:z,s:1,z1:z}:{X:OX+z*K,Y:GY-y*K,d:x,s:1,z1:x};}return o;};
   const draw=()=>{const p=proj();let h=`<rect x="0" y="0" width="600" height="680" fill="#2a2f38"/><line x1="40" y1="${GY}" x2="560" y2="${GY}" stroke="#555" stroke-width="2"/>`;
     h+=picFigSVG(p,K,e=>ED.view==='front'?e.z1>.12:e.z1>0);
-    for(const n of PIC_HANDLES){const q=p[n];h+=`<circle cx="${q.X}" cy="${q.Y}" r="${ED.drag===n?17:13}" fill="${ED.drag===n?'#fff':'rgba(255,255,255,.85)'}" stroke="#1e2127" stroke-width="3"/>`;}
+    for(const n of PIC_HANDLES){const q=p[n];
+      if(ED.lock.has(PIC_LOCK_OF[n]))h+=`<rect x="${q.X-9}" y="${q.Y-9}" width="18" height="18" rx="3" fill="#8a909a" stroke="#1e2127" stroke-width="3"/>`;
+      else h+=`<circle cx="${q.X}" cy="${q.Y}" r="${ED.drag===n?17:13}" fill="${ED.drag===n?'#fff':'rgba(255,255,255,.85)'}" stroke="#1e2127" stroke-width="3"/>`;}
     h+=`<text x="20" y="34" fill="#9aa1ad" font-size="22">${ED.view==='front'?'正面（左右・上下）':'横から（右が前）'}</text>`;svg.innerHTML=h;
     $$('#edView button').forEach(b=>b.classList.toggle('on',b.dataset.ev===ED.view));};
   draw();
-  $$('[data-eb]').forEach(b=>b.onclick=()=>{ED.P=picFill(picPresetSkel(b.dataset.eb));if(!$('#edTags').value.trim())$('#edTags').value=PIC_PRESETS[b.dataset.eb][1];draw();});
+  /* 元にするポーズ：分類のタブとボタン */
+  const drawBase=()=>{const mine=S.parts.filter(p=>p.type==='action'&&p.skel&&(!part||p.id!==part.id));
+    $('#edBase').innerHTML=picGroupTabs(ED.grp,mine.length)+`<div class="tgs">${picGroupKeys(ED.grp,mine).map(k=>`<button type="button" class="tg" data-eb="${esc(k)}">${picPart(k)?'★':''}${esc(picPoseName(k))}</button>`).join('')}</div>`;
+    $$('[data-pgrp]',$('#edBase')).forEach(b=>b.onclick=()=>{ED.grp=b.dataset.pgrp;drawBase();});
+    /* 元にするポーズを押すと、形・タグをそのポーズに替える（名前は、空か前に自動で入れた名前のときだけ替える）。メモには足さない（メモは「今のタグをメモに足す」のときだけ） */
+    $$('[data-eb]',$('#edBase')).forEach(b=>b.onclick=()=>{const k=b.dataset.eb,nm=picPoseName(k),tg=picPoseTags(k).join(', ');ED.P=picKeepLocks(ED.P,picSkelOf(k),ED.lock);
+      $('#edTags').value=tg;const n=$('#edName');if(!n.value.trim()||n.value===ED.autoName){n.value=picPart(k)?'':nm;ED.autoName=n.value;}
+      draw();});};
+  drawBase();
+  /* 固定する部位（右・左は人物から見た向き。色はピクトグラムの手足と同じ） */
+  const drawLock=()=>{$('#edLock').innerHTML=Object.entries(PIC_LOCKS).map(([g,[nm]])=>{const on=ED.lock.has(g),c=g[0]==='r'?PIC_COL.r:g[0]==='l'?PIC_COL.l:'';
+      return `<button type="button" class="tg ${on?'on':''}" data-lk="${g}" aria-pressed="${on}" ${c&&!on?`style="border-color:${c}"`:''}>${on?'🔒':'🔓'} ${nm}</button>`;}).join('')
+      +(ED.lock.size?'<button type="button" class="tg new" data-lk="none">固定をすべて外す</button>':'');
+    $$('[data-lk]',$('#edLock')).forEach(b=>b.onclick=()=>{const g=b.dataset.lk;if(g==='none')ED.lock.clear();else if(ED.lock.has(g))ED.lock.delete(g);else ED.lock.add(g);drawLock();draw();});};
+  drawLock();
+  /* メモ（組み合わせ用）。「名前：タグ」を1行ずつ。この画面を閉じると消える */
+  const memo=$('#edMemo');
+  const memoAdd=(name,tags)=>{const line=`${name||'タグ'}：${tags}`;const L=memo.value.split('\n').map(x=>x.trim()).filter(Boolean);if(!L.includes(line))L.push(line);memo.value=L.join('\n');};
+  /* 各行の「：」のあとをタグとして読む（半角の「:」は、重みの (tag:1.2) と区別するため、かっこより前にあるときだけ） */
+  const memoTags=()=>memo.value.split('\n').flatMap(x=>{const i=x.indexOf('：'),j=x.indexOf(':');const r=i>=0?x.slice(i+1):(j>=0&&!x.slice(0,j).includes('('))?x.slice(j+1):x;return splitTags(r);});
+  $('#edMemoIn').onclick=()=>{const t=$('#edTags').value.trim();if(!t)return toast('タグが空です');memoAdd($('#edName').value.trim()||'今のタグ',splitTags(t).join(', '));toast('メモに足しました');};
+  $('#edMemoOut').onclick=()=>{const t=memoTags();if(!t.length)return toast('メモが空です');const ta=$('#edTags');ta.value=uniq([...splitTags(ta.value),...t]).join(', ');toast('タグに足しました');};
+  $('#edMemoClr').onclick=()=>{if(memo.value.trim()&&!confirm('メモを消しますか？'))return;memo.value='';};
+  /* 日本語 → 英語 */
+  $('#edJaGo').onclick=async()=>{const t=$('#edJa').value.trim();if(!t)return toast('日本語を入れてください');const b=$('#edJaGo'),m=$('#edJaMsg');b.disabled=true;b.textContent='直しています…';
+    try{const r=await jaToTags(t);
+      if(r.tags.length){const ta=$('#edTags');ta.value=uniq([...splitTags(ta.value),...r.tags]).join(', ');}
+      if(!$('#edName').value.trim())$('#edName').value=t;
+      if(r.fail.length)m.innerHTML=`<b style="color:var(--warn)">「${esc(r.fail.join('、'))}」は直せませんでした。</b><a href="${gtLink(r.fail.join('\n'))}" target="_blank" rel="noopener">Google翻訳で開く</a>（英語をコピーして、タグに貼ってください）`;
+      else{m.textContent=`タグに足しました（辞書 ${r.dict}・翻訳 ${r.net}）。合っているか確かめてください。`;$('#edJa').value='';}
+    }finally{b.disabled=false;b.textContent='英語に';}};
   $$('[data-ev]').forEach(b=>b.onclick=()=>{ED.view=b.dataset.ev;draw();});
   const toS=e=>{const r=svg.getBoundingClientRect();return{x:(e.clientX-r.left)/r.width*600,y:(e.clientY-r.top)/r.height*680};};
-  st.addEventListener('pointerdown',e=>{const q=toS(e),p=proj();let best=null,bd=45;for(const n of PIC_HANDLES){const d=Math.hypot(p[n].X-q.x,p[n].Y-q.y);if(d<bd){bd=d;best=n;}}
+  st.addEventListener('pointerdown',e=>{const q=toS(e),p=proj();let best=null,bd=45;for(const n of PIC_HANDLES){if(ED.lock.has(PIC_LOCK_OF[n]))continue;/* 固定した部位は動かさない */const d=Math.hypot(p[n].X-q.x,p[n].Y-q.y);if(d<bd){bd=d;best=n;}}
     if(best){ED.drag=best;st.setPointerCapture(e.pointerId);draw();}});
   st.addEventListener('pointermove',e=>{if(!ED.drag)return;const q=toS(e),ia=ED.view==='front'?0:2,J=ED.drag,Pa=ED.P[PIC_PARENT[J]];
     const ma=(q.x-OX)/K,mb=(GY-q.y)/K,d=Math.atan2(mb-Pa[1],ma-Pa[ia])-Math.atan2(ED.P[J][1]-Pa[1],ED.P[J][ia]-Pa[ia]),c=Math.cos(d),s=Math.sin(d),pa=Pa[ia],pb=Pa[1];
     for(const n of picSub(J)){const v=ED.P[n];if(!v)continue;const ra=v[ia]-pa,rb=v[1]-pb;v[ia]=pa+ra*c-rb*s;v[1]=pb+ra*s+rb*c;}draw();});
   const end=()=>{if(ED.drag){ED.drag=null;draw();}};st.addEventListener('pointerup',end);st.addEventListener('pointercancel',end);
   $('#edCancel').onclick=closeSheet;
-  $('#edOp').onclick=()=>{if(pc&&pc.on)picSaveOpenPose(sc,{i:slotI,P:ED.P});else toast('この人物の「ピクトグラムで向き・位置を決める」をオンにしてください');};
+  /* OpenPose：シーンの人物がピクトグラムを使っていればその位置で、そうでなければ真ん中に1人で */
+  $('#edOp').onclick=()=>{if(pc&&pc.on)return picSaveOpenPose(sc,{i:slotI,P:ED.P});
+    const t={title:$('#edName').value.trim()||'pose',chars:[{pic:Object.assign(picNew({chars:[0]},0),{on:true,gaze:true,yaw:0})}],pic:{pitch:0,ar:(sc&&sc.pic&&sc.pic.ar)||'800x912'}};picSaveOpenPose(t,{i:0,P:ED.P});};
   $('#edSave').onclick=async()=>{
     const name=$('#edName').value.trim(),tags=$('#edTags').value.trim();
     if(!name)return toast('名前を入れてください');if(!tags)return toast('タグを入れてください');
     const P=picClone(ED.P);let p=part;
     if(p){p.name=name;p.tags=tags;p.skel=P;await saveNow('parts',p);}
     else{p={id:uid(),type:'action',name,tags,subject:'',weight:'',loraName:'',neg:'',memo:'ピクトグラムで作ったポーズ',text:'',skel:P,created:Date.now()};S.parts.push(p);await saveNow('parts',p);}
-    if(pc){pc.pose=p.id;await saveNow('scenes',sc);}
-    closeSheet();render(true);toast(part?'ポーズを直しました':'ポーズを登録しました');
+    if(pc){pc.pose=p.id;await saveNow('scenes',sc);picUseRecent(p.id);}
+    closeSheet();if(onDone)onDone(p);else render(true);toast(part?'ポーズを直しました':'ポーズを登録しました');
   };
 }
 
