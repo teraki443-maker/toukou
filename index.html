@@ -45,6 +45,18 @@ nav#tabs button.on{color:var(--acc);font-weight:700}
 .sec{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:14px;margin:0 0 12px}
 .sec>h2{font-size:14px;margin:0 0 10px;display:flex;align-items:baseline;flex-wrap:wrap;column-gap:8px;row-gap:0}
 .sec>h2 small{font-weight:400;color:var(--sub);font-size:12px}
+/* シーンの画面：欄をたたむ（見出しを押す）。たたんだ欄は、選んでいるものを見出しの下に小さく出す */
+.sec>h2.fh,.slot>.sh.fh{cursor:pointer;-webkit-user-select:none;user-select:none;position:relative;padding-right:24px}
+.sec>h2.fh::after,.slot>.sh.fh::after{content:'';position:absolute;right:6px;top:5px;width:7px;height:7px;border-right:2px solid var(--sub);border-bottom:2px solid var(--sub);transform:rotate(45deg);transition:transform .15s}
+.slot>.sh.fh{padding-right:0;padding-left:18px;flex-wrap:wrap}
+.slot>.sh.fh::after{top:50%;margin-top:-6px;right:auto;left:2px}
+.sec.fold>h2.fh::after,.slot.fold>.sh.fh::after{transform:rotate(-45deg)}
+.sec.fold>*:not(h2){display:none}
+.sec.fold>h2{margin:0}
+.slot.fold>*:not(.sh){display:none}
+.slot.fold>.sh{margin-bottom:0}
+.fsum{display:block;flex-basis:100%;font-size:12px;font-weight:400;color:var(--sub);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.foldall{display:flex;justify-content:flex-end;gap:6px;margin:0 0 8px}
 .f{display:block;margin:0 0 12px}
 .f>span{display:block;font-size:12px;color:var(--sub);margin-bottom:4px;font-weight:600}
 .tgs{display:flex;flex-wrap:wrap;gap:6px}
@@ -973,6 +985,36 @@ function partSel(label,type,val,attrs){const p=byId('parts',val);
 function chipSel(label,type,arr,attrs){const ps=S.parts.filter(p=>p.type===type).sort((a,b)=>(a.name||'').localeCompare(b.name||'','ja'));
   return `<div class="f cat" ${catAttr(type)}><span>${pic(type)}${label}（いくつでも・長押しで直す）</span><div class="tgs">${ps.map(p=>`<button type="button" class="tg ${arr.includes(p.id)?'on':''}" ${attrs} data-pid="${p.id}">${esc(p.name||'名前なし')}</button>`).join('')}<button type="button" class="tg new" ${attrs} data-pid="__new">＋ 登録</button></div></div>`;}
 let wSel=null;
+/* ===== シーンの画面の欄をたたむ =====
+   見出し（人物・絡み・背景など）を押すと、たたむ・ひらく。人物は1人ずつたためる。
+   たたんだ状態は、この端末に覚えておく（localStorage の toukou-fold。シーンが変わっても同じ） */
+const FOLD_KEY='toukou-fold';
+function foldGet(){try{return JSON.parse(localStorage.getItem(FOLD_KEY)||'{}')||{};}catch(_){return{};}}
+function foldSet(o){try{localStorage.setItem(FOLD_KEY,JSON.stringify(o));}catch(_){}}
+/* たたんだ欄の中で選んでいるもの（部品の名前・足すタグ）を短く並べる */
+function foldSum(el){const a=[];
+  $$('select',el).forEach(x=>{if(x.value){const o=x.options[x.selectedIndex];if(o)a.push(o.textContent.trim());}});
+  $$('.tg.on:not(.new)',el).forEach(x=>a.push(x.textContent.trim()));
+  $$('input[data-t="add"],input[data-st="add"]',el).forEach(x=>{if(x.value.trim())a.push('＋'+x.value.trim());});
+  $$('input[data-lora]:checked',el).forEach(x=>{const n=x.closest('.lrow');const ln=n&&$('.ln',n);if(ln)a.push(ln.firstChild.textContent.trim());});
+  $$('.im img',el).length&&a.push(`画像 ${$$('.im img',el).length} 枚`);
+  return a.join('・')||'（なし）';}
+function setupFold(){
+  const st=foldGet();
+  const wire=(box,head,key)=>{
+    head.classList.add('fh');head.setAttribute('role','button');head.tabIndex=0;
+    const show=()=>{const f=!!st[key];box.classList.toggle('fold',f);head.setAttribute('aria-expanded',f?'false':'true');
+      let sm=$(':scope>.fsum',head);if(f){if(!sm){sm=document.createElement('span');sm.className='fsum';head.appendChild(sm);}sm.textContent=foldSum(box);}else if(sm)sm.remove();};
+    const tog=()=>{if(st[key])delete st[key];else st[key]=1;foldSet(st);show();};
+    head.onclick=e=>{if(e.target.closest('button,input,select,a,label'))return;tog();};
+    head.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();tog();}};
+    show();};
+  $$(':scope>.sec',view).forEach(sec=>{const h=$(':scope>h2',sec);if(!h)return;const key='s:'+(h.firstChild&&h.firstChild.textContent||'').trim();wire(sec,h,key);});
+  $$('.slot',view).forEach((sl,i)=>{const h=$(':scope>.sh',sl);if(h)wire(sl,h,'p:'+i);});
+  /* すべてたたむ・ひらく */
+  const fa=$('#foldAll');if(fa){$('[data-fa="close"]',fa).onclick=()=>{$$('.fh',view).forEach(h=>{if(!h.parentElement.classList.contains('fold'))h.click();});};
+    $('[data-fa="open"]',fa).onclick=()=>{$$('.fh',view).forEach(h=>{if(h.parentElement.classList.contains('fold'))h.click();});};}
+}
 function vScene(c){
   const sc=byId('scenes',c.id);if(!sc){stack.pop();return render();}
   sc.chars=sc.chars||[];sc.loras=sc.loras||[];sc.images=sc.images||[];sc.roles=sc.roles||[];sc.inter=sc.inter||[];sc.angle=sc.angle||[];sc.fx=sc.fx||[];sc.np=sc.np||[];
@@ -992,6 +1034,7 @@ function vScene(c){
     <div id="dupBox"></div>
   </div>
 
+  <div class="foldall" id="foldAll"><button type="button" class="btn ghost sm" data-fa="close">すべてたたむ</button><button type="button" class="btn ghost sm" data-fa="open">すべてひらく</button></div>
   <div class="sec" id="wSec"><h2>重み <small>タグを押して、強く・弱くする</small></h2>
     <div id="wBody"></div>
   </div>
@@ -1130,6 +1173,7 @@ function vScene(c){
     $('#pLora').innerHTML=p.loras.length?'PixAI で選ぶ LoRA：'+p.loras.map(l=>`<span>${esc(l.name)}（${esc(l.weight===''?'—':l.weight)}）</span>`).join(''):'';};
   upd();
   picWire(sc,upd);
+  setupFold();
   $$('[data-picon]',view).forEach(cb=>cb.onchange=()=>{const i=+cb.dataset.picon,sl=sc.chars[i];if(cb.checked){if(sl.pic)sl.pic.on=true;else sl.pic=picNew(sc,i);picSel=i;}else if(sl.pic)sl.pic.on=false;picCfg(sc);save('scenes',sc);render(true);});
   $('#cpPos').onclick=()=>copyText(buildPrompt(sc).pos);
   $('#cpNeg').onclick=()=>copyText(buildPrompt(sc).neg);
