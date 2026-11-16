@@ -342,6 +342,12 @@ details.nh .nhb .sec{border:0;padding:0;background:none;box-shadow:none}
 .piclg i{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:4px;vertical-align:-1px}
 .picop{display:block;max-width:38%;border-radius:6px;border:1px solid var(--line);margin:0 0 8px;background:#000}
 /* ピクトグラムから作ったタグの欄 */
+/* ポーズを作る画面のメモ：行をタップで呼び出す */
+.memol{border:1px solid var(--line);border-radius:8px;padding:6px;background:var(--soft);display:flex;flex-direction:column;gap:4px}
+.mrow{display:flex;gap:4px;align-items:stretch}
+.mcall{flex:1;min-width:0;text-align:left;border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:6px;padding:7px 9px;font-size:13px;overflow-wrap:anywhere}
+.mcall b{font-weight:700}
+.mdel{flex:none;width:34px;border:1px solid var(--line);background:var(--card);color:var(--sub);border-radius:6px}
 .pmenu{flex-basis:100%;width:100%;border:1px solid var(--line);border-radius:10px;padding:8px;margin-top:4px;background:var(--card)}
 .pgtabs{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 8px;background:none;padding:0}
 .pgtabs button{flex:none;border:1px solid var(--line);background:var(--card);border-radius:999px;padding:4px 11px;font-size:12px;font-weight:700;color:var(--ink)}
@@ -433,7 +439,7 @@ const FMT={
 
 /* ========== データベース（IndexedDB） ========== */
 let db=null;
-const APP_VER='v45';/* sw.js の VERSION と同じにする */
+const APP_VER='v46';/* sw.js の VERSION と同じにする */
 const STORES=['parts','scenes','works','images','meta','fonts','stamps'];
 function openDB(){return new Promise((res,rej)=>{const r=indexedDB.open('manga4koma',3);r.onupgradeneeded=()=>{const d=r.result;for(const s of STORES)if(!d.objectStoreNames.contains(s))d.createObjectStore(s,{keyPath:'id'});};r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error);});}
 function tx(store,mode,fn){return new Promise((res,rej)=>{if(!db)return res(undefined);const t=db.transaction(store,mode);const req=fn(t.objectStore(store));let out;if(req)req.onsuccess=()=>{out=req.result;};t.oncomplete=()=>res(out);t.onerror=()=>rej(t.error);t.onabort=()=>rej(t.error);});}
@@ -2710,9 +2716,9 @@ function openPoseEditor(sc,slotI,partId,onDone){
     <span class="hint" id="edJaMsg">「、」で区切って入れます。よく使う言葉はアプリの辞書で、ほかはインターネットの翻訳（MyMemory）で直します。名前が空なら、この日本語を名前にします。</span></div>
   <label class="f"><span>名前</span><input id="edName" value="${esc(part?part.name:'')}" placeholder="例：片手を腰に当てる"></label>
   <label class="f"><span>タグ（英語・カンマ区切り）</span><textarea id="edTags" rows="2" placeholder="hand on hip, standing">${esc(part?part.tags:'')}</textarea><span class="hint">このポーズを選んだ人物のタグに入ります。「ポーズ」の部品として保存するので、ほかのシーンでも選べます。</span></label>
-  <div class="f edmemo"><span>メモ（組み合わせ用・一時置き）</span><textarea id="edMemo" rows="4" placeholder="ひざまずく：kneeling&#10;応援する：cheering"></textarea>
-    <div class="row" style="margin:6px 0 0"><button type="button" class="btn ghost sm" id="edMemoIn">↓ 今のタグをメモに足す</button><button type="button" class="btn ghost sm" id="edMemoOut">↑ メモをタグに足す</button><button type="button" class="btn ghost sm" id="edMemoClr">メモを消す</button></div>
-    <span class="hint">「今のタグをメモに足す」を押すと、「名前：タグ」の形で1行足します（元にするポーズを選んだだけでは足しません）。「メモをタグに足す」は、各行の「：」のあとのタグを足します。メモは、この画面を閉じると消えます。</span></div>
+  <div class="f edmemo"><span>メモ（組み合わせ用・一時置き）</span><div class="memol" id="edMemo"></div>
+    <div class="row" style="margin:6px 0 0"><button type="button" class="btn ghost sm" id="edMemoIn">↓ 今のポーズをメモに足す</button><button type="button" class="btn ghost sm" id="edMemoOut">↑ メモのタグをすべて足す</button><button type="button" class="btn ghost sm" id="edMemoClr">メモを消す</button></div>
+    <span class="hint">「今のポーズをメモに足す」を押すと、「名前：タグ」と、そのときの形を1行足します（元にするポーズを選んだだけでは足しません）。行をタップすると、そのポーズの形とタグを呼び出します（固定した部位はそのまま）。✕でその行を消します。メモは、この画面を閉じると消えます。</span></div>
   <div class="row"><button class="btn" id="edSave">${part?'保存':sc?'登録して使う':'登録'}</button><button class="btn ghost" id="edOp">OpenPose 画像を保存</button><button class="btn ghost" id="edCancel">やめる</button></div>`);
   const svg=$('#edSvg'),st=$('#edStage');
   const proj=()=>{const o={};for(const n in ED.P){const[x,y,z]=ED.P[n];o[n]=ED.view==='front'?{X:OX+x*K,Y:GY-y*K,d:z,s:1,z1:z}:{X:OX+z*K,Y:GY-y*K,d:x,s:1,z1:x};}return o;};
@@ -2739,14 +2745,19 @@ function openPoseEditor(sc,slotI,partId,onDone){
       +(ED.lock.size?'<button type="button" class="tg new" data-lk="none">固定をすべて外す</button>':'');
     $$('[data-lk]',$('#edLock')).forEach(b=>b.onclick=()=>{const g=b.dataset.lk;if(g==='none')ED.lock.clear();else if(ED.lock.has(g))ED.lock.delete(g);else ED.lock.add(g);drawLock();draw();});};
   drawLock();
-  /* メモ（組み合わせ用）。「名前：タグ」を1行ずつ。この画面を閉じると消える */
-  const memo=$('#edMemo');
-  const memoAdd=(name,tags)=>{const line=`${name||'タグ'}：${tags}`;const L=memo.value.split('\n').map(x=>x.trim()).filter(Boolean);if(!L.includes(line))L.push(line);memo.value=L.join('\n');};
-  /* 各行の「：」のあとをタグとして読む（半角の「:」は、重みの (tag:1.2) と区別するため、かっこより前にあるときだけ） */
-  const memoTags=()=>memo.value.split('\n').flatMap(x=>{const i=x.indexOf('：'),j=x.indexOf(':');const r=i>=0?x.slice(i+1):(j>=0&&!x.slice(0,j).includes('('))?x.slice(j+1):x;return splitTags(r);});
-  $('#edMemoIn').onclick=()=>{const t=$('#edTags').value.trim();if(!t)return toast('タグが空です');memoAdd($('#edName').value.trim()||'今のタグ',splitTags(t).join(', '));toast('メモに足しました');};
-  $('#edMemoOut').onclick=()=>{const t=memoTags();if(!t.length)return toast('メモが空です');const ta=$('#edTags');ta.value=uniq([...splitTags(ta.value),...t]).join(', ');toast('タグに足しました');};
-  $('#edMemoClr').onclick=()=>{if(memo.value.trim()&&!confirm('メモを消しますか？'))return;memo.value='';};
+  /* メモ（組み合わせ用）。{名前, タグ, 形} を1行ずつ（ED.memo）。行をタップすると、その形とタグを呼び出す。この画面を閉じると消える */
+  ED.memo=[];
+  const drawMemo=()=>{const box=$('#edMemo');
+    box.innerHTML=ED.memo.length?ED.memo.map((m,i)=>`<div class="mrow"><button type="button" class="mcall" data-mi="${i}"><b>${esc(m.name)}</b>：${esc(m.tags)}</button><button type="button" class="mdel" data-md="${i}" aria-label="この行を消す">✕</button></div>`).join('')
+      :'<p class="hint" style="margin:0">まだありません。「今のポーズをメモに足す」で足します。</p>';
+    $$('[data-mi]',box).forEach(b=>b.onclick=()=>{const m=ED.memo[+b.dataset.mi];ED.P=picKeepLocks(ED.P,picFill(picClone(m.P)),ED.lock);$('#edTags').value=m.tags;
+      const n=$('#edName');if(!n.value.trim()||n.value===ED.autoName){n.value=m.name;ED.autoName=n.value;}draw();toast(`「${m.name}」を呼び出しました`);});
+    $$('[data-md]',box).forEach(b=>b.onclick=()=>{ED.memo.splice(+b.dataset.md,1);drawMemo();});};
+  drawMemo();
+  $('#edMemoIn').onclick=()=>{const t=splitTags($('#edTags').value).join(', ');if(!t)return toast('タグが空です');const name=$('#edName').value.trim()||'今のポーズ';
+    const i=ED.memo.findIndex(m=>m.name===name&&m.tags===t);const e={name,tags:t,P:picClone(ED.P)};if(i>=0)ED.memo[i]=e;else ED.memo.push(e);drawMemo();toast('メモに足しました');};
+  $('#edMemoOut').onclick=()=>{const t=ED.memo.flatMap(m=>splitTags(m.tags));if(!t.length)return toast('メモが空です');const ta=$('#edTags');ta.value=uniq([...splitTags(ta.value),...t]).join(', ');toast('タグに足しました');};
+  $('#edMemoClr').onclick=()=>{if(ED.memo.length&&!confirm('メモを消しますか？'))return;ED.memo=[];drawMemo();};
   /* 日本語 → 英語 */
   $('#edJaGo').onclick=async()=>{const t=$('#edJa').value.trim();if(!t)return toast('日本語を入れてください');const b=$('#edJaGo'),m=$('#edJaMsg');b.disabled=true;b.textContent='直しています…';
     try{const r=await jaToTags(t);
