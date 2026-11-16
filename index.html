@@ -59,6 +59,9 @@ nav#tabs button.on{color:var(--acc);font-weight:700}
 .lkrow select{min-width:0}
 .lkrow [data-lkp],.lkrow [data-lkt]{grid-column:1/-1}
 .lkh{margin:-4px 0 6px}
+.pool{border:1px dashed var(--line3,var(--line));border-radius:10px;padding:8px 10px;margin:0 0 8px}
+.poolh{font-size:13px;font-weight:700;margin:0 0 8px}
+.poolh small{display:block;font-weight:400;color:var(--sub);font-size:12px;margin-top:2px}
 .simg{border:1px solid var(--line);border-radius:10px;padding:8px 10px;margin:0 0 10px}
 .simh,.simr{display:grid;grid-template-columns:34px 34px 1fr;gap:4px;align-items:center}
 .simh{font-size:11px;color:var(--sub);text-align:center}
@@ -446,10 +449,11 @@ const PT={
   angle:{label:'カメラ位置',hint:'どこから見るか（横から・後ろから・見上げなど）。シーンにいくつでも付けられます',ph:'from side',namePh:'例：横から'},
   camera:{label:'構図',hint:'カメラの距離（全身・上半身・アップなど）やピント',ph:'full body',namePh:'例：全身'},
   light:{label:'光',hint:'光の当たり方・明るさだけ（逆光・薄暗いなど）。場所（暗い部屋・夕方の海など）は「背景」に入れます',ph:'soft lighting',namePh:'例：やわらかい光'},
+  other:{label:'その他',hint:'どの項目にも当てはまらないタグ（持ち物・小物・細かい指定など）。人物ごとにも、シーン全体にも、いくつでも付けられます',ph:'holding umbrella',namePh:'例：傘を持つ'},
   style:{label:'画風',hint:'画質・画風のタグ。タグの形では最後に入ります',ph:'masterpiece, best quality',namePh:'例：いつもの画風'},
   lora:{label:'LoRA',hint:'LoRA を使うときにプロンプトへ足すタグ（なければ空のまま）。LoRA は作られたモデルの系統（SDXL 系・Tsubaki 系）でしか使えません',ph:'トリガーワード',namePh:'例：水彩風'}
 };
-const PT_ORDER=['chara','phys','outfit','action','act','face','body','inter','bg','angle','camera','light','fx','np','style','lora'];
+const PT_ORDER=['chara','phys','outfit','action','act','face','body','inter','bg','angle','camera','light','fx','np','other','style','lora'];
 /* プロンプトの形（PixAI 公式ブログの勧めに合わせる） */
 const FMT={
   tag:{label:'タグ（SDXL 系：Haruka・Hoshino など）',hint:'人数 → 人物の特徴 → 身体の特徴 → 服 → ポーズ → 行動 → 表情 → 体の状態 → 絡み → 背景 → カメラ位置 → 構図 → 光 → エフェクト・動き → ネガポジ → 画風 の順に、タグを並べます。'},
@@ -459,7 +463,7 @@ const FMT={
 
 /* ========== データベース（IndexedDB） ========== */
 let db=null;
-const APP_VER='v50';/* sw.js の VERSION と同じにする */
+const APP_VER='v51';/* sw.js の VERSION と同じにする */
 const STORES=['parts','scenes','works','images','meta','fonts','stamps'];
 function openDB(){return new Promise((res,rej)=>{const r=indexedDB.open('manga4koma',3);r.onupgradeneeded=()=>{const d=r.result;for(const s of STORES)if(!d.objectStoreNames.contains(s))d.createObjectStore(s,{keyPath:'id'});};r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error);});}
 function tx(store,mode,fn){return new Promise((res,rej)=>{if(!db)return res(undefined);const t=db.transaction(store,mode);const req=fn(t.objectStore(store));let out;if(req)req.onsuccess=()=>{out=req.result;};t.oncomplete=()=>res(out);t.onerror=()=>rej(t.error);t.onabort=()=>rej(t.error);});}
@@ -483,8 +487,8 @@ const byId=(k,id)=>!id?undefined:(k==='parts'&&String(id).includes(VSEP))?varPar
 function mapSceneIds(s,fn,snaps){
   const one=v=>v?(fn(v)||''):v;
   const arr=a=>{const o=[];for(const x of A_(a)){const n=one(x);if(n&&!o.includes(n))o.push(n);}return o;};
-  const fix=s=>{for(const c of s.chars||[]){for(const f of['chara','face'])if(c[f])c[f]=one(c[f]);for(const f of['outfit','action','body','phys','act'])if(c[f]!=null&&A_(c[f]).length)c[f]=arr(c[f]);if(c.pic&&c.pic.pose)c.pic.pose=fn(c.pic.pose)||'stand';}
-    for(const f of['bg','style','camera','light'])if(s[f])s[f]=one(s[f]);for(const f of['inter','angle','fx','np'])if(Array.isArray(s[f]))s[f]=arr(s[f]);
+  const fix=s=>{for(const c of s.chars||[]){for(const f of['chara','face'])if(c[f])c[f]=one(c[f]);for(const f of['outfit','action','body','phys','act','other'])if(c[f]!=null&&A_(c[f]).length)c[f]=arr(c[f]);if(c.pic&&c.pic.pose)c.pic.pose=fn(c.pic.pose)||'stand';}
+    for(const f of['bg','style','camera','light'])if(s[f])s[f]=one(s[f]);for(const f of['inter','angle','fx','np','other'])if(Array.isArray(s[f]))s[f]=arr(s[f]);
     if(Array.isArray(s.loras)){const seen=new Set();s.loras=s.loras.map(l=>Object.assign({},l,{id:one(l.id)})).filter(l=>{if(!l.id||seen.has(l.id))return false;seen.add(l.id);return true;});}};
   const before=JSON.stringify(s);fix(s);if(snaps)for(const m of Object.values(s.imgMeta||{}))if(m&&m.snap)fix(m.snap);return JSON.stringify(s)!==before;}
 async function loadAll(){
@@ -659,7 +663,7 @@ function slotInfo(sl){
   /* 呼び方：シーンの人物の欄（sl.subj）に書いたものを先に使う。空なら部品の呼び方、それもなければ girl */
   const subj=((sl.subj||'').trim()||((c&&c.subject)||'').trim()||'girl').replace(/^\d+\s*/,'');
   return{sl,c,subj,rm,feat:uniq(T_(sl.chara),rm),phys:uniq((sl.phys||[]).flatMap(T_),rm),out:uniq(A_(sl.outfit).flatMap(T_),rm),pose:uniq(A_(sl.action).flatMap(T_),rm),act:uniq((sl.act||[]).flatMap(T_),rm),face:uniq(T_(sl.face),rm),
-    body:uniq((sl.body||[]).flatMap(T_),rm),add:uniq(splitTags(sl.add),rm),pic:[]};
+    body:uniq((sl.body||[]).flatMap(T_),rm),other:uniq((sl.other||[]).flatMap(T_),rm),add:uniq(splitTags(sl.add),rm),pic:[]};
 }
 const NUMW=['','One','Two','Three','Four','Five','Six'];
 const ORD=['first','second','third','fourth','fifth','sixth'];
@@ -689,7 +693,7 @@ const ROLE_RE={
 const COUNT_RE=/^(\d+(girl|boy)s?|solo|multiple (girls|boys))$/;
 function roleCheck(type,tags){
   const out={groups:[],count:[],paren:false};
-  if(type==='np'||type==='lora')return out;
+  if(type==='np'||type==='lora'||type==='other')return out;
   const g={};
   for(const t of splitTags(tags)){const k=norm(t);
     if(COUNT_RE.test(k)){out.count.push(t);continue;}
@@ -726,8 +730,8 @@ async function mergeDupParts(type){
   const map={};
   for(const g of dupParts(type)){g.sort((a,b)=>partUsage(b.id)-partUsage(a.id)||(a.created||0)-(b.created||0));for(const x of g.slice(1))map[x.id]=g[0].id;}
   const R=id=>{const b=vBase(id);return map[b]?map[b]+String(id).slice(b.length):id;},RA=a=>[...new Set(A_(a).map(R))];
-  const fix=s=>{for(const c of s.chars||[]){for(const f of['chara','face'])if(c[f])c[f]=R(c[f]);for(const f of['outfit','action','body','phys','act'])if(c[f]!=null)c[f]=Array.isArray(c[f])?RA(c[f]):R(c[f]);if(c.pic&&c.pic.pose)c.pic.pose=R(c.pic.pose);}
-    for(const f of['bg','style','camera','light'])if(s[f])s[f]=R(s[f]);for(const f of['inter','angle','fx','np'])if(Array.isArray(s[f]))s[f]=RA(s[f]);
+  const fix=s=>{for(const c of s.chars||[]){for(const f of['chara','face'])if(c[f])c[f]=R(c[f]);for(const f of['outfit','action','body','phys','act','other'])if(c[f]!=null)c[f]=Array.isArray(c[f])?RA(c[f]):R(c[f]);if(c.pic&&c.pic.pose)c.pic.pose=R(c.pic.pose);}
+    for(const f of['bg','style','camera','light'])if(s[f])s[f]=R(s[f]);for(const f of['inter','angle','fx','np','other'])if(Array.isArray(s[f]))s[f]=RA(s[f]);
     if(Array.isArray(s.loras)){const seen=new Set();s.loras=s.loras.map(l=>Object.assign({},l,{id:R(l.id)})).filter(l=>{if(seen.has(l.id))return false;seen.add(l.id);return true;});}};
   for(const s of S.scenes){const before=JSON.stringify(s);fix(s);for(const m of Object.values(s.imgMeta||{}))if(m&&m.snap)fix(m.snap);if(JSON.stringify(s)!==before)await saveNow('scenes',s);}
   for(const id in map){S.parts=S.parts.filter(p=>p.id!==id);await dbDel('parts',id);markDeleted(id);}
@@ -745,9 +749,9 @@ function dupScan(sc){
   for(const l of sc.loras||[])addIds([l.id],new Set(),'g','');
   const multi=(sc.chars||[]).length>1,PIC=picTags(sc);
   (sc.chars||[]).forEach((sl,i)=>{const rm=new Set(splitTags(sl.remove).map(norm)),scope=fmt==='group'?'s'+i:'g',pre=multi?`人物${i+1}の`:'';
-    addIds([sl.chara,...(sl.phys||[]),...A_(sl.outfit),...A_(sl.action),...(sl.act||[]),sl.face,...(sl.body||[])],rm,scope,pre);addT(splitTags(sl.add),pre+'足すタグ',rm,scope);addT(PIC.per[i]||[],pre+'向き・位置',rm,scope);});
+    addIds([sl.chara,...(sl.phys||[]),...A_(sl.outfit),...A_(sl.action),...(sl.act||[]),sl.face,...(sl.body||[]),...(sl.other||[])],rm,scope,pre);addT(splitTags(sl.add),pre+'足すタグ',rm,scope);addT(PIC.per[i]||[],pre+'向き・位置',rm,scope);});
   const srm=new Set(splitTags(sc.remove).map(norm));
-  addIds([...(sc.inter||[]),sc.bg,...(sc.angle||[]),sc.camera,sc.light,...(sc.fx||[]),...(sc.np||[]),sc.style],srm,'g','');
+  addIds([...(sc.inter||[]),sc.bg,...(sc.angle||[]),sc.camera,sc.light,...(sc.fx||[]),...(sc.np||[]),...(sc.other||[]),sc.style],srm,'g','');
   addT(splitTags(sc.add),'足すタグ（人物以外）',srm,'g');addT(PIC.scene,'向き・位置',srm,'g');
   const nsrc=[];const negOf=(id,suf)=>{const p=P_(id);if(p)for(const t of splitTags(p.neg))nsrc.push({t,label:lab(id)+suf});};
   if(sc.style)negOf(sc.style,'のネガティブ');for(const id of sc.np||[])negOf(id,'のネガティブ');for(const t of splitTags(sc.neg))nsrc.push({t,label:'ネガティブに足すタグ'});
@@ -787,8 +791,8 @@ function buildPrompt0(sc,D){
   const slots=(sc.chars||[]).map(sl=>slotInfo(sl));
   const srm=splitTags(sc.remove);
   /* ピクトグラムで決めた向き・位置のタグ */
-  const PIC=picTags(sc);slots.forEach((s,i)=>s.pic=uniq(PIC.per[i]||[],[...s.rm,...s.feat,...s.phys,...s.out,...s.pose,...s.act,...s.face,...s.body,...s.add]));const picS=uniq(PIC.scene,srm);
-  const inter=uniq((sc.inter||[]).flatMap(T_),srm),bg=uniq(T_(sc.bg),srm),ang=uniq((sc.angle||[]).flatMap(T_),srm),cam=uniq(T_(sc.camera),srm),lit=uniq(T_(sc.light),srm),fx=uniq((sc.fx||[]).flatMap(T_),srm),npP=uniq((sc.np||[]).flatMap(T_),srm),add=uniq(splitTags(sc.add),srm),style=uniq(T_(sc.style),srm);
+  const PIC=picTags(sc);slots.forEach((s,i)=>s.pic=uniq(PIC.per[i]||[],[...s.rm,...s.feat,...s.phys,...s.out,...s.pose,...s.act,...s.face,...s.body,...s.other,...s.add]));const picS=uniq(PIC.scene,srm);
+  const inter=uniq((sc.inter||[]).flatMap(T_),srm),bg=uniq(T_(sc.bg),srm),ang=uniq((sc.angle||[]).flatMap(T_),srm),cam=uniq(T_(sc.camera),srm),lit=uniq(T_(sc.light),srm),fx=uniq((sc.fx||[]).flatMap(T_),srm),npP=uniq((sc.np||[]).flatMap(T_),srm),add=uniq(splitTags(sc.add),srm),oth=uniq((sc.other||[]).flatMap(T_),srm),style=uniq(T_(sc.style),srm);
   const loras=[],trig=[];
   for(const l of sc.loras||[]){
     const p=P_(l.id);if(!p)continue;
@@ -802,8 +806,8 @@ function buildPrompt0(sc,D){
      人物が2人以上のときだけ、人物のタグに番号を付けて、人物ごとに重みを付けられるようにする */
   const multi=slots.length>1;
   const I=(arr,cat,si)=>arr.map(t=>({t,cat,si:multi?si:null,p:si}));
-  const slotItems=(s,i)=>[...I(s.feat,'chara',i),...I(s.phys,'phys',i),...I(s.out,'outfit',i),...I(s.pose,'action',i),...I(s.act,'act',i),...I(s.face,'face',i),...I(s.body,'body',i),...I(s.add,'add',i),...I(s.pic,'pic',i)];
-  const restItems=()=>[...I(inter,'inter'),...I(picS,'pic'),...I(bg,'bg'),...I(ang,'angle'),...I(add,'add'),...I(cam,'camera'),...I(lit,'light'),...I(fx,'fx'),...I(npP,'np'),...I(style,'style')];
+  const slotItems=(s,i)=>[...I(s.feat,'chara',i),...I(s.phys,'phys',i),...I(s.out,'outfit',i),...I(s.pose,'action',i),...I(s.act,'act',i),...I(s.face,'face',i),...I(s.body,'body',i),...I(s.other,'other',i),...I(s.add,'add',i),...I(s.pic,'pic',i)];
+  const restItems=()=>[...I(inter,'inter'),...I(picS,'pic'),...I(bg,'bg'),...I(ang,'angle'),...I(add,'add'),...I(oth,'other'),...I(cam,'camera'),...I(lit,'light'),...I(fx,'fx'),...I(npP,'np'),...I(style,'style')];
   /* uniq と同じ決まりで、同じタグを1つにする（重複の欄で「残す」にしたものは残す） */
   const uniqI=arr=>{const seen=new Set();return arr.filter(x=>{const k=norm(x.t);if(seen.has(k)&&!(KEEP&&KEEP.has(k)))return false;seen.add(k);return true;});};
   const pfI=()=>{const f=D.pf();return x=>f(x.t);};
@@ -829,16 +833,16 @@ function buildPrompt0(sc,D){
   if(fmt==='prose'){
     /* 文章の形では重みを使わない（PixAI の DiT ガイドで、(tag:1.2) は効かないとされているため） */
     const B=a=>a.map(baseOf);
-    for(const s of slots)for(const k of['feat','phys','out','pose','act','face','body','add','pic'])s[k]=B(s[k]);
+    for(const s of slots)for(const k of['feat','phys','out','pose','act','face','body','other','add','pic'])s[k]=B(s[k]);
     trig.splice(0,trig.length,...B(trig));
-    for(const a of[inter,bg,ang,cam,lit,fx,npP,add,style])a.splice(0,a.length,...B(a));
+    for(const a of[inter,bg,ang,cam,lit,fx,npP,add,oth,style])a.splice(0,a.length,...B(a));
     /* 文章（Tsubaki 系） */
     const S2=[];
     if(trig.length)S2.push(uniq(trig).join(', ')+',');
     const head=s=>TX_(s.sl.chara)||`${art(s.subj)} ${s.subj}${s.feat.length?' with '+s.feat.join(', '):''}`;
     const details=s=>{const d=[];const ph=(s.sl.phys||[]).map(id=>TX_(id)||uniq(T_(id),s.rm).map(baseOf).join(', ')).filter(Boolean).join(', ');if(ph)d.push(ph);const oTx=A_(s.sl.outfit).map(TX_).filter(Boolean);const o=oTx.length?oTx.join(', '):s.out.join(', ');if(o)d.push(/^wear/i.test(o)?o:'wearing '+o);
       const pTx=A_(s.sl.action).map(TX_).filter(Boolean);const pz=pTx.length?pTx.join(', '):s.pose.join(', ');if(pz)d.push(pz);const ac=(s.sl.act||[]).map(id=>TX_(id)||uniq(T_(id),s.rm).join(', ')).filter(Boolean).join(', ');if(ac)d.push(ac);const fc=TX_(s.sl.face)||s.face.join(', ');if(fc)d.push(fc);
-      const bd=(s.sl.body||[]).map(id=>TX_(id)||uniq(T_(id),s.rm).join(', ')).filter(Boolean).join(', ');if(bd)d.push(bd);if(s.add.length)d.push(s.add.join(', '));if(s.pic.length)d.push(s.pic.join(', '));return d;};
+      const bd=(s.sl.body||[]).map(id=>TX_(id)||uniq(T_(id),s.rm).join(', ')).filter(Boolean).join(', ');if(bd)d.push(bd);if(s.other.length)d.push(s.other.join(', '));if(s.add.length)d.push(s.add.join(', '));if(s.pic.length)d.push(s.pic.join(', '));return d;};
     if(slots.length===1){const s=slots[0];S2.push(sent([head(s),...details(s)].join(', ')));}
     else if(slots.length>1){
       S2.push(sent(`${NUMW[slots.length]||slots.length} characters: `+slots.map(s=>`${art(s.subj)} ${s.subj}`).join(' and ')));
@@ -850,6 +854,7 @@ function buildPrompt0(sc,D){
     if(slots.length>1)slots.forEach((s,i)=>S2.push(sent([`The ${ORD[i]||(i+1)+'th'} is ${head(s)}`,...details(s)].join(', '))));
     const bgt=TX_(sc.bg)||bg.join(', ');if(bgt)S2.push(sent(TX_(sc.bg)?bgt:'Background: '+bgt));
     if(add.length)S2.push(sent(add.join(', ')));
+    if(oth.length)S2.push(sent(oth.join(', ')));
     const at=(sc.angle||[]).map(id=>TX_(id)).filter(Boolean),atTags=(sc.angle||[]).filter(id=>!TX_(id)).flatMap(id=>uniq(T_(id),srm).map(baseOf));
     for(const x of at)S2.push(sent(x));if(atTags.length)S2.push(sent('Viewed '+uniq(atTags).join(', ')));
     const ct=TX_(sc.camera)||cam.join(', ');if(ct)S2.push(sent(TX_(sc.camera)?ct:'Framing: '+ct));
@@ -901,15 +906,15 @@ $('#sheet .bk').onclick=closeSheet;
 /* ========== 使われている場所 ========== */
 function usedIn(sceneId){const r=[];for(const w of S.works)(w.panels||[]).forEach((p,i)=>{if(p===sceneId)r.push({w,i});});return r;}
 function partUsage(pid){const e=x=>!!x&&(x===pid||(!pid.includes(VSEP)&&vBase(x)===pid)),h=a=>A_(a).some(e);
-  return S.scenes.filter(s=>e(s.bg)||e(s.style)||e(s.camera)||e(s.light)||h(s.inter)||h(s.angle)||h(s.fx)||h(s.np)||(s.chars||[]).some(c=>e(c.chara)||h(c.outfit)||h(c.action)||(c.pic&&e(c.pic.pose))||e(c.face)||h(c.body)||h(c.phys)||h(c.act))||(s.loras||[]).some(l=>e(l.id))).length;}
+  return S.scenes.filter(s=>e(s.bg)||e(s.style)||e(s.camera)||e(s.light)||h(s.inter)||h(s.angle)||h(s.fx)||h(s.np)||h(s.other)||(s.chars||[]).some(c=>e(c.chara)||h(c.outfit)||h(c.action)||(c.pic&&e(c.pic.pose))||e(c.face)||h(c.body)||h(c.phys)||h(c.act)||h(c.other))||(s.loras||[]).some(l=>e(l.id))).length;}
 /* 服装・ポーズは、前は1つだけ（文字）、今はいくつでも（配列）。どちらでも読めるようにする */
 const A_=v=>Array.isArray(v)?v:(v?[v]:[]);
-const newSlot=()=>({chara:'',phys:[],outfit:[],action:[],act:[],face:'',body:[],add:'',remove:''});
+const newSlot=()=>({chara:'',phys:[],outfit:[],action:[],act:[],face:'',body:[],other:[],add:'',remove:''});
 /* ===== 絡みと一緒に選ぶ部品 =====
    絡みの部品に p.links=[{w, f, id}] を入れる。w は 0＝シーン全体、1・2・3＝人物の番号。f は項目（action など）、id は部品（派生は 部品id~派生id）。
    シーンで絡みを選ぶと、ここにある部品も選ぶ（1つだけ選ぶ項目は、ほかのものが選ばれていれば変えない）。
    絡みを外すときは、一緒に選んだ部品も外すか聞く（ほかの絡みでも使う部品は外さない） */
-const LK_PER=['chara','phys','outfit','action','act','face','body','add','subj'],LK_SCN=['angle','camera','light','bg','fx','np','style','add','neg'];
+const LK_PER=['chara','phys','outfit','action','act','face','body','other','add','subj'],LK_SCN=['angle','camera','light','bg','fx','np','other','style','add','neg'];
 /* シーンから取り込むときは、すべての設定（光・背景・画風・足すタグ・ネガティブに足すタグも）を入れる。いらない行は ✕ で外す */
 const LK_ONE=['chara','face','camera','bg','light','style'],LK_TX=['add','subj','neg'];
 const lkLab=(f,w)=>f==='add'?(w?'足すタグ':'足すタグ（人物以外）'):f==='subj'?'呼び方':f==='neg'?'ネガティブに足すタグ':(PT[f]||{}).label||f;
@@ -939,12 +944,13 @@ function removeLinks(sc,L){for(const l of L){const o=lkObj(sc,l);if(!o)continue;
   else if(LK_ONE.includes(l.f)){if(o[l.f]===l.id)o[l.f]='';}else o[l.f]=A_(o[l.f]).filter(x=>x!==l.id);}}
 /* シーンの設定（光・背景・画風・絡み・LoRA を除く）を、絡みに登録する形にする */
 function linksFromScene(sc){const L=[];
-  (sc.chars||[]).forEach((c,i)=>{const w=i+1;if(c.chara)L.push({w,f:'chara',id:c.chara});for(const f of['phys','outfit','action','act'])for(const id of A_(c[f]))L.push({w,f,id});if(c.face)L.push({w,f:'face',id:c.face});for(const id of A_(c.body))L.push({w,f:'body',id});
+  (sc.chars||[]).forEach((c,i)=>{const w=i+1;if(c.chara)L.push({w,f:'chara',id:c.chara});for(const f of['phys','outfit','action','act'])for(const id of A_(c[f]))L.push({w,f,id});if(c.face)L.push({w,f:'face',id:c.face});for(const id of A_(c.body))L.push({w,f:'body',id});for(const id of A_(c.other))L.push({w,f:'other',id});
     if((c.add||'').trim())L.push({w,f:'add',tx:c.add.trim()});if((c.subj||'').trim())L.push({w,f:'subj',tx:c.subj.trim()});});
-  for(const id of sc.angle||[])L.push({w:0,f:'angle',id});for(const f of['camera','light','bg'])if(sc[f])L.push({w:0,f,id:sc[f]});for(const f of['fx','np'])for(const id of sc[f]||[])L.push({w:0,f,id});if(sc.style)L.push({w:0,f:'style',id:sc.style});
+  for(const id of sc.angle||[])L.push({w:0,f:'angle',id});for(const f of['camera','light','bg'])if(sc[f])L.push({w:0,f,id:sc[f]});for(const f of['fx','np','other'])for(const id of sc[f]||[])L.push({w:0,f,id});if(sc.style)L.push({w:0,f:'style',id:sc.style});
   for(const f of['add','neg'])if((sc[f]||'').trim())L.push({w:0,f,tx:sc[f].trim()});
+  try{const P=picTags(sc);(P.per||[]).forEach((a,i)=>{if(a&&a.length)L.push({w:i+1,f:'add',tx:a.join(', ')});});if(P.scene&&P.scene.length)L.push({w:0,f:'add',tx:P.scene.join(', ')});}catch(_){}
   return L;}
-function newScene(){const s={id:uid(),title:'',roles:[],chars:[newSlot()],inter:[],angle:[],fx:[],np:[],bg:'',camera:'',light:'',style:defaultStyle(),loras:[],add:'',remove:'',neg:'',memo:'',images:[],created:Date.now(),updated:Date.now()};S.scenes.push(s);return s;}
+function newScene(){const s={id:uid(),title:'',roles:[],chars:[newSlot()],inter:[],angle:[],fx:[],np:[],other:[],bg:'',camera:'',light:'',style:defaultStyle(),loras:[],add:'',remove:'',neg:'',memo:'',images:[],created:Date.now(),updated:Date.now()};S.scenes.push(s);return s;}
 function defaultStyle(){const st=S.parts.filter(p=>p.type==='style');return st.length===1?st[0].id:'';}
 
 /* ========== 作品一覧 ========== */
@@ -1060,7 +1066,7 @@ function vScenes(c){
 /* ========== シーンの編集 ========== */
 function opts(type,sel){const ps=S.parts.filter(p=>p.type===type).sort((a,b)=>(a.name||'').localeCompare(b.name||'','ja'));return `<option value="">（なし）</option>${ps.map(p=>`<option value="${p.id}"${p.id===sel?' selected':''}>${esc(p.name||'名前なし')}${(p.vars||[]).length?'（派生あり）':''}</option>`+(p.vars||[]).map(v=>`<option value="${p.id}${VSEP}${v.id}"${p.id+VSEP+v.id===sel?' selected':''}>　└ ${esc(v.name||'派生')}</option>`).join('')).join('')}<option value="__new">＋ 新しく登録…</option>`;}
 /* 部品の種類ごとの色（シーンの欄と部品の一覧で同じ色を使う） */
-const CATC={add:'#9ca3af',pic:'#0d9488',act:'#f43f5e',chara:'#3b82f6',phys:'#0ea5a4',outfit:'#8b5cf6',action:'#f97316',face:'#ec4899',body:'#ef4444',inter:'#d946ef',bg:'#22a34a',angle:'#6366f1',camera:'#0891b2',light:'#eab308',fx:'#84cc16',np:'#64748b',style:'#a16207',lora:'#475569'};
+const CATC={add:'#9ca3af',pic:'#0d9488',act:'#f43f5e',chara:'#3b82f6',phys:'#0ea5a4',outfit:'#8b5cf6',action:'#f97316',face:'#ec4899',body:'#ef4444',inter:'#d946ef',bg:'#22a34a',angle:'#6366f1',camera:'#0891b2',light:'#eab308',fx:'#84cc16',np:'#64748b',other:'#78716c',style:'#a16207',lora:'#475569'};
 /* 長押し：0.5秒押し続けたら fn を呼ぶ。そのあとの「押した」はなかったことにする */
 function longPress(el,fn){let t=0,x=0,y=0,fired=false;
   const stop=()=>{clearTimeout(t);t=0;};
@@ -1070,7 +1076,7 @@ function longPress(el,fn){let t=0,x=0,y=0,fired=false;
   el.addEventListener('click',e=>{if(fired){fired=false;e.stopImmediatePropagation();e.preventDefault();}},true);
   el.addEventListener('contextmenu',e=>e.preventDefault());}
 /* 種類ごとの小さな絵（ピクトグラム） */
-const CATI={pic:'🕴',chara:'👤',phys:'🧍',outfit:'👕',action:'🤸',act:'✋',face:'😊',body:'💧',inter:'🤝',bg:'🏞️',angle:'🎥',camera:'🖼️',light:'💡',fx:'✨',np:'⚖️',style:'🎨',lora:'🧩'};
+const CATI={pic:'🕴',chara:'👤',phys:'🧍',outfit:'👕',action:'🤸',act:'✋',face:'😊',body:'💧',inter:'🤝',bg:'🏞️',angle:'🎥',camera:'🖼️',light:'💡',fx:'✨',np:'⚖️',other:'📦',style:'🎨',lora:'🧩'};
 const catLab=c=>c==='add'?'足すタグ':c==='pic'?'向き・位置':PT[c].label;
 const pic=t=>CATI[t]?`<i class="pic" aria-hidden="true">${CATI[t]}</i>`:'';
 const catAttr=t=>`data-cat="${t}" style="--c:${CATC[t]||'#888'}"`;
@@ -1118,8 +1124,8 @@ function setupFold(c){
 }
 function vScene(c){
   const sc=byId('scenes',c.id);if(!sc){stack.pop();return render();}
-  sc.chars=sc.chars||[];sc.loras=sc.loras||[];sc.images=sc.images||[];sc.roles=sc.roles||[];sc.inter=sc.inter||[];sc.angle=sc.angle||[];sc.fx=sc.fx||[];sc.np=sc.np||[];
-  sc.chars.forEach(c=>{c.body=c.body||[];c.phys=c.phys||[];c.act=c.act||[];c.outfit=A_(c.outfit);c.action=A_(c.action);});
+  sc.chars=sc.chars||[];sc.loras=sc.loras||[];sc.images=sc.images||[];sc.roles=sc.roles||[];sc.inter=sc.inter||[];sc.angle=sc.angle||[];sc.fx=sc.fx||[];sc.np=sc.np||[];sc.other=sc.other||[];
+  sc.chars.forEach(c=>{c.body=c.body||[];c.phys=c.phys||[];c.act=c.act||[];c.other=c.other||[];c.outfit=A_(c.outfit);c.action=A_(c.action);});
   setHead(sc.title||'無題のシーン');
   const loraParts=S.parts.filter(p=>p.type==='lora');
   const u=usedIn(sc.id);
@@ -1152,6 +1158,7 @@ function vScene(c){
       ${chipSel('行動','act',sl.act,`data-chip="act" data-slot="${i}"`)}
       ${partSel('表情','face',sl.face,`data-slot="${i}" data-f="face"`)}
       ${chipSel('体の状態','body',sl.body,`data-chip="body" data-slot="${i}"`)}
+      ${chipSel('その他','other',sl.other,`data-chip="other" data-slot="${i}"`)}
       <div class="two">
         <label class="f"><span>足すタグ</span><input data-slot="${i}" data-t="add" value="${esc(sl.add)}" placeholder="looking back"></label>
         <label class="f"><span>外すタグ</span><input data-slot="${i}" data-t="remove" value="${esc(sl.remove)}" placeholder="smile"></label>
@@ -1175,6 +1182,7 @@ function vScene(c){
     ${partSel('光','light',sc.light,'data-scf="light"')}
     ${chipSel('エフェクト・動き','fx',sc.fx,'data-chip="fx"')}
     ${chipSel('ネガポジ','np',sc.np,'data-chip="np"')}
+    ${chipSel('その他','other',sc.other,'data-chip="other"')}
     ${partSel('画風','style',sc.style,'data-scf="style"')}
     <div class="two">
       <label class="f"><span>足すタグ（人物以外）</span><input data-st="add" value="${esc(sc.add)}" placeholder="sunset"></label>
@@ -1304,7 +1312,7 @@ function vScene(c){
   /* 体の状態・絡み（いくつでも） */
   $$('[data-chip]',view).forEach(b=>b.onclick=()=>{
     const kind=b.dataset.chip,slot=b.dataset.slot;
-    const per=['body','phys','act','outfit','action'].includes(kind);/* 人物ごと */
+    const per=slot!=null;/* 人物ごと（その他は、人物ごとにもシーン全体にもある） */
     const arr=()=>per?(sc.chars[+slot][kind]||[]):(sc[kind]||[]);
     const setArr=a=>{if(per)sc.chars[+slot][kind]=a;else sc[kind]=a;};
     /* 派生を選ぶ */
@@ -1337,19 +1345,20 @@ function vScene(c){
     const imgs=sc.images;S.scenes=S.scenes.filter(x=>x.id!==sc.id);await dbDel('scenes',sc.id);markDeleted(sc.id);for(const id of imgs)await deleteImageIfUnused(id);goBack();};
 }
 /* 画像ごとに、そのときのプロンプトの設定を記録する */
-const SNAP_KEYS=['chars','inter','angle','fx','np','bg','camera','light','style','loras','add','remove','neg','weights','dups','pic'];
-const snapDef=k=>(k==='chars'||k==='inter'||k==='angle'||k==='fx'||k==='np'||k==='loras')?[]:(k==='weights'||k==='dups')?{}:k==='pic'?null:'';
+const SNAP_KEYS=['chars','inter','angle','fx','np','other','bg','camera','light','style','loras','add','remove','neg','weights','dups','pic'];
+const snapDef=k=>(k==='chars'||k==='inter'||k==='angle'||k==='fx'||k==='np'||k==='other'||k==='loras')?[]:(k==='weights'||k==='dups')?{}:k==='pic'?null:'';
 const snapVal=(o,k)=>JSON.parse(JSON.stringify(o[k]??snapDef(k)));
 function recordSnap(sc,id){sc.imgMeta=sc.imgMeta||{};const snap={};for(const k of SNAP_KEYS)snap[k]=snapVal(sc,k);const p=buildPrompt(sc);sc.imgMeta[id]={snap,pos:p.pos,neg:p.neg,loras:p.loras,fmt:p.fmt,at:Date.now()};}
 function snapSame(sc,snap){return SNAP_KEYS.every(k=>JSON.stringify(snapVal(sc,k))===JSON.stringify(snapVal(snap,k)));}
 function snapSummary(snap){
   const nm=id=>{const p=byId('parts',id);return p?esc(p.name||'名前なし'):(id?'<span class="gone">（削除された部品）</span>':'');};
   const rows=[];
-  (snap.chars||[]).forEach((c,i)=>{const b=[nm(c.chara),...(c.phys||[]).map(nm),...A_(c.outfit).map(nm),...A_(c.action).map(nm),...(c.act||[]).map(nm),nm(c.face),...(c.body||[]).map(nm)].filter(Boolean).join('・');rows.push(`<tr><th>人物 ${i+1}</th><td>${b||'—'}${c.subj?`<br><small>呼び方：${esc(c.subj)}</small>`:''}${c.add?`<br><small>足す：${esc(c.add)}</small>`:''}${c.remove?`<br><small>外す：${esc(c.remove)}</small>`:''}</td></tr>`);});
+  (snap.chars||[]).forEach((c,i)=>{const b=[nm(c.chara),...(c.phys||[]).map(nm),...A_(c.outfit).map(nm),...A_(c.action).map(nm),...(c.act||[]).map(nm),nm(c.face),...(c.body||[]).map(nm),...(c.other||[]).map(nm)].filter(Boolean).join('・');rows.push(`<tr><th>人物 ${i+1}</th><td>${b||'—'}${c.subj?`<br><small>呼び方：${esc(c.subj)}</small>`:''}${c.add?`<br><small>足す：${esc(c.add)}</small>`:''}${c.remove?`<br><small>外す：${esc(c.remove)}</small>`:''}</td></tr>`);});
   if((snap.inter||[]).length)rows.push(`<tr><th>絡み</th><td>${snap.inter.map(nm).join('・')}</td></tr>`);
   if((snap.angle||[]).length)rows.push(`<tr><th>カメラ位置</th><td>${snap.angle.map(nm).join('・')}</td></tr>`);
   if((snap.fx||[]).length)rows.push(`<tr><th>エフェクト</th><td>${snap.fx.map(nm).join('・')}</td></tr>`);
   if((snap.np||[]).length)rows.push(`<tr><th>ネガポジ</th><td>${snap.np.map(nm).join('・')}</td></tr>`);
+  if((snap.other||[]).length)rows.push(`<tr><th>その他</th><td>${snap.other.map(nm).join('・')}</td></tr>`);
   const rest=[['背景',snap.bg],['構図',snap.camera],['光',snap.light],['画風',snap.style]].filter(x=>x[1]).map(([l,id])=>`<tr><th>${l}</th><td>${nm(id)}</td></tr>`);
   rows.push(...rest);
   if((snap.loras||[]).length)rows.push(`<tr><th>LoRA</th><td>${snap.loras.map(l=>nm(l.id)+(l.weight!==''&&l.weight!=null?`（${esc(l.weight)}）`:'')).join('・')}</td></tr>`);
@@ -2058,7 +2067,7 @@ function openPart(id,type,onSave){
     <span class="hint">例：「正座」の中に「手を下げた正座」「手を上げた正座」。派生のプロンプトは、上のタグの代わりに使います（足したときは上のタグが入るので、変えるところだけ直してください）。シーンでこの部品を選ぶと、派生も選べます。最後に「保存」を押してください。</span></div>`:''}
   ${p.type==='inter'?`<div class="f plinks"><span>呼び出す設定（シーンでこの絡みを選ぶと、ここの設定を当てます）</span>
     <div class="sel" style="margin:0 0 8px"><select id="pLinkScene" aria-label="シーンから取り込む"><option value="">📥 シーンの設定から取り込む…</option>${S.scenes.slice().sort((a,b)=>(b.updated||0)-(a.updated||0)).map(x=>`<option value="${x.id}">${esc(x.title||'無題のシーン')}</option>`).join('')}</select></div>
-    <div id="pLinks"></div><button type="button" class="btn ghost sm" id="pLinkAdd">＋ 設定を1つ足す</button>
+    <div id="pLinks"></div><div id="pPool"></div><button type="button" class="btn ghost sm" id="pLinkAdd">＋ 設定を1つ足す</button>
     <span class="hint">「シーンの設定から取り込む」を選ぶと、そのシーンの設定をいったんすべて読み込みます（人物ごとの部品・足すタグ・呼び方、カメラ位置・構図・光・背景・エフェクト・ネガポジ・画風・足すタグ・ネガティブに足すタグ）。いらない行は ✕ で外してから「保存」を押してください。シーンでこの絡みを選ぶと、1つだけ選ぶ項目（人物・表情・構図・光・背景・画風）と呼び方は置きかえ、ほかは足します。人物が足りないときは人物を足します。絡みを外すときは、一緒に外すか聞きます。</span></div>`:''}
   ${p.type!=='lora'?`<label class="f"><span>文章で書くとき（Tsubaki 系・英語・なくてもよい）</span><textarea id="pText" rows="2" placeholder="${esc(TEXT_PH[p.type]||'')}">${esc(p.text||'')}</textarea><span class="hint">プロンプトの形が「文章」のときだけ、タグの代わりにこの文を使います。空のままならタグから文を作ります。<button type="button" class="linkb" id="pTextJa">上の日本語を文章として英語にする</button></span></label>`:''}
   ${p.type==='np'?`<details class="nh" ${p.neg?'open':''}><summary>ネガティブにも足す（なくてもよい）</summary><div class="nhb"><label class="f" style="margin:0"><span>ネガティブに足すタグ</span><textarea id="pNegT" rows="2" placeholder="なくても、ポジティブだけで働きます">${esc(p.neg)}</textarea></label></div></details>`:''}
@@ -2088,10 +2097,43 @@ function openPart(id,type,onSave){
     $$('[data-lkf]',box).forEach(x=>x.onchange=()=>{const l=LINKS[+x.dataset.lkf];l.f=x.value;l.id='';l.tx='';drawLinks();});
     $$('[data-lkp]',box).forEach(x=>x.onchange=()=>{LINKS[+x.dataset.lkp].id=x.value;});
     $$('[data-lkdel]',box).forEach(x=>x.onclick=()=>{LINKS.splice(+x.dataset.lkdel,1);drawLinks();});};
-  drawLinks();
+  /* ===== 部品になっていないタグ =====
+     足すタグ・向き・位置のタグは、重みの画面のようにタグを並べる。押して選び、入れる項目を決めると、
+     保存したときにその項目の部品を作って、呼び出す設定に入れる。決めないものは「足すタグ」のまま */
+  const POOL=[];let poolSel=new Set();
+  const toPool=L=>{for(let k=L.length-1;k>=0;k--){const l=L[k];if(l.f!=='add')continue;const ts=splitTags(l.tx);for(let j=ts.length-1;j>=0;j--){const t=ts[j];if(!POOL.some(x=>x.w===l.w&&norm(x.t)===norm(t)))POOL.unshift({t,w:l.w,f:'add'});}L.splice(k,1);}};
+  toPool(LINKS);
+  const poolLab=(f,w)=>f==='add'?lkLab('add',w):PT[f].label;
+  const drawPool=()=>{const box=$('#pPool');if(!box)return;if(!POOL.length){box.innerHTML='';return;}
+    const ws=[...new Set(POOL.map(x=>x.w))].sort((a,b)=>(a||99)-(b||99));
+    const sel=[...poolSel],selW=sel.length?POOL[sel[0]].w:null;
+    const fs=selW==null?[]:(selW?LK_PER:LK_SCN).filter(f=>!LK_TX.includes(f));
+    const chip=(x,i)=>`<button type="button" class="tg wt ${poolSel.has(i)?'sel':''}" style="--c:${CATC[x.f]||'#9ca3af'}" data-pi="${i}"><i class="wi" aria-hidden="true">${CATI[x.f]||'＋'}</i>${esc(baseOf(x.t))}${x.f!=='add'?` <b>${esc(PT[x.f].label)}</b>`:''}</button>`;
+    const G=new Map();for(const x of POOL){if(x.f==='add')continue;const k=x.w+'|'+x.f;if(!G.has(k))G.set(k,{w:x.w,f:x.f,t:[]});G.get(k).t.push(baseOf(x.t));}
+    box.innerHTML=`<div class="pool"><div class="poolh">部品になっていないタグ<small>足すタグ・向き・位置のタグです。押して選び、入れる項目を決めると、保存したときにその項目の部品を作ります。決めないものは「足すタグ」のまま呼び出します。</small></div>
+      <div class="wgrp">${ws.map(w=>`<div class="wg ${w?'wper':''}" style="${w?'':'--c:#64748b'}"><div class="wgl">${w?'👤 人物'+w:'🎬 シーン全体'}</div><div class="tgs">${POOL.map((x,i)=>x.w===w?chip(x,i):'').join('')}</div></div>`).join('')}</div>
+      ${sel.length?`<div class="wedit"><div class="wtop"><b>${selW?'人物'+selW+'の':'シーン全体の'}タグ ${sel.length} 個を</b></div>
+        <div class="sel"><select id="poolF" aria-label="入れる項目">${fs.map(f=>`<option value="${f}">${CATI[f]||''}${PT[f].label}</option>`).join('')}</select><button type="button" class="btn sm" id="poolSet">の部品にする</button></div>
+        <div class="row" style="margin:6px 0 0"><button type="button" class="btn ghost sm" id="poolBack">足すタグに戻す</button><button type="button" class="btn ghost sm danger" id="poolDel">外す（呼び出さない）</button><button type="button" class="btn ghost sm" id="poolNone">選ぶのをやめる</button></div></div>`
+        :'<p class="hint" style="margin:8px 0 0">タグを押すと選べます（同じ人物のタグなら、いくつでも）。</p>'}
+      ${G.size?`<p class="hint" style="margin:8px 0 0">保存すると、${[...G.values()].map(g=>`${g.w?'人物'+g.w+'の':''}${PT[g.f].label}の部品（${esc(g.t.join(', '))}）`).join('・')}を作ります。</p>`:''}</div>`;
+    $$('[data-pi]',box).forEach(b=>b.onclick=()=>{const i=+b.dataset.pi;if(selW!=null&&POOL[i].w!==selW)poolSel=new Set([i]);else if(poolSel.has(i))poolSel.delete(i);else poolSel.add(i);drawPool();});
+    const setF=f=>{for(const i of poolSel)POOL[i].f=f;poolSel=new Set();drawPool();};
+    const ps=$('#poolSet');if(ps)ps.onclick=()=>setF($('#poolF').value);
+    const pb=$('#poolBack');if(pb)pb.onclick=()=>setF('add');
+    const pd=$('#poolDel');if(pd)pd.onclick=()=>{[...poolSel].sort((a,b)=>b-a).forEach(i=>POOL.splice(i,1));poolSel=new Set();drawPool();};
+    const pn=$('#poolNone');if(pn)pn.onclick=()=>{poolSel=new Set();drawPool();};
+  };
+  /* 保存のとき：項目を決めたタグから部品を作り、呼び出す設定に入れる */
+  const poolMake=async()=>{const G=new Map();for(const x of POOL){if(x.f==='add')continue;const k=x.w+'|'+x.f;if(!G.has(k))G.set(k,{w:x.w,f:x.f,t:[]});G.get(k).t.push(x.t);}
+    const nm0=($('#pName')&&$('#pName').value.trim())||'絡み';const made=[];
+    for(const g of G.values()){const n={id:uid(),type:g.f,name:`${nm0}：${g.w?'人物'+g.w+'の':''}${PT[g.f].label}`,tags:uniq(g.t).join(', '),subject:'',weight:'',loraName:'',neg:'',memo:`絡み「${nm0}」のシーンから作った部品`,text:'',created:Date.now()};
+      S.parts.push(n);await saveNow('parts',n);LINKS.push({w:g.w,f:g.f,id:n.id});made.push(n.name);}
+    for(let k=POOL.length-1;k>=0;k--)if(POOL[k].f!=='add')POOL.splice(k,1);return made;};
+  drawLinks();drawPool();
   const la=$('#pLinkAdd');if(la)la.onclick=()=>{LINKS.push({w:1,f:'action',id:''});drawLinks();};
   const ls=$('#pLinkScene');if(ls)ls.onchange=()=>{const sc2=byId('scenes',ls.value);ls.value='';if(!sc2)return;const L=linksFromScene(sc2);if(!L.length)return toast('そのシーンには、取り込む設定がありません');
-    if(LINKS.length&&!confirm(`今の設定を、シーン「${sc2.title||'無題のシーン'}」の設定に置きかえますか？`))return;LINKS.splice(0,LINKS.length,...L);drawLinks();toast(`${L.length} 件を取り込みました。保存を押すと登録します`);};
+    if(LINKS.length&&!confirm(`今の設定を、シーン「${sc2.title||'無題のシーン'}」の設定に置きかえますか？`))return;LINKS.splice(0,LINKS.length,...L);POOL.length=0;poolSel=new Set();toPool(LINKS);drawLinks();drawPool();toast(`${L.length} 件を取り込みました。保存を押すと登録します`);};
   const va=$('#pVarAdd');if(va)va.onclick=()=>{VARS.push({id:'v'+uid(),name:'',tags:$('#pTags').value.trim()});drawVars();const ins=$$('#pVars [data-vn]');ins[ins.length-1].focus();};
   /* 日本語 → 英語 */
   $('#pJaGo').onclick=async()=>{const t=$('#pJa').value.trim();if(!t)return toast('日本語を入れてください');const b=$('#pJaGo'),m=$('#pJaMsg');b.disabled=true;b.textContent='直しています…';
@@ -2110,7 +2152,8 @@ function openPart(id,type,onSave){
   $('#pImgIn').onchange=async e=>{const f=e.target.files[0];e.target.value='';if(!f)return;p.img=await makeThumb(f,512);showImg();};
   $('#pImgDel').onclick=()=>{p.img=null;showImg();};
   const read=o=>{o.name=$('#pName').value.trim();o.tags=$('#pTags').value.trim();if($('#pSubj'))o.subject=$('#pSubj').value.trim()||'girl';if($('#pLname'))o.loraName=$('#pLname').value.trim();if($('#pW'))o.weight=$('#pW').value;if($('#pNegT'))o.neg=$('#pNegT').value.trim();if($('#pText'))o.text=$('#pText').value.trim();o.memo=$('#pMemo').value;if(!o.name)o.name=(o.tags.slice(0,18)||'名前なし');
-    if($('#pLinks')){const L=LINKS.filter(l=>LK_TX.includes(l.f)?(l.tx||'').trim():l.id).map(l=>LK_TX.includes(l.f)?{w:l.w,f:l.f,tx:l.tx.trim()}:{w:l.w,f:l.f,id:l.id});if(L.length)o.links=L;else delete o.links;}
+    if($('#pLinks')){const adds={};for(const x of POOL)if(x.f==='add')(adds[x.w]=adds[x.w]||[]).push(x.t);
+      const L=LINKS.filter(l=>LK_TX.includes(l.f)?(l.tx||'').trim():l.id).map(l=>LK_TX.includes(l.f)?{w:l.w,f:l.f,tx:l.tx.trim()}:{w:l.w,f:l.f,id:l.id});for(const w in adds)L.push({w:+w,f:'add',tx:adds[w].join(', ')});if(L.length)o.links=L;else delete o.links;}
     if($('#pVars')){const vs=VARS.filter(v=>(v.name||'').trim()||(v.tags||'').trim()).map(v=>Object.assign({},v,{name:(v.name||'').trim()||(v.tags||'').trim().slice(0,18),tags:(v.tags||'').trim()}));if(vs.length)o.vars=vs;else delete o.vars;}
     return o;};
   /* ぶつかりやすいタグを知らせる。「○○の部品に分ける」は、保存したときに部品を作り、この部品を使っているシーンにも付ける */
@@ -2138,8 +2181,8 @@ function openPart(id,type,onSave){
       if(ch){add++;await saveNow('scenes',s);}}
     return{add,skip};};
   $('#pCancel').onclick=closeSheet;
-  $('#pSave').onclick=async()=>{read(p);const i=S.parts.findIndex(x=>x.id===p.id);if(i>=0)S.parts[i]=p;else S.parts.push(p);await saveNow('parts',p);
-    const msg=[];
+  $('#pSave').onclick=async()=>{const made=await poolMake();read(p);const i=S.parts.findIndex(x=>x.id===p.id);if(i>=0)S.parts[i]=p;else S.parts.push(p);await saveNow('parts',p);
+    const msg=[];if(made.length)msg.push(`部品「${made.join('」「')}」を作りました`);
     /* 消した派生を選んでいたシーンは、基本の部品にする */
     const gone=new Set(((src&&src.vars)||[]).filter(v=>!(p.vars||[]).some(x=>x.id===v.id)).map(v=>p.id+VSEP+v.id));
     if(gone.size)for(const s of S.scenes)if(mapSceneIds(s,id=>gone.has(id)?p.id:id,false))await saveNow('scenes',s);
