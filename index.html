@@ -57,7 +57,7 @@ nav#tabs button.on{color:var(--acc);font-weight:700}
 .tg.wt.off{text-decoration:line-through;opacity:.5}
 .lkrow{display:grid;grid-template-columns:1fr 1fr auto;gap:4px;padding:6px 0 6px 8px;border-left:3px solid var(--line);margin:0 0 6px}
 .lkrow select{min-width:0}
-.lkrow [data-lkp]{grid-column:1/-1}
+.lkrow [data-lkp],.lkrow [data-lkt]{grid-column:1/-1}
 .lkh{margin:-4px 0 6px}
 .simg{border:1px solid var(--line);border-radius:10px;padding:8px 10px;margin:0 0 10px}
 .simh,.simr{display:grid;grid-template-columns:34px 34px 1fr;gap:4px;align-items:center}
@@ -459,7 +459,7 @@ const FMT={
 
 /* ========== データベース（IndexedDB） ========== */
 let db=null;
-const APP_VER='v48';/* sw.js の VERSION と同じにする */
+const APP_VER='v49';/* sw.js の VERSION と同じにする */
 const STORES=['parts','scenes','works','images','meta','fonts','stamps'];
 function openDB(){return new Promise((res,rej)=>{const r=indexedDB.open('manga4koma',3);r.onupgradeneeded=()=>{const d=r.result;for(const s of STORES)if(!d.objectStoreNames.contains(s))d.createObjectStore(s,{keyPath:'id'});};r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error);});}
 function tx(store,mode,fn){return new Promise((res,rej)=>{if(!db)return res(undefined);const t=db.transaction(store,mode);const req=fn(t.objectStore(store));let out;if(req)req.onsuccess=()=>{out=req.result;};t.oncomplete=()=>res(out);t.onerror=()=>rej(t.error);t.onabort=()=>rej(t.error);});}
@@ -909,22 +909,40 @@ const newSlot=()=>({chara:'',phys:[],outfit:[],action:[],act:[],face:'',body:[],
    絡みの部品に p.links=[{w, f, id}] を入れる。w は 0＝シーン全体、1・2・3＝人物の番号。f は項目（action など）、id は部品（派生は 部品id~派生id）。
    シーンで絡みを選ぶと、ここにある部品も選ぶ（1つだけ選ぶ項目は、ほかのものが選ばれていれば変えない）。
    絡みを外すときは、一緒に選んだ部品も外すか聞く（ほかの絡みでも使う部品は外さない） */
-const LK_PER=['chara','phys','outfit','action','act','face','body'],LK_SCN=['angle','camera','light','bg','fx','np','style'];
-const LK_ONE=['chara','face','bg','camera','light','style'];
-const lkName=l=>{const p=P_(l.id);return `${l.w?'人物'+l.w+'の':''}${PT[l.f].label}「${p?p.name||'名前なし':'（削除された部品）'}」`;};
+const LK_PER=['chara','phys','outfit','action','act','face','body','add','subj'],LK_SCN=['angle','camera','fx','np'];
+/* 光・背景・画風は、絡みでは変えない（シーンごとに選ぶ） */
+const LK_ONE=['chara','face','camera','bg','light','style'],LK_TX=['add','subj'];
+const lkLab=f=>f==='add'?'足すタグ':f==='subj'?'呼び方':(PT[f]||{}).label||f;
+const lkName=l=>{const who=l.w?'人物'+l.w+'の':'';if(LK_TX.includes(l.f))return `${who}${lkLab(l.f)}「${l.tx||''}」`;const p=P_(l.id);return `${who}${lkLab(l.f)}「${p?p.name||'名前なし':'（削除された部品）'}」`;};
 const lkObj=(sc,l)=>l.w?(sc.chars||[])[l.w-1]:sc;
-function lkHas(sc,l){const o=lkObj(sc,l);if(!o)return false;return LK_ONE.includes(l.f)?o[l.f]===l.id:A_(o[l.f]).includes(l.id);}
-function applyLinks(sc,interId){const p=P_(interId);const L=(p&&p.links)||[];const skip=[];let add=0,slots=0;sc.chars=sc.chars||[];
-  for(const l of L){if(!P_(l.id))continue;
+const lkOk=l=>LK_TX.includes(l.f)?!!(l.tx||'').trim():!!P_(l.id);
+function lkHas(sc,l){const o=lkObj(sc,l);if(!o)return false;
+  if(l.f==='add'){const have=new Set(splitTags(o.add).map(norm));return splitTags(l.tx).every(t=>have.has(norm(t)));}
+  if(l.f==='subj')return(o.subj||'').trim()===(l.tx||'').trim();
+  return LK_ONE.includes(l.f)?o[l.f]===l.id:A_(o[l.f]).includes(l.id);}
+/* 絡みを選んだとき：登録した設定を当てる。1つだけ選ぶ項目と呼び方は置きかえ、いくつでも選ぶ項目と足すタグは足す */
+function applyLinks(sc,interId){const p=P_(interId);const L=(p&&p.links)||[];let add=0,slots=0;const rep=[];sc.chars=sc.chars||[];
+  for(const l of L){if(!lkOk(l))continue;
     if(l.w)while(sc.chars.length<l.w){sc.chars.push(newSlot());slots++;}
-    const o=lkObj(sc,l);
-    if(LK_ONE.includes(l.f)){if(o[l.f]===l.id)continue;if(o[l.f]){skip.push(lkName(l));continue;}o[l.f]=l.id;add++;}
-    else{const a=A_(o[l.f]);if(a.includes(l.id))continue;if(a.some(x=>vBase(x)===vBase(l.id))){skip.push(lkName(l));continue;}o[l.f]=[...a,l.id];add++;}}
-  return{add,skip,slots};}
-function unlinkList(sc,interId){const p=P_(interId);const key=l=>l.w+'|'+l.f+'|'+l.id;
+    const o=lkObj(sc,l);if(lkHas(sc,l))continue;
+    if(l.f==='add'){o.add=uniq([...splitTags(o.add),...splitTags(l.tx)]).join(', ');add++;}
+    else if(l.f==='subj'){o.subj=(l.tx||'').trim();add++;}
+    else if(LK_ONE.includes(l.f)){if(o[l.f])rep.push(lkName(l));o[l.f]=l.id;add++;}
+    else{const a=A_(o[l.f]);o[l.f]=[...a.filter(x=>vBase(x)!==vBase(l.id)),l.id];add++;}}
+  return{add,slots,skip:[],rep};}
+function unlinkList(sc,interId){const p=P_(interId);const key=l=>l.w+'|'+l.f+'|'+(l.id||l.tx||'');
   const keep=new Set((sc.inter||[]).filter(x=>x!==interId).flatMap(x=>(P_(x)&&P_(x).links)||[]).map(key));
   return((p&&p.links)||[]).filter(l=>!keep.has(key(l))&&lkHas(sc,l));}
-function removeLinks(sc,L){for(const l of L){const o=lkObj(sc,l);if(!o)continue;if(LK_ONE.includes(l.f)){if(o[l.f]===l.id)o[l.f]='';}else o[l.f]=A_(o[l.f]).filter(x=>x!==l.id);}}
+function removeLinks(sc,L){for(const l of L){const o=lkObj(sc,l);if(!o)continue;
+  if(l.f==='add'){const rm=new Set(splitTags(l.tx).map(norm));o.add=splitTags(o.add).filter(t=>!rm.has(norm(t))).join(', ');}
+  else if(l.f==='subj'){if((o.subj||'').trim()===(l.tx||'').trim())o.subj='';}
+  else if(LK_ONE.includes(l.f)){if(o[l.f]===l.id)o[l.f]='';}else o[l.f]=A_(o[l.f]).filter(x=>x!==l.id);}}
+/* シーンの設定（光・背景・画風・絡み・LoRA を除く）を、絡みに登録する形にする */
+function linksFromScene(sc){const L=[];
+  (sc.chars||[]).forEach((c,i)=>{const w=i+1;if(c.chara)L.push({w,f:'chara',id:c.chara});for(const f of['phys','outfit','action','act'])for(const id of A_(c[f]))L.push({w,f,id});if(c.face)L.push({w,f:'face',id:c.face});for(const id of A_(c.body))L.push({w,f:'body',id});
+    if((c.add||'').trim())L.push({w,f:'add',tx:c.add.trim()});if((c.subj||'').trim())L.push({w,f:'subj',tx:c.subj.trim()});});
+  for(const id of sc.angle||[])L.push({w:0,f:'angle',id});if(sc.camera)L.push({w:0,f:'camera',id:sc.camera});for(const f of['fx','np'])for(const id of sc[f]||[])L.push({w:0,f,id});
+  return L;}
 function newScene(){const s={id:uid(),title:'',roles:[],chars:[newSlot()],inter:[],angle:[],fx:[],np:[],bg:'',camera:'',light:'',style:defaultStyle(),loras:[],add:'',remove:'',neg:'',memo:'',images:[],created:Date.now(),updated:Date.now()};S.scenes.push(s);return s;}
 function defaultStyle(){const st=S.parts.filter(p=>p.type==='style');return st.length===1?st[0].id:'';}
 
@@ -1145,7 +1163,7 @@ function vScene(c){
 
   <div class="sec"><h2>絡み <small>人物どうしの関わり</small></h2>
     ${chipSel('絡み','inter',sc.inter,'data-chip="inter"')}
-    ${sc.inter.map(id=>{const p=P_(id);return p&&(p.links||[]).length?`<p class="hint lkh">🔗「${esc(p.name||'名前なし')}」と一緒に選ぶ：${p.links.map(l=>esc(lkName(l))).join('・')}</p>`:'';}).join('')}
+    ${sc.inter.map(id=>{const p=P_(id);if(!p)return'';return `${(p.links||[]).length?`<p class="hint lkh">🔗「${esc(p.name||'名前なし')}」で呼び出す設定：${p.links.map(l=>esc(lkName(l))).join('・')}</p>`:''}<div class="row" style="margin:0 0 8px"><button type="button" class="btn ghost sm" data-lkrec="${esc(vBase(id))}">📥 今の人物・カメラなどを「${esc(P_(vBase(id))&&P_(vBase(id)).name||'名前なし')}」に記録</button></div>`;}).join('')}
     ${sc.inter.length&&sc.chars.length<2?'<p class="hint" style="margin:-6px 0 0">絡みは、人物が2人以上のときに使います。</p>':''}
   </div>
 
@@ -1290,15 +1308,19 @@ function vScene(c){
     const setArr=a=>{if(per)sc.chars[+slot][kind]=a;else sc[kind]=a;};
     /* 派生を選ぶ */
     if(b.dataset.vb){setArr([...new Set(arr().map(x=>vBase(x)===b.dataset.vb?b.dataset.vid:x))]);save('scenes',sc);render(true);return;}
-    const lkMsg=r=>{const m=[];if(r.add)m.push(`一緒に選ぶ部品を ${r.add} 件選びました`);if(r.slots)m.push(`人物を ${r.slots} 人足しました`);if(r.skip.length)m.push(`${r.skip.join('・')}は、ほかのものが選ばれているので、そのままです`);if(m.length)toast(m.join('。'));};
+    const lkMsg=r=>{const m=[];if(r.add)m.push(`絡みの設定を ${r.add} 件呼び出しました`);if(r.slots)m.push(`人物を ${r.slots} 人足しました`);if(r.rep&&r.rep.length)m.push(`${r.rep.join('・')}に置きかえました`);if(m.length)toast(m.join('。'));};
     if(b.dataset.pid==='__new'){openPart(null,kind,p=>{if(p){setArr([...arr(),p.id]);if(kind==='inter')lkMsg(applyLinks(sc,p.id));saveNow('scenes',sc);}render(true);});return;}
     const id=b.dataset.pid,a=arr(),cur=a.find(x=>vBase(x)===id);
     /* 絡みを外す：一緒に選んだ部品も外すか聞く */
-    if(kind==='inter'&&cur){const L=unlinkList(sc,cur);if(L.length&&confirm(`この絡みと一緒に選んだ部品も外しますか？\n\n${L.map(lkName).join('\n')}\n\n「キャンセル」なら、絡みだけを外します。`))removeLinks(sc,L);}
+    if(kind==='inter'&&cur){const L=unlinkList(sc,cur);if(L.length&&confirm(`この絡みで呼び出した設定も外しますか？\n\n${L.map(lkName).join('\n')}\n\n「キャンセル」なら、絡みだけを外します。`))removeLinks(sc,L);}
     setArr(cur?a.filter(x=>vBase(x)!==id):[...a,id]);
     if(kind==='inter'&&!cur)lkMsg(applyLinks(sc,id));
     save('scenes',sc);render(true);
   });
+  /* 絡みに、今のシーンの設定（光・背景・画風を除く）を記録する */
+  $$('[data-lkrec]',view).forEach(b=>b.onclick=async()=>{const p=byId('parts',b.dataset.lkrec);if(!p)return;const L=linksFromScene(sc);if(!L.length)return toast('記録する設定がありません');
+    if(!confirm(`今のシーンの設定を、絡み「${p.name||'名前なし'}」に記録しますか？${(p.links||[]).length?'（前に記録した設定は置きかわります）':''}\n\n${L.map(lkName).join('\n')}\n\n光・背景・画風は記録しません。`))return;
+    p.links=L;await saveNow('parts',p);toast('絡みに記録しました。ほかのシーンでこの絡みを選ぶと、この設定が呼び出されます');render(true);});
   $('#fmtSel').onchange=e=>{S.meta.fmt=e.target.value;dbPut('meta',S.meta);upd();};
   /* LoRA */
   $$('input[data-lora]',view).forEach(cb=>cb.onchange=()=>{const id=cb.dataset.lora;if(cb.checked)sc.loras.push({id,weight:''});else sc.loras=sc.loras.filter(l=>l.id!==id);save('scenes',sc);render(true);});
@@ -1926,7 +1948,7 @@ function vPList(c){
   const list=S.parts.filter(p=>p.type===t).sort((a,b)=>(a.name||'').localeCompare(b.name||'','ja'));
   view.innerHTML=`
   ${mergeBanner(t)}${simBanner(t)}<p class="hint" style="margin:0 0 12px">${esc(T.hint)}</p>
-  ${list.length?list.map(p=>{const n=partUsage(p.id);const inner=`<small>${n?n+'シーン':'未使用'}</small><b>${esc(p.name||'名前なし')}</b>${roleN(p)?' <span class="chip warn">⚠ ぶつかりやすいタグ</span>':''}${p.type==='chara'?` <span class="chip">${esc(p.subject||'girl')}</span>`:''}${p.type==='lora'?` <span class="chip">重み ${esc(p.weight??'')}</span>`:''}${p.skel?' <span class="chip">🕴 ピクトグラムのポーズ</span>':''}${(p.vars||[]).length?` <span class="chip">派生 ${p.vars.length}</span>`:''}${(p.links||[]).length?` <span class="chip">🔗 一緒に選ぶ ${p.links.length}</span>`:''}<div class="ptags">${esc(p.tags)||'<span class="muted">タグなし</span>'}${(p.vars||[]).map(v=>`<br><span class="pvar">└ ${esc(v.name||'派生')}：${esc(v.tags)||'タグなし'}</span>`).join('')}${p.type==='np'&&p.neg?`<br><span style="color:var(--warn)">ネガ：${esc(p.neg)}</span>`:''}</div>`;
+  ${list.length?list.map(p=>{const n=partUsage(p.id);const inner=`<small>${n?n+'シーン':'未使用'}</small><b>${esc(p.name||'名前なし')}</b>${roleN(p)?' <span class="chip warn">⚠ ぶつかりやすいタグ</span>':''}${p.type==='chara'?` <span class="chip">${esc(p.subject||'girl')}</span>`:''}${p.type==='lora'?` <span class="chip">重み ${esc(p.weight??'')}</span>`:''}${p.skel?' <span class="chip">🕴 ピクトグラムのポーズ</span>':''}${(p.vars||[]).length?` <span class="chip">派生 ${p.vars.length}</span>`:''}${(p.links||[]).length?` <span class="chip">🔗 呼び出す設定 ${p.links.length}</span>`:''}<div class="ptags">${esc(p.tags)||'<span class="muted">タグなし</span>'}${(p.vars||[]).map(v=>`<br><span class="pvar">└ ${esc(v.name||'派生')}：${esc(v.tags)||'タグなし'}</span>`).join('')}${p.type==='np'&&p.neg?`<br><span style="color:var(--warn)">ネガ：${esc(p.neg)}</span>`:''}</div>`;
     return p.img?`<button class="pitem hasimg" data-id="${p.id}"><img class="pim" src="${partImgUrl(p)}" alt=""><div>${inner}</div></button>`:`<button class="pitem" data-id="${p.id}">${inner}</button>`;}).join('')
   :`<div class="empty"><b>${T.label}はまだありません</b>「＋ 新しい${T.label}」で登録します。</div>`}
   <button class="fab" id="newPart">＋ 新しい${T.label}</button>`;
@@ -2033,8 +2055,10 @@ function openPart(id,type,onSave){
   <div id="pRole"></div>
   ${p.type!=='lora'?`<div class="f pvars"><span>派生（この部品の別の形）</span><div id="pVars"></div><button type="button" class="btn ghost sm" id="pVarAdd">＋ 派生を足す</button>
     <span class="hint">例：「正座」の中に「手を下げた正座」「手を上げた正座」。派生のプロンプトは、上のタグの代わりに使います（足したときは上のタグが入るので、変えるところだけ直してください）。シーンでこの部品を選ぶと、派生も選べます。最後に「保存」を押してください。</span></div>`:''}
-  ${p.type==='inter'?`<div class="f plinks"><span>一緒に選ぶ部品（シーンでこの絡みを選ぶと、自動で選びます）</span><div id="pLinks"></div><button type="button" class="btn ghost sm" id="pLinkAdd">＋ 一緒に選ぶ部品を足す</button>
-    <span class="hint">例：「少女が男性を見上げる」なら、人物1の行動「見上げる」、人物2の行動「見下ろす」、シーン全体のカメラ位置「横から」。人物が足りないときは、人物を足します。シーンで絡みを外すときは、一緒に外すか聞きます。</span></div>`:''}
+  ${p.type==='inter'?`<div class="f plinks"><span>呼び出す設定（シーンでこの絡みを選ぶと、ここの設定を当てます）</span>
+    <div class="sel" style="margin:0 0 8px"><select id="pLinkScene" aria-label="シーンから取り込む"><option value="">📥 シーンの設定から取り込む…</option>${S.scenes.slice().sort((a,b)=>(b.updated||0)-(a.updated||0)).map(x=>`<option value="${x.id}">${esc(x.title||'無題のシーン')}</option>`).join('')}</select></div>
+    <div id="pLinks"></div><button type="button" class="btn ghost sm" id="pLinkAdd">＋ 設定を1つ足す</button>
+    <span class="hint">人物（人物・身体の特徴・服装・ポーズ・行動・表情・体の状態・足すタグ・呼び方）と、シーン全体のカメラ位置・構図・エフェクト・ネガポジを登録できます。光・背景・画風は、絡みでは変えません。シーンで選ぶと、1つだけ選ぶ項目（人物・表情・構図）と呼び方は置きかえ、ほかは足します。人物が足りないときは人物を足します。絡みを外すときは、一緒に外すか聞きます。</span></div>`:''}
   ${p.type!=='lora'?`<label class="f"><span>文章で書くとき（Tsubaki 系・英語・なくてもよい）</span><textarea id="pText" rows="2" placeholder="${esc(TEXT_PH[p.type]||'')}">${esc(p.text||'')}</textarea><span class="hint">プロンプトの形が「文章」のときだけ、タグの代わりにこの文を使います。空のままならタグから文を作ります。<button type="button" class="linkb" id="pTextJa">上の日本語を文章として英語にする</button></span></label>`:''}
   ${p.type==='np'?`<details class="nh" ${p.neg?'open':''}><summary>ネガティブにも足す（なくてもよい）</summary><div class="nhb"><label class="f" style="margin:0"><span>ネガティブに足すタグ</span><textarea id="pNegT" rows="2" placeholder="なくても、ポジティブだけで働きます">${esc(p.neg)}</textarea></label></div></details>`:''}
   ${p.type==='style'?`<label class="f"><span>ネガティブプロンプト</span><textarea id="pNegT" rows="3" placeholder="lowres, blurry, jpeg artifacts, text, watermark">${esc(p.neg)}</textarea></label>${negHelp()}`:''}
@@ -2056,13 +2080,17 @@ function openPart(id,type,onSave){
   const LINKS=JSON.parse(JSON.stringify(p.links||[]));
   const lkOpts=(f,sel)=>S.parts.filter(x=>x.type===f).sort((a,b)=>(a.name||'').localeCompare(b.name||'','ja')).map(x=>`<option value="${x.id}"${x.id===sel?' selected':''}>${esc(x.name||'名前なし')}</option>`+(x.vars||[]).map(v=>`<option value="${x.id}${VSEP}${v.id}"${x.id+VSEP+v.id===sel?' selected':''}>　└ ${esc(v.name||'派生')}</option>`).join('')).join('');
   const drawLinks=()=>{const box=$('#pLinks');if(!box)return;
-    box.innerHTML=LINKS.map((l,i)=>{const fs=l.w?LK_PER:LK_SCN;return `<div class="lkrow"><select data-lkw="${i}" aria-label="だれに">${[1,2,3,0].map(w=>`<option value="${w}"${l.w===w?' selected':''}>${w?'人物'+w:'シーン全体'}</option>`).join('')}</select><select data-lkf="${i}" aria-label="項目">${fs.map(f=>`<option value="${f}"${l.f===f?' selected':''}>${CATI[f]||''}${PT[f].label}</option>`).join('')}</select><button type="button" class="ico" data-lkdel="${i}" title="外す" aria-label="外す">✕</button><select data-lkp="${i}" aria-label="部品"><option value="">（部品を選ぶ）</option>${lkOpts(l.f,l.id)}</select></div>`;}).join('');
-    $$('[data-lkw]',box).forEach(x=>x.onchange=()=>{const l=LINKS[+x.dataset.lkw];l.w=+x.value;const fs=l.w?LK_PER:LK_SCN;if(!fs.includes(l.f)){l.f=l.w?'action':'angle';l.id='';}drawLinks();});
-    $$('[data-lkf]',box).forEach(x=>x.onchange=()=>{const l=LINKS[+x.dataset.lkf];l.f=x.value;l.id='';drawLinks();});
+    const ws=[...new Set([1,2,3,...LINKS.map(l=>l.w).filter(w=>w>3)])].sort((a,b)=>a-b);
+    box.innerHTML=LINKS.map((l,i)=>{const fs=l.w?LK_PER:LK_SCN;const fs2=fs.includes(l.f)?fs:[l.f,...fs];return `<div class="lkrow"><select data-lkw="${i}" aria-label="だれに">${[...ws,0].map(w=>`<option value="${w}"${l.w===w?' selected':''}>${w?'人物'+w:'シーン全体'}</option>`).join('')}</select><select data-lkf="${i}" aria-label="項目">${fs2.map(f=>`<option value="${f}"${l.f===f?' selected':''}>${CATI[f]||(f==='add'?'＋':f==='subj'?'🏷':'')}${lkLab(f)}</option>`).join('')}</select><button type="button" class="ico" data-lkdel="${i}" title="外す" aria-label="外す">✕</button>${LK_TX.includes(l.f)?`<input data-lkt="${i}" value="${esc(l.tx||'')}" placeholder="${l.f==='subj'?'girl・boy など':'looking up, blush'}" aria-label="${lkLab(l.f)}">`:`<select data-lkp="${i}" aria-label="部品"><option value="">（部品を選ぶ）</option>${lkOpts(l.f,l.id)}</select>`}</div>`;}).join('');
+    $$('[data-lkt]',box).forEach(x=>x.oninput=()=>{LINKS[+x.dataset.lkt].tx=x.value;});
+    $$('[data-lkw]',box).forEach(x=>x.onchange=()=>{const l=LINKS[+x.dataset.lkw];l.w=+x.value;const fs=l.w?LK_PER:LK_SCN;if(!fs.includes(l.f)){l.f=l.w?'action':'angle';l.id='';l.tx='';}drawLinks();});
+    $$('[data-lkf]',box).forEach(x=>x.onchange=()=>{const l=LINKS[+x.dataset.lkf];l.f=x.value;l.id='';l.tx='';drawLinks();});
     $$('[data-lkp]',box).forEach(x=>x.onchange=()=>{LINKS[+x.dataset.lkp].id=x.value;});
     $$('[data-lkdel]',box).forEach(x=>x.onclick=()=>{LINKS.splice(+x.dataset.lkdel,1);drawLinks();});};
   drawLinks();
   const la=$('#pLinkAdd');if(la)la.onclick=()=>{LINKS.push({w:1,f:'action',id:''});drawLinks();};
+  const ls=$('#pLinkScene');if(ls)ls.onchange=()=>{const sc2=byId('scenes',ls.value);ls.value='';if(!sc2)return;const L=linksFromScene(sc2);if(!L.length)return toast('そのシーンには、取り込む設定がありません');
+    if(LINKS.length&&!confirm(`今の設定を、シーン「${sc2.title||'無題のシーン'}」の設定に置きかえますか？`))return;LINKS.splice(0,LINKS.length,...L);drawLinks();toast(`${L.length} 件を取り込みました。保存を押すと登録します`);};
   const va=$('#pVarAdd');if(va)va.onclick=()=>{VARS.push({id:'v'+uid(),name:'',tags:$('#pTags').value.trim()});drawVars();const ins=$$('#pVars [data-vn]');ins[ins.length-1].focus();};
   /* 日本語 → 英語 */
   $('#pJaGo').onclick=async()=>{const t=$('#pJa').value.trim();if(!t)return toast('日本語を入れてください');const b=$('#pJaGo'),m=$('#pJaMsg');b.disabled=true;b.textContent='直しています…';
@@ -2081,7 +2109,7 @@ function openPart(id,type,onSave){
   $('#pImgIn').onchange=async e=>{const f=e.target.files[0];e.target.value='';if(!f)return;p.img=await makeThumb(f,512);showImg();};
   $('#pImgDel').onclick=()=>{p.img=null;showImg();};
   const read=o=>{o.name=$('#pName').value.trim();o.tags=$('#pTags').value.trim();if($('#pSubj'))o.subject=$('#pSubj').value.trim()||'girl';if($('#pLname'))o.loraName=$('#pLname').value.trim();if($('#pW'))o.weight=$('#pW').value;if($('#pNegT'))o.neg=$('#pNegT').value.trim();if($('#pText'))o.text=$('#pText').value.trim();o.memo=$('#pMemo').value;if(!o.name)o.name=(o.tags.slice(0,18)||'名前なし');
-    if($('#pLinks')){const L=LINKS.filter(l=>l.id);if(L.length)o.links=L;else delete o.links;}
+    if($('#pLinks')){const L=LINKS.filter(l=>LK_TX.includes(l.f)?(l.tx||'').trim():l.id).map(l=>LK_TX.includes(l.f)?{w:l.w,f:l.f,tx:l.tx.trim()}:{w:l.w,f:l.f,id:l.id});if(L.length)o.links=L;else delete o.links;}
     if($('#pVars')){const vs=VARS.filter(v=>(v.name||'').trim()||(v.tags||'').trim()).map(v=>Object.assign({},v,{name:(v.name||'').trim()||(v.tags||'').trim().slice(0,18),tags:(v.tags||'').trim()}));if(vs.length)o.vars=vs;else delete o.vars;}
     return o;};
   /* ぶつかりやすいタグを知らせる。「○○の部品に分ける」は、保存したときに部品を作り、この部品を使っているシーンにも付ける */
@@ -2121,7 +2149,7 @@ function openPart(id,type,onSave){
   const dl=$('#pDel');if(dl)dl.onclick=async()=>{if(!confirm(used?`この部品は ${used} 件のシーンで使っています。削除すると、そのシーンからも外れます。削除しますか？`:'この部品を削除しますか？'))return;
     /* 絡みを消すときは、使っているシーンで一緒に選んだ部品も外すか聞く */
     if(p.type==='inter'&&src&&(src.links||[]).length){const hit=S.scenes.map(s=>[s,(s.inter||[]).filter(x=>vBase(x)===p.id).flatMap(x=>unlinkList(s,x))]).filter(x=>x[1].length);
-      if(hit.length&&confirm(`この絡みを使っている ${hit.length} 件のシーンで、一緒に選んだ部品も外しますか？\n\n${[...new Set(hit.flatMap(x=>x[1].map(lkName)))].join('\n')}\n\n「キャンセル」なら、絡みだけを外します。`))for(const[s,L]of hit)removeLinks(s,L);}
+      if(hit.length&&confirm(`この絡みを使っている ${hit.length} 件のシーンで、この絡みで呼び出した設定も外しますか？\n\n${[...new Set(hit.flatMap(x=>x[1].map(lkName)))].join('\n')}\n\n「キャンセル」なら、絡みだけを外します。`))for(const[s,L]of hit)removeLinks(s,L);}
     /* シーンから外す（派生を選んでいたところも） */
     for(const s of S.scenes)if(mapSceneIds(s,id=>vBase(id)===p.id?'':id,false))await saveNow('scenes',s);
     S.parts=S.parts.filter(x=>x.id!==p.id);await dbDel('parts',p.id);markDeleted(p.id);closeSheet();onSave&&onSave(null);};
