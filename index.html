@@ -45,6 +45,22 @@ nav#tabs button.on{color:var(--acc);font-weight:700}
 .sec{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:14px;margin:0 0 12px}
 .sec>h2{font-size:14px;margin:0 0 10px;display:flex;align-items:baseline;flex-wrap:wrap;column-gap:8px;row-gap:0}
 .sec>h2 small{font-weight:400;color:var(--sub);font-size:12px}
+/* 部品の派生 */
+.vrow{border-left:3px solid var(--line);padding:4px 0 4px 8px;margin:0 0 8px}
+.vrow textarea{margin-top:4px;width:100%}
+.vpick{display:flex;flex-wrap:wrap;gap:4px;align-items:center;margin:6px 0 0;padding:6px 8px;border-radius:8px;border:1px dashed var(--c,var(--line))}
+.vpick small{color:var(--sub);margin-right:2px;font-size:12px}
+.vp{border:1px solid var(--line);background:var(--card);border-radius:999px;padding:4px 10px;font:inherit;font-size:12px;color:inherit;cursor:pointer}
+.vp.on{background:var(--c,#888);border-color:var(--c,#888);color:#fff}
+.tg .vn{font-size:10px;opacity:.7}
+.pvar{color:var(--sub)}
+.tg.wt.off{text-decoration:line-through;opacity:.5}
+.simg{border:1px solid var(--line);border-radius:10px;padding:8px 10px;margin:0 0 10px}
+.simh,.simr{display:grid;grid-template-columns:34px 34px 1fr;gap:4px;align-items:center}
+.simh{font-size:11px;color:var(--sub);text-align:center}
+.simr{padding:5px 0;border-top:1px dashed var(--line)}
+.simr input{justify-self:center;width:18px;height:18px}
+.simr small{display:block;color:var(--sub);font-size:11px;word-break:break-all}
 /* シーンの画面：欄をたたむ（見出しを押す）。たたんだ欄は、選んでいるものを見出しの下に小さく出す */
 .sec>h2.fh,.slot>.sh.fh{cursor:pointer;-webkit-user-select:none;user-select:none;position:relative;padding-right:24px}
 .sec>h2.fh::after,.slot>.sh.fh::after{content:'';position:absolute;right:6px;top:5px;width:7px;height:7px;border-right:2px solid var(--sub);border-bottom:2px solid var(--sub);transform:rotate(45deg);transition:transform .15s}
@@ -439,7 +455,7 @@ const FMT={
 
 /* ========== データベース（IndexedDB） ========== */
 let db=null;
-const APP_VER='v46';/* sw.js の VERSION と同じにする */
+const APP_VER='v47';/* sw.js の VERSION と同じにする */
 const STORES=['parts','scenes','works','images','meta','fonts','stamps'];
 function openDB(){return new Promise((res,rej)=>{const r=indexedDB.open('manga4koma',3);r.onupgradeneeded=()=>{const d=r.result;for(const s of STORES)if(!d.objectStoreNames.contains(s))d.createObjectStore(s,{keyPath:'id'});};r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error);});}
 function tx(store,mode,fn){return new Promise((res,rej)=>{if(!db)return res(undefined);const t=db.transaction(store,mode);const req=fn(t.objectStore(store));let out;if(req)req.onsuccess=()=>{out=req.result;};t.oncomplete=()=>res(out);t.onerror=()=>rej(t.error);t.onabort=()=>rej(t.error);});}
@@ -449,7 +465,24 @@ const dbPut=(s,v)=>tx(s,'readwrite',st=>st.put(v));
 const dbDel=(s,id)=>tx(s,'readwrite',st=>st.delete(id));
 
 const S={parts:[],scenes:[],works:[],meta:{id:'settings',loraInPrompt:false,lastBackup:0}};
-const byId=(k,id)=>id?S[k].find(x=>x.id===id):undefined;
+/* ===== 部品の派生 =====
+   部品の中に、少し違う形（派生）を入れられる。p.vars=[{id,name,tags}]（text・neg・skel・memo もあれば使う）。
+   シーンでは「部品のid~派生のid」で選ぶ。派生のタグは、基本のタグの代わりに使う（ネガティブ・見本の画像などは基本のもの）。
+   派生がなくなったときは、基本の部品として扱う */
+const VSEP='~';
+const vBase=id=>String(id||'').split(VSEP)[0];
+function varPart(id){const[b,v]=String(id).split(VSEP);const p=S.parts.find(x=>x.id===b);if(!p)return undefined;const vr=(p.vars||[]).find(x=>x.id===v);if(!vr)return p;
+  return Object.assign({},p,{id,name:(p.name||'名前なし')+'・'+(vr.name||'派生'),tags:vr.tags||'',text:vr.text||'',neg:vr.neg!=null?vr.neg:p.neg,skel:vr.skel||p.skel,vars:undefined,_base:p.id,_vname:vr.name||''});}
+const byId=(k,id)=>!id?undefined:(k==='parts'&&String(id).includes(VSEP))?varPart(id):S[k].find(x=>x.id===id);
+/* シーンの中の部品の選び方を、まとめて付けかえる。fn(id) が返した id にする（'' なら外す）。
+   snaps が true なら、画像に記録した設定も付けかえる。変わったら true を返す */
+function mapSceneIds(s,fn,snaps){
+  const one=v=>v?(fn(v)||''):v;
+  const arr=a=>{const o=[];for(const x of A_(a)){const n=one(x);if(n&&!o.includes(n))o.push(n);}return o;};
+  const fix=s=>{for(const c of s.chars||[]){for(const f of['chara','face'])if(c[f])c[f]=one(c[f]);for(const f of['outfit','action','body','phys','act'])if(c[f]!=null&&A_(c[f]).length)c[f]=arr(c[f]);if(c.pic&&c.pic.pose)c.pic.pose=fn(c.pic.pose)||'stand';}
+    for(const f of['bg','style','camera','light'])if(s[f])s[f]=one(s[f]);for(const f of['inter','angle','fx','np'])if(Array.isArray(s[f]))s[f]=arr(s[f]);
+    if(Array.isArray(s.loras)){const seen=new Set();s.loras=s.loras.map(l=>Object.assign({},l,{id:one(l.id)})).filter(l=>{if(!l.id||seen.has(l.id))return false;seen.add(l.id);return true;});}};
+  const before=JSON.stringify(s);fix(s);if(snaps)for(const m of Object.values(s.imgMeta||{}))if(m&&m.snap)fix(m.snap);return JSON.stringify(s)!==before;}
 async function loadAll(){
   S.parts=await dbAll('parts');S.scenes=await dbAll('scenes');S.works=await dbAll('works');
   S.meta=Object.assign({id:'settings',loraInPrompt:false,lastBackup:0},await dbGet('meta','settings')||{});
@@ -604,7 +637,8 @@ const baseOf=t=>parseTag(t).base;
    人物ごとの重みがなければ、前からある「タグ」だけの重みを使う */
 const wKey=(t,si)=>si!=null?(si+1)+'|'+norm(t):norm(t);
 function wVal(ws,k,fb,own){return(k in ws)?ws[k]:(fb&&fb in ws)?ws[fb]:own;}
-function weigh(t,sc,si){const p=parseTag(t);const ws=(sc&&sc.weights)||{};const w=wVal(ws,wKey(t,si),si!=null?norm(t):null,p.w);return(w!=null&&Math.abs(w-1)>1e-9)?`(${p.base}:${+(+w).toFixed(2)})`:p.base;}
+/* 重みが 0 のタグは、プロンプトに入れない（'' を返す） */
+function weigh(t,sc,si){const p=parseTag(t);const ws=(sc&&sc.weights)||{};const w=wVal(ws,wKey(t,si),si!=null?norm(t):null,p.w);if(w!=null&&Math.abs(w)<1e-9)return'';return(w!=null&&Math.abs(w-1)>1e-9)?`(${p.base}:${+(+w).toFixed(2)})`:p.base;}
 /* KEEP：重複の欄で「残す」にしたタグ。プロンプトを組み立てている間だけ入る */
 let KEEP=null;
 function uniq(arr,remove){const rm=new Set((remove||[]).map(norm));const seen=new Set();return arr.filter(t=>{const k=norm(t);if(rm.has(k)||(seen.has(k)&&!(KEEP&&KEEP.has(k))))return false;seen.add(k);return true;});}
@@ -682,12 +716,12 @@ const OPP=[
 /* ===== 同じ内容の部品 =====
    スマホとPCで合わせたときなど、同じ部品が2つできることがある。名前・タグなどが同じものを1つにまとめる。
    シーンで使っているほうを残し、消すほうを選んでいるシーン（画像の記録も）は、残すほうに付けかえる */
-function partSig(p){const n=x=>splitTags(x).map(norm).join(',');return JSON.stringify([p.type,(p.name||'').trim(),n(p.tags),n(p.neg),(p.text||'').trim(),p.type==='chara'?(p.subject||'').trim():'',p.loraName||'',p.type==='lora'?String(p.weight??''):'',p.skel?JSON.stringify(p.skel):'']);}
+function partSig(p){const n=x=>splitTags(x).map(norm).join(',');return JSON.stringify([p.type,(p.name||'').trim(),n(p.tags),n(p.neg),(p.text||'').trim(),p.type==='chara'?(p.subject||'').trim():'',p.loraName||'',p.type==='lora'?String(p.weight??''):'',p.skel?JSON.stringify(p.skel):'',JSON.stringify(p.vars||[])]);}
 function dupParts(type){const m=new Map();for(const p of S.parts){if(p.img||(type&&p.type!==type))continue;const k=partSig(p);if(!m.has(k))m.set(k,[]);m.get(k).push(p);}return[...m.values()].filter(g=>g.length>1);}
 async function mergeDupParts(type){
   const map={};
   for(const g of dupParts(type)){g.sort((a,b)=>partUsage(b.id)-partUsage(a.id)||(a.created||0)-(b.created||0));for(const x of g.slice(1))map[x.id]=g[0].id;}
-  const R=id=>map[id]||id,RA=a=>[...new Set(A_(a).map(R))];
+  const R=id=>{const b=vBase(id);return map[b]?map[b]+String(id).slice(b.length):id;},RA=a=>[...new Set(A_(a).map(R))];
   const fix=s=>{for(const c of s.chars||[]){for(const f of['chara','face'])if(c[f])c[f]=R(c[f]);for(const f of['outfit','action','body','phys','act'])if(c[f]!=null)c[f]=Array.isArray(c[f])?RA(c[f]):R(c[f]);if(c.pic&&c.pic.pose)c.pic.pose=R(c.pic.pose);}
     for(const f of['bg','style','camera','light'])if(s[f])s[f]=R(s[f]);for(const f of['inter','angle','fx','np'])if(Array.isArray(s[f]))s[f]=RA(s[f]);
     if(Array.isArray(s.loras)){const seen=new Set();s.loras=s.loras.map(l=>Object.assign({},l,{id:R(l.id)})).filter(l=>{if(seen.has(l.id))return false;seen.add(l.id);return true;});}};
@@ -772,17 +806,17 @@ function buildPrompt0(sc,D){
   const W=x=>weigh(x.t,sc,x.si);
   /* 見やすくするため、項目（セクション）が変わるところで改行する。コピーしたプロンプトにも改行が入る（カンマは残すので、タグの区切りは変わらない） */
   const secOf=x=>x.si!=null?'p'+x.si:x.cat;
-  const secs=L=>{const o=[];let k=null;for(const x of L){const s=secOf(x);if(s!==k){o.push([]);k=s;}o[o.length-1].push(W(x));}return o.map(a=>a.join(', '));};
+  const secs=L=>{const o=[];let k=null;for(const x of L){const s=secOf(x);if(s!==k){o.push([]);k=s;}const w=W(x);if(w)o[o.length-1].push(w);}return o.map(a=>a.join(', '));};
   const SEP=',\n';
   let used=[];
   if(fmt==='group'){
-    const out=slots.map((s,i)=>{const t=uniqI(slotItems(s,i)).filter(pfI());used.push(...t);return t.length?`${s.subj}(${t.map(W).join(', ')})`:s.subj;});
+    const out=slots.map((s,i)=>{const t=uniqI(slotItems(s,i)).filter(pfI());used.push(...t);const tw=t.map(W).filter(Boolean);return tw.length?`${s.subj}(${tw.join(', ')})`:s.subj;});
     const r=uniqI([...restItems(),...I(trig,'lora')]).filter(pfI());used.push(...r);
     pos=[...out,...secs(r),loraTxt.join(', ')].filter(Boolean).join(SEP);
   }else if(fmt==='tag'){
     used=uniqI([...I(trig,'lora'),...slots.flatMap(slotItems),...restItems()]).filter(pfI()).filter(x=>!(slots.length&&COUNT_RE.test(norm(x.t))));
     /* 人物が1人のときも、人物のタグを1つのセクションにする */
-    const secOf2=x=>x.p!=null?'p'+x.p:x.cat;let k=null;const o=[];for(const x of used){const s=secOf2(x);if(s!==k){o.push([]);k=s;}o[o.length-1].push(W(x));}
+    const secOf2=x=>x.p!=null?'p'+x.p:x.cat;let k=null;const o=[];for(const x of used){const s=secOf2(x);if(s!==k){o.push([]);k=s;}const w=W(x);if(w)o[o.length-1].push(w);}
     pos=[countTags(slots.map(s=>s.subj)).join(', '),...o.map(a=>a.join(', ')),loraTxt.join(', ')].filter(Boolean).join(SEP);
   }
   /* 重みを付けられるタグの一覧（プロンプトに入ったタグを、入った順に1回ずつ） */
@@ -862,7 +896,8 @@ $('#sheet .bk').onclick=closeSheet;
 
 /* ========== 使われている場所 ========== */
 function usedIn(sceneId){const r=[];for(const w of S.works)(w.panels||[]).forEach((p,i)=>{if(p===sceneId)r.push({w,i});});return r;}
-function partUsage(pid){return S.scenes.filter(s=>s.bg===pid||s.style===pid||s.camera===pid||s.light===pid||(s.inter||[]).includes(pid)||(s.angle||[]).includes(pid)||(s.fx||[]).includes(pid)||(s.np||[]).includes(pid)||(s.chars||[]).some(c=>c.chara===pid||A_(c.outfit).includes(pid)||A_(c.action).includes(pid)||(c.pic&&c.pic.pose===pid)||c.face===pid||(c.body||[]).includes(pid)||(c.phys||[]).includes(pid)||(c.act||[]).includes(pid))||(s.loras||[]).some(l=>l.id===pid)).length;}
+function partUsage(pid){const e=x=>!!x&&(x===pid||(!pid.includes(VSEP)&&vBase(x)===pid)),h=a=>A_(a).some(e);
+  return S.scenes.filter(s=>e(s.bg)||e(s.style)||e(s.camera)||e(s.light)||h(s.inter)||h(s.angle)||h(s.fx)||h(s.np)||(s.chars||[]).some(c=>e(c.chara)||h(c.outfit)||h(c.action)||(c.pic&&e(c.pic.pose))||e(c.face)||h(c.body)||h(c.phys)||h(c.act))||(s.loras||[]).some(l=>e(l.id))).length;}
 /* 服装・ポーズは、前は1つだけ（文字）、今はいくつでも（配列）。どちらでも読めるようにする */
 const A_=v=>Array.isArray(v)?v:(v?[v]:[]);
 const newSlot=()=>({chara:'',phys:[],outfit:[],action:[],act:[],face:'',body:[],add:'',remove:''});
@@ -980,7 +1015,7 @@ function vScenes(c){
 }
 
 /* ========== シーンの編集 ========== */
-function opts(type,sel){const ps=S.parts.filter(p=>p.type===type).sort((a,b)=>(a.name||'').localeCompare(b.name||'','ja'));return `<option value="">（なし）</option>${ps.map(p=>`<option value="${p.id}"${p.id===sel?' selected':''}>${esc(p.name||'名前なし')}</option>`).join('')}<option value="__new">＋ 新しく登録…</option>`;}
+function opts(type,sel){const ps=S.parts.filter(p=>p.type===type).sort((a,b)=>(a.name||'').localeCompare(b.name||'','ja'));return `<option value="">（なし）</option>${ps.map(p=>`<option value="${p.id}"${p.id===sel?' selected':''}>${esc(p.name||'名前なし')}${(p.vars||[]).length?'（派生あり）':''}</option>`+(p.vars||[]).map(v=>`<option value="${p.id}${VSEP}${v.id}"${p.id+VSEP+v.id===sel?' selected':''}>　└ ${esc(v.name||'派生')}</option>`).join('')).join('')}<option value="__new">＋ 新しく登録…</option>`;}
 /* 部品の種類ごとの色（シーンの欄と部品の一覧で同じ色を使う） */
 const CATC={add:'#9ca3af',pic:'#0d9488',act:'#f43f5e',chara:'#3b82f6',phys:'#0ea5a4',outfit:'#8b5cf6',action:'#f97316',face:'#ec4899',body:'#ef4444',inter:'#d946ef',bg:'#22a34a',angle:'#6366f1',camera:'#0891b2',light:'#eab308',fx:'#84cc16',np:'#64748b',style:'#a16207',lora:'#475569'};
 /* 長押し：0.5秒押し続けたら fn を呼ぶ。そのあとの「押した」はなかったことにする */
@@ -1003,7 +1038,12 @@ function partSel(label,type,val,attrs){const p=byId('parts',val);
   return `<div class="f cat" ${catAttr(type)}><span>${pic(type)}${label}</span><div class="sel"><select ${attrs} data-type="${type}" aria-label="${label}">${opts(type,val)}</select>${p?`<button class="ico" data-editpart="${p.id}" title="この部品を直す" aria-label="この部品を直す">✎</button>`:''}</div>${p&&p.tags?`<div class="ptags">${esc(p.tags)}</div>`:''}${grid}</div>`;}
 /* いくつでも選べる部品（体の状態・絡み） */
 function chipSel(label,type,arr,attrs){const ps=S.parts.filter(p=>p.type===type).sort((a,b)=>(a.name||'').localeCompare(b.name||'','ja'));
-  return `<div class="f cat" ${catAttr(type)}><span>${pic(type)}${label}（いくつでも・長押しで直す）</span><div class="tgs">${ps.map(p=>`<button type="button" class="tg ${arr.includes(p.id)?'on':''}" ${attrs} data-pid="${p.id}">${esc(p.name||'名前なし')}</button>`).join('')}<button type="button" class="tg new" ${attrs} data-pid="__new">＋ 登録</button></div></div>`;}
+  /* 派生のある部品を選ぶと、下に「基本・派生」のボタンが出る */
+  const selOf=p=>arr.find(x=>vBase(x)===p.id);
+  const vrow=ps.filter(p=>(p.vars||[]).length&&selOf(p)).map(p=>{const cur=selOf(p);
+    return `<div class="vpick"><small>${esc(p.name||'名前なし')}の派生：</small>${[['','基本'],...p.vars.map(v=>[v.id,v.name||'派生'])].map(([vid,n])=>{const id=vid?p.id+VSEP+vid:p.id;return `<button type="button" class="vp ${cur===id?'on':''}" ${attrs} data-vb="${p.id}" data-vid="${id}">${esc(n)}</button>`;}).join('')}</div>`;}).join('');
+  return `<div class="f cat" ${catAttr(type)}><span>${pic(type)}${label}（いくつでも・長押しで直す）</span><div class="tgs">${ps.map(p=>{const cur=selOf(p),v=cur&&cur!==p.id?P_(cur):null;
+    return `<button type="button" class="tg ${cur?'on':''}" ${attrs} data-pid="${p.id}">${esc(v?v.name:(p.name||'名前なし'))}${(p.vars||[]).length&&!cur?' <small class="vn">＋派生</small>':''}</button>`;}).join('')}<button type="button" class="tg new" ${attrs} data-pid="__new">＋ 登録</button></div>${vrow}</div>`;}
 let wSel=null;
 /* ===== シーンの画面の欄をたたむ =====
    見出し（プロンプト・人物・絡み・背景など）を押すと、たたむ・ひらく。人物は1人ずつたためる。
@@ -1011,7 +1051,7 @@ let wSel=null;
    （画面の記録 c.fold に、開いた欄の名前を入れる） */
 /* たたんだ欄の中で選んでいるもの（部品の名前・足すタグ）を短く並べる */
 function foldSum(el){const a=[];
-  $$('select',el).forEach(x=>{if(x.value){const o=x.options[x.selectedIndex];if(o)a.push(o.textContent.trim());}});
+  $$('select',el).forEach(x=>{if(x.value){const o=x.options[x.selectedIndex],pp=P_(x.value);if(pp)a.push(pp.name||'名前なし');else if(o)a.push(o.textContent.trim());}});
   $$('.tg.on:not(.new)',el).forEach(x=>a.push(x.textContent.trim()));
   $$('input[data-t="add"],input[data-st="add"]',el).forEach(x=>{if(x.value.trim())a.push('＋'+x.value.trim());});
   $$('input[data-lora]:checked',el).forEach(x=>{const n=x.closest('.lrow');const ln=n&&$('.ln',n);if(ln)a.push(ln.firstChild.textContent.trim());});
@@ -1138,7 +1178,8 @@ function vScene(c){
     const pLab=t=>t.si!=null?`人物${t.si+1}${t.pname?'「'+esc(t.pname)+'」':''}`:'';
     const legend=`<div class="wleg">${cats.map(c=>`<span style="--c:${CATC[c]||'#888'}">${CATI[c]||'＋'}${catLab(c)}</span>`).join('')}</div>`;
     /* 項目ごとにまとめ、行の頭に項目名、タグの頭にその項目の絵を付ける（色だけに頼らない） */
-    const chip=t=>{const w=wOf(t);return `<button type="button" class="tg wt ${w>1?'up':w<1?'dn':''} ${t.key===wSel?'sel':''}" style="--c:${CATC[t.cat]||'#888'}" data-wk="${esc(t.key)}"><i class="wi" aria-hidden="true">${CATI[t.cat]||'＋'}</i>`;};
+    const wc=w=>Math.abs(w)<1e-9?'off':w>1?'up':w<1?'dn':'';
+    const chip=t=>{const w=wOf(t);return `<button type="button" class="tg wt ${wc(w)} ${t.key===wSel?'sel':''}" style="--c:${CATC[t.cat]||'#888'}" data-wk="${esc(t.key)}"><i class="wi" aria-hidden="true">${CATI[t.cat]||'＋'}</i>`;};
     const chips=L=>L.map(t=>{const w=wOf(t);return chip(t)+`${esc(t.base)}${Math.abs(w-1)>1e-9?` <b>${+(+w).toFixed(2)}</b>`:''}</button>`;}).join('');
     const grp=pers.length?[...pers.map(i=>{const L=p.tagList.filter(t=>t.si===i);return `<div class="wg wper"><div class="wgl">👤 ${pLab(L[0])}</div><div class="tgs">${chips(L)}</div></div>`;}),
         ...rcats.map(c=>`<div class="wg" style="--c:${CATC[c]||'#888'}"><div class="wgl">${CATI[c]||'＋'} ${catLab(c)}</div><div class="tgs">${chips(rest.filter(t=>t.cat===c))}</div></div>`)]
@@ -1147,18 +1188,18 @@ function vScene(c){
     box.innerHTML=pHint+`<div class="wgrp">${grp.join('')}</div>`+`
     ${sel?`<div class="wedit">
       <div class="wtop"><b>${sel.si!=null?`<small class="wwho">${pLab(sel)}</small> `:''}${esc(sel.base)}</b><code id="wPrev"></code></div>
-      <div class="wrow"><button class="btn ghost sm" id="wDn" aria-label="弱く">－</button><input type="range" id="wRange" min="0.5" max="1.8" step="0.05" value="${wOf(sel)}" aria-label="重み"><button class="btn ghost sm" id="wUp" aria-label="強く">＋</button></div>
-      <div class="wscale"><span>0.5 弱い</span><span>1.0 ふつう</span><span>1.8 強い</span></div>
-      <div class="row" style="margin-bottom:0">${[1,1.2,1.4,1.6].map(v=>`<button class="btn ghost sm ${Math.abs(wOf(sel)-v)<1e-9?'on':''}" data-wv="${v}">${v.toFixed(1)}</button>`).join('')}<button class="btn danger sm" id="wReset">元に戻す</button></div>
-      <span class="hint">1.2〜1.4 くらいが目安です。1.6 以上は、絵がくずれやすくなります。このシーンだけの設定です。</span>
+      <div class="wrow"><button class="btn ghost sm" id="wDn" aria-label="弱く">－</button><input type="range" id="wRange" min="0" max="1.8" step="0.05" value="${wOf(sel)}" aria-label="重み"><button class="btn ghost sm" id="wUp" aria-label="強く">＋</button></div>
+      <div class="wscale"><span>0 なし</span><span>1.0 ふつう</span><span>1.8 強い</span></div>
+      <div class="row" style="margin-bottom:0">${[0,1,1.2,1.4,1.6].map(v=>`<button class="btn ghost sm ${Math.abs(wOf(sel)-v)<1e-9?'on':''}" data-wv="${v}">${v?v.toFixed(1):'0（なし）'}</button>`).join('')}<button class="btn danger sm" id="wReset">元に戻す</button></div>
+      <span class="hint">1.2〜1.4 くらいが目安です。1.6 以上は、絵がくずれやすくなります。0 にすると、このタグはプロンプトに入りません（部品はそのまま）。このシーンだけの設定です。</span>
     </div>`:`${Object.keys(sc.weights).length?'<div class="row" style="margin:10px 0 0"><button class="btn danger sm" id="wAll">重みをすべて元に戻す</button></div>':''}`}`;
     $$('[data-wk]',box).forEach(b=>b.onclick=()=>{wSel=wSel===b.dataset.wk?null:b.dataset.wk;drawW(buildPrompt(sc));});
     const wa=$('#wAll');if(wa)wa.onclick=()=>{if(!confirm('このシーンの重みを、すべて元に戻しますか？'))return;sc.weights={};save('scenes',sc);upd();};
     if(!sel)return;
-    const setW=v=>{v=Math.round(Math.min(1.8,Math.max(0.5,v))*100)/100;if(Math.abs(v-(sel.own??1))<1e-9&&!(sel.fb&&sel.fb in sc.weights))delete sc.weights[sel.key];else sc.weights[sel.key]=v;save('scenes',sc);
-      $('#wRange').value=v;$('#wPrev').textContent=weigh(sel.base,sc,sel.si);const p2=buildPrompt(sc);$('#pPos').innerHTML=hlPrompt(p2.pos);
-      const chip=$(`[data-wk="${CSS.escape(sel.key)}"]`,box);if(chip){chip.className=`tg wt ${v>1?'up':v<1?'dn':''} sel`;chip.innerHTML=`<i class="wi" aria-hidden="true">${CATI[sel.cat]||'＋'}</i>`+esc(sel.base)+(Math.abs(v-1)>1e-9?` <b>${v}</b>`:'');}};
-    $('#wPrev').textContent=weigh(sel.base,sc,sel.si);
+    const setW=v=>{v=Math.round(Math.min(1.8,Math.max(0,v))*100)/100;if(Math.abs(v-(sel.own??1))<1e-9&&!(sel.fb&&sel.fb in sc.weights))delete sc.weights[sel.key];else sc.weights[sel.key]=v;save('scenes',sc);
+      $('#wRange').value=v;$('#wPrev').textContent=weigh(sel.base,sc,sel.si)||'（入れない）';const p2=buildPrompt(sc);$('#pPos').innerHTML=hlPrompt(p2.pos);
+      const chip=$(`[data-wk="${CSS.escape(sel.key)}"]`,box);if(chip){chip.className=`tg wt ${wc(v)} sel`;chip.innerHTML=`<i class="wi" aria-hidden="true">${CATI[sel.cat]||'＋'}</i>`+esc(sel.base)+(Math.abs(v-1)>1e-9?` <b>${v}</b>`:'');}};
+    $('#wPrev').textContent=weigh(sel.base,sc,sel.si)||'（入れない）';
     $('#wRange').oninput=e=>setW(+e.target.value);
     $('#wUp').onclick=()=>setW(wOf(sel)+0.05);
     $('#wDn').onclick=()=>setW(wOf(sel)-0.05);
@@ -1222,8 +1263,10 @@ function vScene(c){
     const per=['body','phys','act','outfit','action'].includes(kind);/* 人物ごと */
     const arr=()=>per?(sc.chars[+slot][kind]||[]):(sc[kind]||[]);
     const setArr=a=>{if(per)sc.chars[+slot][kind]=a;else sc[kind]=a;};
+    /* 派生を選ぶ */
+    if(b.dataset.vb){setArr([...new Set(arr().map(x=>vBase(x)===b.dataset.vb?b.dataset.vid:x))]);save('scenes',sc);render(true);return;}
     if(b.dataset.pid==='__new'){openPart(null,kind,p=>{if(p){setArr([...arr(),p.id]);saveNow('scenes',sc);}render(true);});return;}
-    const id=b.dataset.pid,a=arr();setArr(a.includes(id)?a.filter(x=>x!==id):[...a,id]);save('scenes',sc);render(true);
+    const id=b.dataset.pid,a=arr(),cur=a.find(x=>vBase(x)===id);setArr(cur?a.filter(x=>vBase(x)!==id):[...a,id]);save('scenes',sc);render(true);
   });
   $('#fmtSel').onchange=e=>{S.meta.fmt=e.target.value;dbPut('meta',S.meta);upd();};
   /* LoRA */
@@ -1851,8 +1894,8 @@ function vPList(c){
   setHead((CATI[t]?CATI[t]+' ':'')+T.label);
   const list=S.parts.filter(p=>p.type===t).sort((a,b)=>(a.name||'').localeCompare(b.name||'','ja'));
   view.innerHTML=`
-  ${mergeBanner(t)}<p class="hint" style="margin:0 0 12px">${esc(T.hint)}</p>
-  ${list.length?list.map(p=>{const n=partUsage(p.id);const inner=`<small>${n?n+'シーン':'未使用'}</small><b>${esc(p.name||'名前なし')}</b>${roleN(p)?' <span class="chip warn">⚠ ぶつかりやすいタグ</span>':''}${p.type==='chara'?` <span class="chip">${esc(p.subject||'girl')}</span>`:''}${p.type==='lora'?` <span class="chip">重み ${esc(p.weight??'')}</span>`:''}${p.skel?' <span class="chip">🕴 ピクトグラムのポーズ</span>':''}<div class="ptags">${esc(p.tags)||'<span class="muted">タグなし</span>'}${p.type==='np'&&p.neg?`<br><span style="color:var(--warn)">ネガ：${esc(p.neg)}</span>`:''}</div>`;
+  ${mergeBanner(t)}${simBanner(t)}<p class="hint" style="margin:0 0 12px">${esc(T.hint)}</p>
+  ${list.length?list.map(p=>{const n=partUsage(p.id);const inner=`<small>${n?n+'シーン':'未使用'}</small><b>${esc(p.name||'名前なし')}</b>${roleN(p)?' <span class="chip warn">⚠ ぶつかりやすいタグ</span>':''}${p.type==='chara'?` <span class="chip">${esc(p.subject||'girl')}</span>`:''}${p.type==='lora'?` <span class="chip">重み ${esc(p.weight??'')}</span>`:''}${p.skel?' <span class="chip">🕴 ピクトグラムのポーズ</span>':''}${(p.vars||[]).length?` <span class="chip">派生 ${p.vars.length}</span>`:''}<div class="ptags">${esc(p.tags)||'<span class="muted">タグなし</span>'}${(p.vars||[]).map(v=>`<br><span class="pvar">└ ${esc(v.name||'派生')}：${esc(v.tags)||'タグなし'}</span>`).join('')}${p.type==='np'&&p.neg?`<br><span style="color:var(--warn)">ネガ：${esc(p.neg)}</span>`:''}</div>`;
     return p.img?`<button class="pitem hasimg" data-id="${p.id}"><img class="pim" src="${partImgUrl(p)}" alt=""><div>${inner}</div></button>`:`<button class="pitem" data-id="${p.id}">${inner}</button>`;}).join('')
   :`<div class="empty"><b>${T.label}はまだありません</b>「＋ 新しい${T.label}」で登録します。</div>`}
   <button class="fab" id="newPart">＋ 新しい${T.label}</button>`;
@@ -1860,7 +1903,51 @@ function vPList(c){
     $('#newPicPose').onclick=()=>openPoseEditor(null,0,null,()=>render(true));}
   $$('.pitem',view).forEach(b=>b.onclick=()=>openPart(b.dataset.id,null,()=>render(true)));
   $('#newPart').onclick=()=>openPart(null,t,()=>render(true));
-  mergeWire(t);
+  mergeWire(t);simWire(t);
+}
+/* ===== 似ている部品を派生にまとめる =====
+   同じ種類の部品で、タグがもう一方に全部入っているもの・名前とタグが近いものを組にする。
+   組の中でタグが少ないものを「基本」の候補にし、ほかを派生の候補にする（基本は画面で選びなおせる）。
+   派生を持っている部品・ピクトグラムの形がある部品・見本の画像がある部品は、派生にはしない */
+function simGroups(type){
+  if(type==='lora'||type==='chara')return[];
+  const nm=p=>(p.name||'').replace(/[（(].*?[)）]/g,'').trim();
+  const ps=S.parts.filter(p=>p.type===type).map(p=>({p,t:new Set(splitTags(p.tags).map(norm)),n:nm(p)})).filter(x=>x.t.size);
+  ps.sort((a,b)=>a.t.size-b.t.size||(a.p.name||'').length-(b.p.name||'').length);
+  const sim=(a,b)=>{let i=0;for(const x of a.t)if(b.t.has(x))i++;const j=i/(a.t.size+b.t.size-i);
+    if(i===a.t.size||i===b.t.size)return 1+j;if(a.n.length>=2&&b.n.length>=2&&(a.n.includes(b.n)||b.n.includes(a.n))&&j>=.25)return .9+j;return j>=.6?j:0;};
+  const role=new Map(),G=new Map();
+  ps.forEach((x,xi)=>{if((x.p.vars||[]).length||x.p.skel||x.p.img)return;let best=null,bs=0;
+    ps.forEach((b,bi)=>{if(b===x||bi>xi||role.get(b.p.id)==='m')return;const s=sim(b,x);if(s>bs){bs=s;best=b;}});
+    if(best){role.set(best.p.id,'b');role.set(x.p.id,'m');if(!G.has(best.p.id))G.set(best.p.id,[best.p]);G.get(best.p.id).push(x.p);}});
+  return[...G.values()];}
+/* 派生の名前：基本の名前で始まるときは、その後ろだけにする（逆光（シルエット）→ シルエット） */
+function varNameOf(b,m){const bn=(b.name||'').replace(/[（(].*?[)）]/g,'').trim(),mn=(m.name||'').trim();
+  if(bn&&mn.startsWith(bn)&&mn.length>bn.length){const r=mn.slice(bn.length).replace(/^[＋+・\s]+/,'').replace(/^[（(](.*)[)）]$/,'$1').trim();if(r)return r;}return mn||'派生';}
+async function mergeAsVars(baseId,memIds){
+  const b=S.parts.find(x=>x.id===baseId);if(!b)return 0;b.vars=b.vars||[];const map={};
+  for(const id of memIds){const m=S.parts.find(x=>x.id===id);if(!m||m===b||(m.vars||[]).length)continue;
+    const v={id:'v'+uid(),name:varNameOf(b,m),tags:m.tags||''};if(m.text)v.text=m.text;if((m.neg||'')!==(b.neg||''))v.neg=m.neg||'';if(m.skel)v.skel=m.skel;if(m.memo)v.memo=m.memo;
+    b.vars.push(v);map[m.id]=b.id+VSEP+v.id;}
+  if(!Object.keys(map).length)return 0;
+  await saveNow('parts',b);
+  for(const s of S.scenes)if(mapSceneIds(s,id=>map[id]||id,true))await saveNow('scenes',s);
+  for(const id in map){S.parts=S.parts.filter(p=>p.id!==id);await dbDel('parts',id);markDeleted(id);}
+  return Object.keys(map).length;}
+const simBanner=type=>{const n=simGroups(type).length;return n?`<div class="banner info">似ている部品が ${n} 組あります。1つの部品の「派生」にまとめると、一覧がすっきりします。<div class="row" style="margin:6px 0 0"><button class="btn sm" id="simOpen">確かめてまとめる</button></div></div>`:'';};
+const simWire=type=>{const b=$('#simOpen');if(b)b.onclick=()=>openSimSheet(type);};
+function openSimSheet(type){
+  const gs=simGroups(type);if(!gs.length){toast('似ている部品はありません');return render(true);}
+  openSheet(`<h2>似ている部品を派生にまとめる</h2>
+  <p class="hint" style="margin:0 0 10px">組ごとに「基本」にする部品を選び、派生にする部品にチェックを入れて「この組をまとめる」を押します。派生にした部品は、基本の部品の中に入って（名前とタグはそのまま）、部品の一覧からは消えます。その部品を選んでいたシーンは、派生を選んだ形に付けかえます。</p>
+  ${gs.map((g,gi)=>`<div class="simg" data-g="${gi}"><div class="simh"><span>基本</span><span>派生</span><span></span></div>${g.map((p,k)=>`<div class="simr"><input type="radio" name="sb${gi}" value="${p.id}" ${k===0?'checked':''} aria-label="${esc(p.name||'')}を基本にする"><input type="checkbox" value="${p.id}" ${k?'checked':''} ${k===0?'disabled':''} aria-label="${esc(p.name||'')}を派生にする"><div><b>${esc(p.name||'名前なし')}</b><small>${esc(p.tags)}</small></div></div>`).join('')}
+    <div class="row" style="margin:6px 0 0"><button type="button" class="btn sm" data-sm="${gi}">この組をまとめる</button></div></div>`).join('')}
+  <div class="row"><button class="btn" id="simAll">すべての組をまとめる</button><button class="btn ghost" id="simClose">閉じる</button></div>`);
+  const pick=gi=>{const el=$(`.simg[data-g="${gi}"]`);const b=$('input[type=radio]:checked',el).value;return{el,b,ms:$$('input[type=checkbox]:checked',el).map(x=>x.value).filter(x=>x!==b)};};
+  $$('.simg').forEach(el=>$$('input[type=radio]',el).forEach(r=>r.onchange=()=>{$$('input[type=checkbox]',el).forEach(c=>{const me=c.value===r.value;c.disabled=me;if(me)c.checked=false;});}));
+  $$('[data-sm]').forEach(bt=>bt.onclick=async()=>{const x=pick(+bt.dataset.sm);if(!x.ms.length)return toast('派生にする部品にチェックを入れてください');const n=await mergeAsVars(x.b,x.ms);x.el.innerHTML=`<p class="hint" style="margin:0">✓ ${n} 件を派生にまとめました</p>`;toast(`${n} 件を派生にまとめました`);});
+  $('#simAll').onclick=async()=>{let n=0;for(let gi=0;gi<gs.length;gi++){const el=$(`.simg[data-g="${gi}"]`);if(!el||!$('input[type=radio]',el))continue;const x=pick(gi);if(x.ms.length)n+=await mergeAsVars(x.b,x.ms);}closeSheet();toast(`${n} 件を派生にまとめました`);render(true);};
+  $('#simClose').onclick=()=>{closeSheet();render(true);};
 }
 /* 日本語→英語（タグ）の辞書。よく使う言葉はここで直し、ないものはインターネットの翻訳を使う */
 const JA_DICT={
@@ -1896,6 +1983,7 @@ async function jaToTags(t){const words=jaSplit(t);const out=[];let dict=0,net=0,
     try{const e=(await netTranslate(w)).toLowerCase().replace(/[.。]+$/,'').trim();if(e){out.push(e);net++;}else fail.push(w);}catch(_){fail.push(w);}}
   return{tags:out,dict,net,fail};}
 function openPart(id,type,onSave){
+  id=id?vBase(id):id;/* 派生を押したときも、基本の部品を開く */
   const src=id?byId('parts',id):null;
   const p=src?Object.assign(JSON.parse(JSON.stringify(Object.assign({},src,{img:null}))),{img:src.img||null}):{id:uid(),type,name:'',tags:'',subject:type==='chara'?'girl':'',weight:type==='lora'?0.7:'',loraName:'',neg:'',memo:'',text:''};
   const T=PT[p.type];const used=src?partUsage(src.id):0;
@@ -1911,6 +1999,8 @@ function openPart(id,type,onSave){
     <span class="hint" id="pJaMsg">「、」で区切って入れます。よく使う言葉はアプリの辞書で、ほかはインターネットの翻訳（MyMemory）で直します。</span></div>
   <label class="f"><span>${p.type==='lora'?'トリガーワード（プロンプトに足すタグ）':p.type==='np'?'ポジティブに足すタグ（なくしたいものは no ○○ と書く）':'タグ（カンマ区切り）'}</span><textarea id="pTags" rows="3" placeholder="${esc(T.ph)}">${esc(p.tags)}</textarea><span class="hint">${esc(T.hint)}</span></label>
   <div id="pRole"></div>
+  ${p.type!=='lora'?`<div class="f pvars"><span>派生（この部品の別の形）</span><div id="pVars"></div><button type="button" class="btn ghost sm" id="pVarAdd">＋ 派生を足す</button>
+    <span class="hint">例：「正座」の中に「手を下げた正座」「手を上げた正座」。派生のプロンプトは、上のタグの代わりに使います（足したときは上のタグが入るので、変えるところだけ直してください）。シーンでこの部品を選ぶと、派生も選べます。最後に「保存」を押してください。</span></div>`:''}
   ${p.type!=='lora'?`<label class="f"><span>文章で書くとき（Tsubaki 系・英語・なくてもよい）</span><textarea id="pText" rows="2" placeholder="${esc(TEXT_PH[p.type]||'')}">${esc(p.text||'')}</textarea><span class="hint">プロンプトの形が「文章」のときだけ、タグの代わりにこの文を使います。空のままならタグから文を作ります。<button type="button" class="linkb" id="pTextJa">上の日本語を文章として英語にする</button></span></label>`:''}
   ${p.type==='np'?`<details class="nh" ${p.neg?'open':''}><summary>ネガティブにも足す（なくてもよい）</summary><div class="nhb"><label class="f" style="margin:0"><span>ネガティブに足すタグ</span><textarea id="pNegT" rows="2" placeholder="なくても、ポジティブだけで働きます">${esc(p.neg)}</textarea></label></div></details>`:''}
   ${p.type==='style'?`<label class="f"><span>ネガティブプロンプト</span><textarea id="pNegT" rows="3" placeholder="lowres, blurry, jpeg artifacts, text, watermark">${esc(p.neg)}</textarea></label>${negHelp()}`:''}
@@ -1920,6 +2010,15 @@ function openPart(id,type,onSave){
   <div class="row"><button class="btn" id="pSave">保存</button>${src?'<button class="btn ghost" id="pDup">複製</button><button class="btn danger" id="pDel">削除</button>':''}<button class="btn ghost" id="pCancel">やめる</button></div>`);
   const pp=$('#pPic');if(pp)pp.onclick=()=>{closeSheet();setTimeout(()=>openPoseEditor(null,0,src.id,()=>{onSave&&onSave(byId('parts',src.id));}),30);};
   setTimeout(()=>{if(!src)$('#pName')&&$('#pName').focus();},50);
+  /* 派生の欄 */
+  const VARS=JSON.parse(JSON.stringify(p.vars||[]));
+  const drawVars=()=>{const box=$('#pVars');if(!box)return;
+    box.innerHTML=VARS.map((v,i)=>{const n=src?partUsage(p.id+VSEP+v.id):0;return `<div class="vrow"><div class="sel"><input data-vn="${i}" value="${esc(v.name||'')}" placeholder="派生の名前（例：手を上げる）" aria-label="派生の名前"><button type="button" class="ico" data-vdel="${i}" title="この派生を消す" aria-label="この派生を消す">✕</button></div><textarea data-vt="${i}" rows="2" placeholder="プロンプト（タグ・カンマ区切り）" aria-label="派生のプロンプト">${esc(v.tags||'')}</textarea>${n?`<small class="hint">${n} シーンで使っています</small>`:''}</div>`;}).join('');
+    $$('[data-vn]',box).forEach(x=>x.oninput=()=>{VARS[+x.dataset.vn].name=x.value;});
+    $$('[data-vt]',box).forEach(x=>x.oninput=()=>{VARS[+x.dataset.vt].tags=x.value;});
+    $$('[data-vdel]',box).forEach(x=>x.onclick=()=>{const v=VARS[+x.dataset.vdel];if((v.name||v.tags)&&!confirm(`派生「${v.name||'名前なし'}」を消しますか？（保存したときに消えます。使っているシーンは、基本の形になります）`))return;VARS.splice(+x.dataset.vdel,1);drawVars();});};
+  drawVars();
+  const va=$('#pVarAdd');if(va)va.onclick=()=>{VARS.push({id:'v'+uid(),name:'',tags:$('#pTags').value.trim()});drawVars();const ins=$$('#pVars [data-vn]');ins[ins.length-1].focus();};
   /* 日本語 → 英語 */
   $('#pJaGo').onclick=async()=>{const t=$('#pJa').value.trim();if(!t)return toast('日本語を入れてください');const b=$('#pJaGo'),m=$('#pJaMsg');b.disabled=true;b.textContent='直しています…';
     try{const r=await jaToTags(t);
@@ -1936,7 +2035,9 @@ function openPart(id,type,onSave){
   showImg();
   $('#pImgIn').onchange=async e=>{const f=e.target.files[0];e.target.value='';if(!f)return;p.img=await makeThumb(f,512);showImg();};
   $('#pImgDel').onclick=()=>{p.img=null;showImg();};
-  const read=o=>{o.name=$('#pName').value.trim();o.tags=$('#pTags').value.trim();if($('#pSubj'))o.subject=$('#pSubj').value.trim()||'girl';if($('#pLname'))o.loraName=$('#pLname').value.trim();if($('#pW'))o.weight=$('#pW').value;if($('#pNegT'))o.neg=$('#pNegT').value.trim();if($('#pText'))o.text=$('#pText').value.trim();o.memo=$('#pMemo').value;if(!o.name)o.name=(o.tags.slice(0,18)||'名前なし');return o;};
+  const read=o=>{o.name=$('#pName').value.trim();o.tags=$('#pTags').value.trim();if($('#pSubj'))o.subject=$('#pSubj').value.trim()||'girl';if($('#pLname'))o.loraName=$('#pLname').value.trim();if($('#pW'))o.weight=$('#pW').value;if($('#pNegT'))o.neg=$('#pNegT').value.trim();if($('#pText'))o.text=$('#pText').value.trim();o.memo=$('#pMemo').value;if(!o.name)o.name=(o.tags.slice(0,18)||'名前なし');
+    if($('#pVars')){const vs=VARS.filter(v=>(v.name||'').trim()||(v.tags||'').trim()).map(v=>Object.assign({},v,{name:(v.name||'').trim()||(v.tags||'').trim().slice(0,18),tags:(v.tags||'').trim()}));if(vs.length)o.vars=vs;else delete o.vars;}
+    return o;};
   /* ぶつかりやすいタグを知らせる。「○○の部品に分ける」は、保存したときに部品を作り、この部品を使っているシーンにも付ける */
   const splits=[];
   const drawRole=()=>{const box=$('#pRole');if(!box)return;const r=roleCheck(p.type,$('#pTags').value);const h=[];const C=t=>`<code>${esc(t)}</code>`;
@@ -1964,19 +2065,16 @@ function openPart(id,type,onSave){
   $('#pCancel').onclick=closeSheet;
   $('#pSave').onclick=async()=>{read(p);const i=S.parts.findIndex(x=>x.id===p.id);if(i>=0)S.parts[i]=p;else S.parts.push(p);await saveNow('parts',p);
     const msg=[];
+    /* 消した派生を選んでいたシーンは、基本の部品にする */
+    const gone=new Set(((src&&src.vars)||[]).filter(v=>!(p.vars||[]).some(x=>x.id===v.id)).map(v=>p.id+VSEP+v.id));
+    if(gone.size)for(const s of S.scenes)if(mapSceneIds(s,id=>gone.has(id)?p.id:id,false))await saveNow('scenes',s);
     for(const x of splits){const n={id:uid(),type:x.cat,name:`${p.name||'部品'}の${PT[x.cat].label}`,tags:x.tags.join(', '),subject:'',weight:'',loraName:'',neg:'',memo:`「${p.name||''}」から分けた部品`,text:'',created:Date.now()};S.parts.push(n);await saveNow('parts',n);
       const r=src?await attach(p.id,n):{add:0,skip:0};msg.push(`${PT[x.cat].label}の部品「${n.name}」を作りました`+(r.add?`（${r.add} 件のシーンに付けました）`:'')+(r.skip?`。${r.skip} 件のシーンは、${PT[x.cat].label}がすでに選ばれているので、そのままです`:''));}
     closeSheet();onSave&&onSave(p);toast(msg.length?msg.join('。'):'保存しました');};
   const dp=$('#pDup');if(dp)dp.onclick=async()=>{const n=read(Object.assign(JSON.parse(JSON.stringify(Object.assign({},p,{img:null}))),{img:p.img||null}));n.id=uid();n.name+='（コピー）';S.parts.push(n);await saveNow('parts',n);closeSheet();setTimeout(()=>openPart(n.id,null,onSave),30);};
   const dl=$('#pDel');if(dl)dl.onclick=async()=>{if(!confirm(used?`この部品は ${used} 件のシーンで使っています。削除すると、そのシーンからも外れます。削除しますか？`:'この部品を削除しますか？'))return;
-    for(const s of S.scenes){let ch=false;for(const c of s.chars||[]){for(const f of['chara','face'])if(c[f]===p.id){c[f]='';ch=true;}
-        for(const f of['outfit','action'])if(A_(c[f]).includes(p.id)){c[f]=A_(c[f]).filter(x=>x!==p.id);ch=true;}
-        for(const f of['body','phys','act'])if((c[f]||[]).includes(p.id)){c[f]=c[f].filter(x=>x!==p.id);ch=true;}
-        if(c.pic&&c.pic.pose===p.id){c.pic.pose='stand';ch=true;}}
-      for(const f of['bg','style','camera','light'])if(s[f]===p.id){s[f]='';ch=true;}
-      for(const f of['inter','angle','fx','np'])if((s[f]||[]).includes(p.id)){s[f]=s[f].filter(x=>x!==p.id);ch=true;}
-      if((s.loras||[]).some(l=>l.id===p.id)){s.loras=s.loras.filter(l=>l.id!==p.id);ch=true;}
-      if(ch)await saveNow('scenes',s);}
+    /* シーンから外す（派生を選んでいたところも） */
+    for(const s of S.scenes)if(mapSceneIds(s,id=>vBase(id)===p.id?'':id,false))await saveNow('scenes',s);
     S.parts=S.parts.filter(x=>x.id!==p.id);await dbDel('parts',p.id);markDeleted(p.id);closeSheet();onSave&&onSave(null);};
 }
 
