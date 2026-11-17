@@ -73,6 +73,15 @@ nav#tabs button.on{color:var(--acc);font-weight:700}
 .optimgs{display:flex;gap:6px;overflow-x:auto;margin:0 0 4px;padding-bottom:4px}
 .optimgs button{flex:0 0 auto;border:1px solid var(--line);border-radius:8px;padding:0;background:var(--soft);width:64px;height:64px;overflow:hidden;cursor:pointer}
 .optimgs img{width:100%;height:100%;object-fit:cover;display:block}
+.optimgs button{position:relative;font-size:22px}
+.optimgs button small{position:absolute;left:0;right:0;bottom:0;font-size:9px;line-height:1.5;background:rgba(0,0,0,.6);color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding:0 2px}
+.optrot{border:1px solid var(--line);border-radius:10px;padding:8px 10px;margin:8px 0}
+.optrot label{display:flex;align-items:center;gap:8px;font-size:13px;margin:0 0 6px}
+.optrot label span{flex:0 0 7.5em}
+.optrot input{flex:1;min-width:0}
+.opsc{display:flex;gap:10px;align-items:flex-start;margin:4px 0 0}
+.opsc img{width:150px;border-radius:8px;background:#000;display:block}
+.optpart{border:1px solid var(--line);border-left:4px solid #0f766e;border-radius:10px;padding:8px 10px;margin:10px 0}
 .optsel{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:14px}
 .optchk{border:1px solid var(--line);border-radius:10px;padding:8px 10px;margin:8px 0}
 .optchk>b{display:block;font-size:13px;margin-bottom:4px}
@@ -472,11 +481,12 @@ const PT={
   angle:{label:'カメラ位置',hint:'どこから見るか（横から・後ろから・見上げなど）。シーンにいくつでも付けられます',ph:'from side',namePh:'例：横から'},
   camera:{label:'構図',hint:'カメラの距離（全身・上半身・アップなど）やピント',ph:'full body',namePh:'例：全身'},
   light:{label:'光',hint:'光の当たり方・明るさだけ（逆光・薄暗いなど）。場所（暗い部屋・夕方の海など）は「背景」に入れます',ph:'soft lighting',namePh:'例：やわらかい光'},
+  openpose:{label:'OpenPose',hint:'OpenPose の棒人形の点と、合わせたときに下に敷いた画像を一緒にしまう部品です。押すと、画像と点がそのまま出て、直したり PNG で保存したりできます。シーンのプロンプトには入りません',ph:'',namePh:'例：向かい合って腕組み'},
   other:{label:'その他',hint:'どの項目にも当てはまらないタグ（持ち物・小物・細かい指定など）。人物ごとにも、シーン全体にも、いくつでも付けられます',ph:'holding umbrella',namePh:'例：傘を持つ'},
   style:{label:'画風',hint:'画質・画風のタグ。タグの形では最後に入ります',ph:'masterpiece, best quality',namePh:'例：いつもの画風'},
   lora:{label:'LoRA',hint:'LoRA を使うときにプロンプトへ足すタグ（なければ空のまま）。LoRA は作られたモデルの系統（SDXL 系・Tsubaki 系）でしか使えません',ph:'トリガーワード',namePh:'例：水彩風'}
 };
-const PT_ORDER=['chara','phys','outfit','action','act','face','body','inter','bg','angle','camera','light','fx','np','other','style','lora'];
+const PT_ORDER=['chara','phys','outfit','action','openpose','act','face','body','inter','bg','angle','camera','light','fx','np','other','style','lora'];
 /* プロンプトの形（PixAI 公式ブログの勧めに合わせる） */
 const FMT={
   tag:{label:'タグ（SDXL 系：Haruka・Hoshino など）',hint:'人数 → 人物の特徴 → 身体の特徴 → 服 → ポーズ → 行動 → 表情 → 体の状態 → 絡み → 背景 → カメラ位置 → 構図 → 光 → エフェクト・動き → ネガポジ → 画風 の順に、タグを並べます。'},
@@ -486,7 +496,7 @@ const FMT={
 
 /* ========== データベース（IndexedDB） ========== */
 let db=null;
-const APP_VER='v57';/* sw.js の VERSION と同じにする */
+const APP_VER='v59';/* sw.js の VERSION と同じにする */
 const STORES=['parts','scenes','works','images','meta','fonts','stamps'];
 function openDB(){return new Promise((res,rej)=>{const r=indexedDB.open('manga4koma',3);r.onupgradeneeded=()=>{const d=r.result;for(const s of STORES)if(!d.objectStoreNames.contains(s))d.createObjectStore(s,{keyPath:'id'});};r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error);});}
 function tx(store,mode,fn){return new Promise((res,rej)=>{if(!db)return res(undefined);const t=db.transaction(store,mode);const req=fn(t.objectStore(store));let out;if(req)req.onsuccess=()=>{out=req.result;};t.oncomplete=()=>res(out);t.onerror=()=>rej(t.error);t.onabort=()=>rej(t.error);});}
@@ -511,7 +521,7 @@ function mapSceneIds(s,fn,snaps){
   const one=v=>v?(fn(v)||''):v;
   const arr=a=>{const o=[];for(const x of A_(a)){const n=one(x);if(n&&!o.includes(n))o.push(n);}return o;};
   const fix=s=>{for(const c of s.chars||[]){for(const f of['chara','face'])if(c[f])c[f]=one(c[f]);for(const f of['outfit','action','body','phys','act','other'])if(c[f]!=null&&A_(c[f]).length)c[f]=arr(c[f]);if(c.pic&&c.pic.pose)c.pic.pose=fn(c.pic.pose)||'stand';}
-    for(const f of['bg','style','camera','light'])if(s[f])s[f]=one(s[f]);for(const f of['inter','angle','fx','np','other'])if(Array.isArray(s[f]))s[f]=arr(s[f]);
+    for(const f of['bg','style','camera','light','openpose'])if(s[f])s[f]=one(s[f]);for(const f of['inter','angle','fx','np','other'])if(Array.isArray(s[f]))s[f]=arr(s[f]);
     if(Array.isArray(s.loras)){const seen=new Set();s.loras=s.loras.map(l=>Object.assign({},l,{id:one(l.id)})).filter(l=>{if(!l.id||seen.has(l.id))return false;seen.add(l.id);return true;});}};
   const before=JSON.stringify(s);fix(s);if(snaps)for(const m of Object.values(s.imgMeta||{}))if(m&&m.snap)fix(m.snap);return JSON.stringify(s)!==before;}
 async function loadAll(){
@@ -738,7 +748,7 @@ const ROLE_RE={
 const COUNT_RE=/^(\d+(girl|boy)s?|solo|multiple (girls|boys))$/;
 function roleCheck(type,tags){
   const out={groups:[],count:[],paren:false};
-  if(type==='np'||type==='lora'||type==='other')return out;
+  if(type==='np'||type==='lora'||type==='other'||type==='openpose')return out;
   const g={};
   for(const t of splitTags(tags)){const k=norm(t);
     if(COUNT_RE.test(k)){out.count.push(t);continue;}
@@ -776,7 +786,7 @@ async function mergeDupParts(type){
   for(const g of dupParts(type)){g.sort((a,b)=>partUsage(b.id)-partUsage(a.id)||(a.created||0)-(b.created||0));for(const x of g.slice(1))map[x.id]=g[0].id;}
   const R=id=>{const b=vBase(id);return map[b]?map[b]+String(id).slice(b.length):id;},RA=a=>[...new Set(A_(a).map(R))];
   const fix=s=>{for(const c of s.chars||[]){for(const f of['chara','face'])if(c[f])c[f]=R(c[f]);for(const f of['outfit','action','body','phys','act','other'])if(c[f]!=null)c[f]=Array.isArray(c[f])?RA(c[f]):R(c[f]);if(c.pic&&c.pic.pose)c.pic.pose=R(c.pic.pose);}
-    for(const f of['bg','style','camera','light'])if(s[f])s[f]=R(s[f]);for(const f of['inter','angle','fx','np','other'])if(Array.isArray(s[f]))s[f]=RA(s[f]);
+    for(const f of['bg','style','camera','light','openpose'])if(s[f])s[f]=R(s[f]);for(const f of['inter','angle','fx','np','other'])if(Array.isArray(s[f]))s[f]=RA(s[f]);
     if(Array.isArray(s.loras)){const seen=new Set();s.loras=s.loras.map(l=>Object.assign({},l,{id:R(l.id)})).filter(l=>{if(seen.has(l.id))return false;seen.add(l.id);return true;});}};
   for(const s of S.scenes){const before=JSON.stringify(s);fix(s);for(const m of Object.values(s.imgMeta||{}))if(m&&m.snap)fix(m.snap);if(JSON.stringify(s)!==before)await saveNow('scenes',s);}
   for(const id in map){S.parts=S.parts.filter(p=>p.id!==id);await dbDel('parts',id);markDeleted(id);}
@@ -796,7 +806,7 @@ function dupScan(sc){
   (sc.chars||[]).forEach((sl,i)=>{const rm=new Set(splitTags(sl.remove).map(norm)),scope=fmt==='group'?'s'+i:'g',pre=multi?`人物${i+1}の`:'';
     addIds([sl.chara,...(sl.phys||[]),...A_(sl.outfit),...A_(sl.action),...(sl.act||[]),sl.face,...(sl.body||[]),...(sl.other||[])],rm,scope,pre);addT(splitTags(sl.add),pre+'足すタグ',rm,scope);addT(PIC.per[i]||[],pre+'向き・位置',rm,scope);});
   const srm=new Set(splitTags(sc.remove).map(norm));
-  addIds([...(sc.inter||[]),sc.bg,...(sc.angle||[]),sc.camera,sc.light,...(sc.fx||[]),...(sc.np||[]),...(sc.other||[]),sc.style],srm,'g','');
+  addIds([...(sc.inter||[]),sc.bg,...(sc.angle||[]),sc.camera,sc.light,...(sc.fx||[]),...(sc.np||[]),...(sc.other||[]),sc.openpose,sc.style],srm,'g','');
   addT(splitTags(sc.add),'足すタグ（人物以外）',srm,'g');addT(PIC.scene,'向き・位置',srm,'g');
   const nsrc=[];const negOf=(id,suf)=>{const p=P_(id);if(p)for(const t of splitTags(p.neg))nsrc.push({t,label:lab(id)+suf});};
   if(sc.style)negOf(sc.style,'のネガティブ');for(const id of sc.np||[])negOf(id,'のネガティブ');for(const t of splitTags(sc.neg))nsrc.push({t,label:'ネガティブに足すタグ'});
@@ -837,7 +847,7 @@ function buildPrompt0(sc,D){
   const srm=splitTags(sc.remove);
   /* ピクトグラムで決めた向き・位置のタグ */
   const PIC=picTags(sc);slots.forEach((s,i)=>s.pic=uniq(PIC.per[i]||[],[...s.rm,...s.feat,...s.phys,...s.out,...s.pose,...s.act,...s.face,...s.body,...s.other,...s.add]));const picS=uniq(PIC.scene,srm);
-  const inter=uniq((sc.inter||[]).flatMap(T_),srm),bg=uniq(T_(sc.bg),srm),ang=uniq((sc.angle||[]).flatMap(T_),srm),cam=uniq(T_(sc.camera),srm),lit=uniq(T_(sc.light),srm),fx=uniq((sc.fx||[]).flatMap(T_),srm),npP=uniq((sc.np||[]).flatMap(T_),srm),add=uniq(splitTags(sc.add),srm),oth=uniq((sc.other||[]).flatMap(T_),srm),style=uniq(T_(sc.style),srm);
+  const inter=uniq((sc.inter||[]).flatMap(T_),srm),bg=uniq(T_(sc.bg),srm),ang=uniq((sc.angle||[]).flatMap(T_),srm),cam=uniq(T_(sc.camera),srm),lit=uniq(T_(sc.light),srm),fx=uniq((sc.fx||[]).flatMap(T_),srm),npP=uniq((sc.np||[]).flatMap(T_),srm),add=uniq(splitTags(sc.add),srm),oth=uniq((sc.other||[]).flatMap(T_),srm),opT=uniq(T_(sc.openpose),srm),style=uniq(T_(sc.style),srm);
   const loras=[],trig=[];
   for(const l of sc.loras||[]){
     const p=P_(l.id);if(!p)continue;
@@ -852,7 +862,7 @@ function buildPrompt0(sc,D){
   const multi=slots.length>1;
   const I=(arr,cat,si)=>arr.map(t=>({t,cat,si:multi?si:null,p:si}));
   const slotItems=(s,i)=>[...I(s.feat,'chara',i),...I(s.phys,'phys',i),...I(s.out,'outfit',i),...I(s.pose,'action',i),...I(s.act,'act',i),...I(s.face,'face',i),...I(s.body,'body',i),...I(s.other,'other',i),...I(s.add,'add',i),...I(s.pic,'pic',i)];
-  const restItems=()=>[...I(inter,'inter'),...I(picS,'pic'),...I(bg,'bg'),...I(ang,'angle'),...I(add,'add'),...I(oth,'other'),...I(cam,'camera'),...I(lit,'light'),...I(fx,'fx'),...I(npP,'np'),...I(style,'style')];
+  const restItems=()=>[...I(inter,'inter'),...I(picS,'pic'),...I(bg,'bg'),...I(ang,'angle'),...I(opT,'openpose'),...I(add,'add'),...I(oth,'other'),...I(cam,'camera'),...I(lit,'light'),...I(fx,'fx'),...I(npP,'np'),...I(style,'style')];
   /* uniq と同じ決まりで、同じタグを1つにする（重複の欄で「残す」にしたものは残す） */
   const uniqI=arr=>{const seen=new Set();return arr.filter(x=>{const k=norm(x.t);if(seen.has(k)&&!(KEEP&&KEEP.has(k)))return false;seen.add(k);return true;});};
   const pfI=()=>{const f=D.pf();return x=>f(x.t);};
@@ -880,7 +890,7 @@ function buildPrompt0(sc,D){
     const B=a=>a.map(baseOf);
     for(const s of slots)for(const k of['feat','phys','out','pose','act','face','body','other','add','pic'])s[k]=B(s[k]);
     trig.splice(0,trig.length,...B(trig));
-    for(const a of[inter,bg,ang,cam,lit,fx,npP,add,oth,style])a.splice(0,a.length,...B(a));
+    for(const a of[inter,bg,ang,cam,lit,fx,npP,add,oth,opT,style])a.splice(0,a.length,...B(a));
     /* 文章（Tsubaki 系） */
     const S2=[];
     if(trig.length)S2.push(uniq(trig).join(', ')+',');
@@ -900,6 +910,7 @@ function buildPrompt0(sc,D){
     const bgt=TX_(sc.bg)||bg.join(', ');if(bgt)S2.push(sent(TX_(sc.bg)?bgt:'Background: '+bgt));
     if(add.length)S2.push(sent(add.join(', ')));
     if(oth.length)S2.push(sent(oth.join(', ')));
+    if(opT.length)S2.push(sent(opT.join(', ')));
     const at=(sc.angle||[]).map(id=>TX_(id)).filter(Boolean),atTags=(sc.angle||[]).filter(id=>!TX_(id)).flatMap(id=>uniq(T_(id),srm).map(baseOf));
     for(const x of at)S2.push(sent(x));if(atTags.length)S2.push(sent('Viewed '+uniq(atTags).join(', ')));
     const ct=TX_(sc.camera)||cam.join(', ');if(ct)S2.push(sent(TX_(sc.camera)?ct:'Framing: '+ct));
@@ -952,7 +963,7 @@ $('#sheet .bk').onclick=closeSheet;
 /* ========== 使われている場所 ========== */
 function usedIn(sceneId){const r=[];for(const w of S.works)(w.panels||[]).forEach((p,i)=>{if(p===sceneId)r.push({w,i});});return r;}
 function partUsage(pid){const e=x=>!!x&&(x===pid||(!pid.includes(VSEP)&&vBase(x)===pid)),h=a=>A_(a).some(e);
-  return S.scenes.filter(s=>e(s.bg)||e(s.style)||e(s.camera)||e(s.light)||h(s.inter)||h(s.angle)||h(s.fx)||h(s.np)||h(s.other)||(s.chars||[]).some(c=>e(c.chara)||h(c.outfit)||h(c.action)||(c.pic&&e(c.pic.pose))||e(c.face)||h(c.body)||h(c.phys)||h(c.act)||h(c.other))||(s.loras||[]).some(l=>e(l.id))).length;}
+  return S.scenes.filter(s=>e(s.bg)||e(s.style)||e(s.camera)||e(s.light)||e(s.openpose)||h(s.inter)||h(s.angle)||h(s.fx)||h(s.np)||h(s.other)||(s.chars||[]).some(c=>e(c.chara)||h(c.outfit)||h(c.action)||(c.pic&&e(c.pic.pose))||e(c.face)||h(c.body)||h(c.phys)||h(c.act)||h(c.other))||(s.loras||[]).some(l=>e(l.id))).length;}
 /* 服装・ポーズは、前は1つだけ（文字）、今はいくつでも（配列）。どちらでも読めるようにする */
 const A_=v=>Array.isArray(v)?v:(v?[v]:[]);
 const newSlot=()=>({chara:'',phys:[],outfit:[],action:[],act:[],face:'',body:[],other:[],add:'',remove:''});
@@ -960,9 +971,9 @@ const newSlot=()=>({chara:'',phys:[],outfit:[],action:[],act:[],face:'',body:[],
    絡みの部品に p.links=[{w, f, id}] を入れる。w は 0＝シーン全体、1・2・3＝人物の番号。f は項目（action など）、id は部品（派生は 部品id~派生id）。
    シーンで絡みを選ぶと、ここにある部品も選ぶ（1つだけ選ぶ項目は、ほかのものが選ばれていれば変えない）。
    絡みを外すときは、一緒に選んだ部品も外すか聞く（ほかの絡みでも使う部品は外さない） */
-const LK_PER=['chara','phys','outfit','action','act','face','body','other','add','subj'],LK_SCN=['angle','camera','light','bg','fx','np','other','style','add','neg'];
+const LK_PER=['chara','phys','outfit','action','act','face','body','other','add','subj'],LK_SCN=['openpose','angle','camera','light','bg','fx','np','other','style','add','neg'];
 /* シーンから取り込むときは、すべての設定（光・背景・画風・足すタグ・ネガティブに足すタグも）を入れる。いらない行は ✕ で外す */
-const LK_ONE=['chara','face','camera','bg','light','style'],LK_TX=['add','subj','neg'];
+const LK_ONE=['chara','face','camera','bg','light','style','openpose'],LK_TX=['add','subj','neg'];
 const lkLab=(f,w)=>f==='add'?(w?'足すタグ':'足すタグ（人物以外）'):f==='subj'?'呼び方':f==='neg'?'ネガティブに足すタグ':(PT[f]||{}).label||f;
 const lkName=l=>{const who=l.w?'人物'+l.w+'の':'';if(LK_TX.includes(l.f))return `${who}${lkLab(l.f,l.w)}「${l.tx||''}」`;const p=P_(l.id);return `${who}${lkLab(l.f,l.w)}「${p?p.name||'名前なし':'（削除された部品）'}」`;};
 const lkObj=(sc,l)=>l.w?(sc.chars||[])[l.w-1]:sc;
@@ -992,7 +1003,7 @@ function removeLinks(sc,L){for(const l of L){const o=lkObj(sc,l);if(!o)continue;
 function linksFromScene(sc,selfId,withInter){const L=[];
   (sc.chars||[]).forEach((c,i)=>{const w=i+1;if(c.chara)L.push({w,f:'chara',id:c.chara});for(const f of['phys','outfit','action','act'])for(const id of A_(c[f]))L.push({w,f,id});if(c.face)L.push({w,f:'face',id:c.face});for(const id of A_(c.body))L.push({w,f:'body',id});for(const id of A_(c.other))L.push({w,f:'other',id});
     if((c.add||'').trim())L.push({w,f:'add',tx:c.add.trim()});if((c.subj||'').trim())L.push({w,f:'subj',tx:c.subj.trim()});});
-  for(const id of sc.angle||[])L.push({w:0,f:'angle',id});for(const f of['camera','light','bg'])if(sc[f])L.push({w:0,f,id:sc[f]});for(const f of['fx','np','other'])for(const id of sc[f]||[])L.push({w:0,f,id});if(sc.style)L.push({w:0,f:'style',id:sc.style});
+  for(const id of sc.angle||[])L.push({w:0,f:'angle',id});for(const f of['openpose','camera','light','bg'])if(sc[f])L.push({w:0,f,id:sc[f]});for(const f of['fx','np','other'])for(const id of sc[f]||[])L.push({w:0,f,id});if(sc.style)L.push({w:0,f:'style',id:sc.style});
   for(const f of['add','neg'])if((sc[f]||'').trim())L.push({w:0,f,tx:sc[f].trim()});
   try{const P=picTags(sc);(P.per||[]).forEach((a,i)=>{if(a&&a.length)L.push({w:i+1,f:'add',tx:a.join(', ')});});if(P.scene&&P.scene.length)L.push({w:0,f:'add',tx:P.scene.join(', ')});}catch(_){}
   /* シーンで選んでいる絡み（いま直している絡みは除く）のタグ。部品の画面で、タグに分けて振り分ける */
@@ -1114,7 +1125,7 @@ function vScenes(c){
 /* ========== シーンの編集 ========== */
 function opts(type,sel){const ps=S.parts.filter(p=>p.type===type).sort((a,b)=>(a.name||'').localeCompare(b.name||'','ja'));return `<option value="">（なし）</option>${ps.map(p=>`<option value="${p.id}"${p.id===sel?' selected':''}>${esc(p.name||'名前なし')}${(p.vars||[]).length?'（派生あり）':''}</option>`+(p.vars||[]).map(v=>`<option value="${p.id}${VSEP}${v.id}"${p.id+VSEP+v.id===sel?' selected':''}>　└ ${esc(v.name||'派生')}</option>`).join('')).join('')}<option value="__new">＋ 新しく登録…</option>`;}
 /* 部品の種類ごとの色（シーンの欄と部品の一覧で同じ色を使う） */
-const CATC={add:'#9ca3af',pic:'#0d9488',act:'#f43f5e',chara:'#3b82f6',phys:'#0ea5a4',outfit:'#8b5cf6',action:'#f97316',face:'#ec4899',body:'#ef4444',inter:'#d946ef',bg:'#22a34a',angle:'#6366f1',camera:'#0891b2',light:'#eab308',fx:'#84cc16',np:'#64748b',other:'#78716c',style:'#a16207',lora:'#475569'};
+const CATC={add:'#9ca3af',pic:'#0d9488',act:'#f43f5e',chara:'#3b82f6',phys:'#0ea5a4',outfit:'#8b5cf6',action:'#f97316',face:'#ec4899',body:'#ef4444',inter:'#d946ef',bg:'#22a34a',angle:'#6366f1',camera:'#0891b2',light:'#eab308',fx:'#84cc16',np:'#64748b',other:'#78716c',openpose:'#0f766e',style:'#a16207',lora:'#475569'};
 /* 長押し：0.5秒押し続けたら fn を呼ぶ。そのあとの「押した」はなかったことにする */
 function longPress(el,fn){let t=0,x=0,y=0,fired=false;
   const stop=()=>{clearTimeout(t);t=0;};
@@ -1124,7 +1135,7 @@ function longPress(el,fn){let t=0,x=0,y=0,fired=false;
   el.addEventListener('click',e=>{if(fired){fired=false;e.stopImmediatePropagation();e.preventDefault();}},true);
   el.addEventListener('contextmenu',e=>e.preventDefault());}
 /* 種類ごとの小さな絵（ピクトグラム） */
-const CATI={pic:'🕴',chara:'👤',phys:'🧍',outfit:'👕',action:'🤸',act:'✋',face:'😊',body:'💧',inter:'🤝',bg:'🏞️',angle:'🎥',camera:'🖼️',light:'💡',fx:'✨',np:'⚖️',other:'📦',style:'🎨',lora:'🧩'};
+const CATI={pic:'🕴',chara:'👤',phys:'🧍',outfit:'👕',action:'🤸',act:'✋',face:'😊',body:'💧',inter:'🤝',bg:'🏞️',angle:'🎥',camera:'🖼️',light:'💡',fx:'✨',np:'⚖️',other:'📦',openpose:'🦴',style:'🎨',lora:'🧩'};
 const catLab=c=>c==='add'?'足すタグ':c==='pic'?'向き・位置':PT[c].label;
 const pic=t=>CATI[t]?`<i class="pic" aria-hidden="true">${CATI[t]}</i>`:'';
 const catAttr=t=>`data-cat="${t}" style="--c:${CATC[t]||'#888'}"`;
@@ -1197,7 +1208,6 @@ function vScene(c){
   <div class="sec"><h2>人物 <small>人数のタグ（1girl・2girls など）は自動で付きます</small></h2>
     <datalist id="subjList2"><option value="girl"><option value="boy"><option value="woman"><option value="man"><option value="mature female"><option value="mature male"><option value="old man"><option value="old woman"></datalist>
     ${sc.chars.map((sl,i)=>`<div class="slot"><div class="sh">人物 ${i+1}<button class="btn sm danger" data-delslot="${i}">外す</button></div>
-      <label class="switch" style="margin:0 0 12px"><input type="checkbox" data-picon="${i}" ${sl.pic&&sl.pic.on?'checked':''}><span>🕴 ピクトグラムで向き・位置を決める<span class="hint">オンにすると、下の「向き・位置」の欄で、この人物を指で動かせます。</span></span></label>
       ${partSel('人物','chara',sl.chara,`data-slot="${i}" data-f="chara"`)}
       <label class="f"><span>呼び方 <small class="hint">空のときは部品の呼び方（${esc((P_(sl.chara)&&P_(sl.chara).subject)||'girl')}）</small></span><input data-slot="${i}" data-t="subj" list="subjList2" value="${esc(sl.subj||'')}" placeholder="${esc((P_(sl.chara)&&P_(sl.chara).subject)||'girl')}"></label>
       ${chipSel('身体の特徴','phys',sl.phys,`data-chip="phys" data-slot="${i}"`)}
@@ -1215,7 +1225,7 @@ function vScene(c){
     </div>`).join('')}
     <button class="btn ghost sm" id="addSlot">＋ 人物を足す</button>
   </div>
-  ${picSecHTML(sc)}
+  ${opSecHTML(sc)}
 
   <div class="sec"><h2>絡み <small>人物どうしの関わり</small></h2>
     ${chipSel('絡み','inter',sc.inter,'data-chip="inter"')}
@@ -1332,7 +1342,7 @@ function vScene(c){
     drawDup(p);
     $('#pLora').innerHTML=p.loras.length?'PixAI で選ぶ LoRA：'+p.loras.map(l=>`<span>${esc(l.name)}（${esc(l.weight===''?'—':l.weight)}）</span>`).join(''):'';};
   upd();
-  picWire(sc,upd);
+  opSecWire(sc);
   setupFold(c);
   /* たたんだままでもコピーできる、見出しのボタン */
   $$('[data-cp]',view).forEach(b=>b.onclick=()=>{const p=buildPrompt(sc);copyText(b.dataset.cp==='neg'?p.neg:p.pos);});
@@ -1394,7 +1404,7 @@ function vScene(c){
     const imgs=sc.images;S.scenes=S.scenes.filter(x=>x.id!==sc.id);await dbDel('scenes',sc.id);markDeleted(sc.id);for(const id of imgs)await deleteImageIfUnused(id);goBack();};
 }
 /* 画像ごとに、そのときのプロンプトの設定を記録する */
-const SNAP_KEYS=['chars','inter','angle','fx','np','other','bg','camera','light','style','loras','add','remove','neg','weights','dups','pic'];
+const SNAP_KEYS=['chars','inter','angle','fx','np','other','openpose','bg','camera','light','style','loras','add','remove','neg','weights','dups','pic'];
 const snapDef=k=>(k==='chars'||k==='inter'||k==='angle'||k==='fx'||k==='np'||k==='other'||k==='loras')?[]:(k==='weights'||k==='dups')?{}:k==='pic'?null:'';
 const snapVal=(o,k)=>JSON.parse(JSON.stringify(o[k]??snapDef(k)));
 function recordSnap(sc,id){sc.imgMeta=sc.imgMeta||{};const snap={};for(const k of SNAP_KEYS)snap[k]=snapVal(sc,k);const p=buildPrompt(sc);sc.imgMeta[id]={snap,pos:p.pos,neg:p.neg,loras:p.loras,fmt:p.fmt,at:Date.now()};}
@@ -1408,7 +1418,7 @@ function snapSummary(snap){
   if((snap.fx||[]).length)rows.push(`<tr><th>エフェクト</th><td>${snap.fx.map(nm).join('・')}</td></tr>`);
   if((snap.np||[]).length)rows.push(`<tr><th>ネガポジ</th><td>${snap.np.map(nm).join('・')}</td></tr>`);
   if((snap.other||[]).length)rows.push(`<tr><th>その他</th><td>${snap.other.map(nm).join('・')}</td></tr>`);
-  const rest=[['背景',snap.bg],['構図',snap.camera],['光',snap.light],['画風',snap.style]].filter(x=>x[1]).map(([l,id])=>`<tr><th>${l}</th><td>${nm(id)}</td></tr>`);
+  const rest=[['OpenPose',snap.openpose],['背景',snap.bg],['構図',snap.camera],['光',snap.light],['画風',snap.style]].filter(x=>x[1]).map(([l,id])=>`<tr><th>${l}</th><td>${nm(id)}</td></tr>`);
   rows.push(...rest);
   if((snap.loras||[]).length)rows.push(`<tr><th>LoRA</th><td>${snap.loras.map(l=>nm(l.id)+(l.weight!==''&&l.weight!=null?`（${esc(l.weight)}）`:'')).join('・')}</td></tr>`);
   const w=Object.entries(snap.weights||{});if(w.length)rows.push(`<tr><th>重み</th><td>${w.map(([k,v])=>{const m=/^(\d+)\|(.*)$/.exec(k);return `${m?`人物${m[1]}の`+esc(m[2]):esc(k)} ${v}`;}).join('、')}</td></tr>`);
@@ -2007,12 +2017,12 @@ function vPList(c){
   const list=S.parts.filter(p=>p.type===t).sort((a,b)=>(a.name||'').localeCompare(b.name||'','ja'));
   view.innerHTML=`
   ${mergeBanner(t)}${simBanner(t)}<p class="hint" style="margin:0 0 12px">${esc(T.hint)}</p>
-  ${list.length?list.map(p=>{const n=partUsage(p.id);const inner=`<small>${n?n+'シーン':'未使用'}</small><b>${esc(p.name||'名前なし')}</b>${roleN(p)?' <span class="chip warn">⚠ ぶつかりやすいタグ</span>':''}${p.type==='chara'?` <span class="chip">${esc(p.subject||'girl')}</span>`:''}${p.type==='lora'?` <span class="chip">重み ${esc(p.weight??'')}</span>`:''}${p.skel?' <span class="chip">🕴 ピクトグラムのポーズ</span>':''}${(p.vars||[]).length?` <span class="chip">派生 ${p.vars.length}</span>`:''}${(p.links||[]).length?` <span class="chip">🔗 呼び出す設定 ${p.links.length}</span>`:''}<div class="ptags">${esc(p.tags)||'<span class="muted">タグなし</span>'}${(p.vars||[]).map(v=>`<br><span class="pvar">└ ${esc(v.name||'派生')}：${esc(v.tags)||'タグなし'}</span>`).join('')}${p.type==='np'&&p.neg?`<br><span style="color:var(--warn)">ネガ：${esc(p.neg)}</span>`:''}</div>`;
+  ${list.length?list.map(p=>{const n=partUsage(p.id);const inner=`<small>${n?n+'シーン':'未使用'}</small><b>${esc(p.name||'名前なし')}</b>${roleN(p)?' <span class="chip warn">⚠ ぶつかりやすいタグ</span>':''}${p.type==='chara'?` <span class="chip">${esc(p.subject||'girl')}</span>`:''}${p.type==='lora'?` <span class="chip">重み ${esc(p.weight??'')}</span>`:''}${(p.vars||[]).length?` <span class="chip">派生 ${p.vars.length}</span>`:''}${(p.links||[]).length?` <span class="chip">🔗 呼び出す設定 ${p.links.length}</span>`:''}<div class="ptags">${esc(p.tags)||'<span class="muted">タグなし</span>'}${(p.vars||[]).map(v=>`<br><span class="pvar">└ ${esc(v.name||'派生')}：${esc(v.tags)||'タグなし'}</span>`).join('')}${p.type==='np'&&p.neg?`<br><span style="color:var(--warn)">ネガ：${esc(p.neg)}</span>`:''}</div>`;
+    if(p.type==='openpose')return `<button class="pitem hasimg" data-id="${p.id}"><img class="pim" data-opthumb="${p.id}" alt=""><div>${inner}</div></button>`;
     return p.img?`<button class="pitem hasimg" data-id="${p.id}"><img class="pim" src="${partImgUrl(p)}" alt=""><div>${inner}</div></button>`:`<button class="pitem" data-id="${p.id}">${inner}</button>`;}).join('')
   :`<div class="empty"><b>${T.label}はまだありません</b>「＋ 新しい${T.label}」で登録します。</div>`}
   <button class="fab" id="newPart">＋ 新しい${T.label}</button>`;
-  if(t==='action'){const h=$('p.hint',view);if(h)h.insertAdjacentHTML('afterend','<div class="row" style="margin:-4px 0 12px"><button class="btn sm" id="newPicPose">🕴 ピクトグラムでポーズを作る</button><button class="btn ghost sm" id="newOpT">🖼 画像から OpenPose を作る</button></div>');
-    $('#newPicPose').onclick=()=>openPoseEditor(null,0,null,()=>render(true));$('#newOpT').onclick=()=>openOpTrace({});}
+  if(t==='openpose'){$$('img[data-opthumb]',view).forEach(async im=>{const pp=byId('parts',im.dataset.opthumb);if(pp)im.src=await opThumb(pp);});}
   $$('.pitem',view).forEach(b=>b.onclick=()=>openPart(b.dataset.id,null,()=>render(true)));
   $('#newPart').onclick=()=>openPart(null,t,()=>render(true));
   mergeWire(t);simWire(t);
@@ -2022,7 +2032,7 @@ function vPList(c){
    組の中でタグが少ないものを「基本」の候補にし、ほかを派生の候補にする（基本は画面で選びなおせる）。
    派生を持っている部品・ピクトグラムの形がある部品・見本の画像がある部品は、派生にはしない */
 function simGroups(type){
-  if(type==='lora'||type==='chara')return[];
+  if(type==='lora'||type==='chara'||type==='openpose')return[];
   const nm=p=>(p.name||'').replace(/[（(].*?[)）]/g,'').trim();
   const ps=S.parts.filter(p=>p.type===type).map(p=>({p,t:new Set(splitTags(p.tags).map(norm)),n:nm(p)})).filter(x=>x.t.size);
   ps.sort((a,b)=>a.t.size-b.t.size||(a.p.name||'').length-(b.p.name||'').length);
@@ -2096,7 +2106,9 @@ async function jaToTags(t){const words=jaSplit(t);const out=[];let dict=0,net=0,
     try{const e=(await netTranslate(w)).toLowerCase().replace(/[.。]+$/,'').trim();if(e){out.push(e);net++;}else fail.push(w);}catch(_){fail.push(w);}}
   return{tags:out,dict,net,fail};}
 function openPart(id,type,onSave){
-  id=id?vBase(id):id;/* 派生を押したときも、基本の部品を開く */
+  id=id?vBase(id):id;
+  /* OpenPose の部品は、画像に合わせる画面で開く */
+  {const sp=id?byId('parts',id):null;if((sp&&sp.type==='openpose')||(!id&&type==='openpose'))return openOpTrace({part:sp||null,onDone:pid=>{const p2=pid?byId('parts',pid):null;if(p2||sp)onSave&&onSave(p2||null);}});}/* 派生を押したときも、基本の部品を開く */
   const src=id?byId('parts',id):null;
   const p=src?Object.assign(JSON.parse(JSON.stringify(Object.assign({},src,{img:null}))),{img:src.img||null}):{id:uid(),type,name:'',tags:'',subject:type==='chara'?'girl':'',weight:type==='lora'?0.7:'',loraName:'',neg:'',memo:'',text:''};
   const T=PT[p.type];const used=src?partUsage(src.id):0;
@@ -2124,7 +2136,6 @@ function openPart(id,type,onSave){
   ${p.type==='style'?`<label class="f"><span>ネガティブプロンプト</span><textarea id="pNegT" rows="3" placeholder="lowres, blurry, jpeg artifacts, text, watermark">${esc(p.neg)}</textarea></label>${negHelp()}`:''}
   <label class="f"><span>メモ</span><textarea id="pMemo" rows="2" placeholder="${p.type==='lora'?'PixAI のURL・合う重みなど':''}">${esc(p.memo)}</textarea></label>
   ${used?`<div class="banner info">この部品は ${used} 件のシーンで使っています。直すと、そのすべてのシーンのプロンプトが変わります。</div>`:''}
-  ${p.type==='action'&&src?`<div class="row" style="margin:-4px 0 12px"><button type="button" class="btn ghost sm" id="pPic">🕴 ピクトグラムで形を${src.skel?'直す':'作る'}</button></div>`:''}
   <div class="row"><button class="btn" id="pSave">保存</button>${src?'<button class="btn ghost" id="pDup">複製</button><button class="btn danger" id="pDel">削除</button>':''}<button class="btn ghost" id="pCancel">やめる</button></div>`);
   const pp=$('#pPic');if(pp)pp.onclick=()=>{closeSheet();setTimeout(()=>openPoseEditor(null,0,src.id,()=>{onSave&&onSave(byId('parts',src.id));}),30);};
   setTimeout(()=>{if(!src)$('#pName')&&$('#pName').focus();},50);
@@ -2728,8 +2739,10 @@ function picLayout(sc,ov){const cfg=picCfgR(sc),[W,H]=PIC_AR[cfg.ar];
   return{W,H,pitch:cfg.pitch,items:picOn(sc).map(o=>Object.assign(o,{c:picCompute(o.p,W,H,cfg.pitch,ov&&ov.i===o.i?ov.P:null)}))};}
 /* ===== タグを作る =====
    per[人物の番号]：その人物のタグ、scene：人物どうし・カメラの高さのタグ */
+/* ピクトグラムは v59 でなくした（OpenPose に一本化）。前に作ったシーンのピクトグラムのタグも、プロンプトに入れない */
+const PIC_OFF=true;
 function picTags(sc){
-  const per=(sc.chars||[]).map(()=>[]),scene=[];
+  const per=(sc.chars||[]).map(()=>[]),scene=[];if(PIC_OFF)return{per,scene};
   const L=picLayout(sc);if(!L.items.length)return{per,scene};
   const{W,H}=L;
   const toward=(it,other)=>{const y=picDeg(it.p.yaw||0),right=other.c.p.head.X>it.c.p.head.X;return right?(y>=22.5&&y<=157.5):(y<=-22.5&&y>=-157.5);};
@@ -2815,14 +2828,15 @@ function picOpKps(sc,ov,all){
       if(!q)return null;
       const x=q.X*sc2,y=q.Y*sc2;
       const hid=((n==='eyeR'||n==='eyeL')&&q.z1<=.05)||(n==='nose'&&q.z1<=0)||((n==='earR'||n==='earL')&&q.z1<-.45)||x<0||y<0||x>cw||y>ch;
-      return hid?(all?[x,y,1]:null):[x,y];});});
+      const z=(n==='neck'?((p.rS.d||0)+(p.lS.d||0))/2:(q.d||0))*it.c.k*sc2;
+      return hid?(all?[x,y,1,z]:null):(all?[x,y,0,z]:[x,y]);});});
   return{cw,ch,people};
 }
 function picOpenPose(sc,ov){const k=picOpKps(sc,ov);return opPaint(k.people,k.cw,k.ch);}
 /* OpenPose の棒人形を描く（people：人物ごとに18点。[x,y] か null） */
-function opPaint(people,cw,ch){
+function opPaint(people,cw,ch,clear){
   const cv=document.createElement('canvas');cv.width=cw;cv.height=ch;const g=cv.getContext('2d');
-  g.fillStyle='#000';g.fillRect(0,0,cw,ch);const sw=Math.max(4,Math.round(Math.min(cw,ch)/512*4));
+  if(!clear){g.fillStyle='#000';g.fillRect(0,0,cw,ch);}const sw=Math.max(4,Math.round(Math.min(cw,ch)/512*4));
   for(const kp of people){
     g.globalAlpha=.6;
     OP_LIMB.forEach(([a,b],i)=>{const A=kp[a],B=kp[b];if(!A||!B)return;
@@ -2841,18 +2855,42 @@ const OP_GEN=[800,912];
 let OPT=null;
 function opFromKps(k,W,H){/* 別の大きさ（cw×ch）の点を、画像（W×H）の真ん中に収める */
   const s=Math.min(W/k.cw,H/k.ch)*.9,ox=(W-k.cw*s)/2,oy=(H-k.ch*s)/2;
-  return k.people.map(kp=>{const nk=kp[1]||[k.cw/2,k.ch*.3];return kp.map((q,i)=>{const r=q||[nk[0]+(i===0?0:(i%2?-1:1)*k.cw*.02),nk[1]-k.ch*.05,1];return{x:r[0]*s+ox,y:r[1]*s+oy,h:!q||!!r[2]};});});}
+  return k.people.map(kp=>{const nk=kp[1]||[k.cw/2,k.ch*.3];return kp.map((q,i)=>{const r=q||[nk[0]+(i===0?0:(i%2?-1:1)*k.cw*.02),nk[1]-k.ch*.05,1];return{x:r[0]*s+ox,y:r[1]*s+oy,z:(r[3]||0)*s,h:!q||!!r[2]};});});}
 function opDefault(W,H,P){const t={title:'pose',chars:[{pic:Object.assign(picNew({chars:[0]},0),{on:true,gaze:true,yaw:0})}],pic:{pitch:0,ar:'800x912'}};
   return opFromKps(picOpKps(t,{i:0,P:P||picSkelOf('stand')},true),W,H)[0];}
+/* 肉付け：棒人形に、だいたいの体を重ねる（見るためだけ。保存する画像には入らない）。
+   太さは肩幅（なければ腰幅・胴の長さ）をもとに決める。数字を変えると太さが変わる */
+const OP_FLESH=[[2,3,.44],[3,4,.36],[5,6,.44],[6,7,.36],[8,9,.6],[9,10,.44],[11,12,.6],[12,13,.44],[1,0,.34]];
+function opFleshSVG(k){const v=i=>k[i]&&!k[i].h,D=(a,b)=>Math.hypot(k[a].x-k[b].x,k[a].y-k[b].y);
+  let u=v(2)&&v(5)?D(2,5):v(8)&&v(11)?D(8,11)*1.35:v(1)&&(v(8)||v(11))?D(1,v(8)?8:11)*.55:0;if(!u)return'';u=Math.max(u,1);
+  let h=`<g opacity=".62" fill="#ffd2b0" stroke="#ffd2b0" stroke-linecap="round" stroke-linejoin="round">`;
+  const tor=[2,5,11,8].filter(v);if(tor.length>=3)h+=`<polygon points="${tor.map(i=>k[i].x+','+k[i].y).join(' ')}" stroke-width="${u*.4}"/>`;
+  else if(v(1)&&(v(8)||v(11))){const b=v(8)?8:11;h+=`<line x1="${k[1].x}" y1="${k[1].y}" x2="${k[b].x}" y2="${k[b].y}" stroke-width="${u*.8}"/>`;}
+  for(const[a,b,w]of OP_FLESH)if(v(a)&&v(b))h+=`<line x1="${k[a].x}" y1="${k[a].y}" x2="${k[b].x}" y2="${k[b].y}" stroke-width="${u*w}"/>`;
+  if(v(0)){const r=Math.max(u*.45,v(1)?D(0,1)*.62:0);let cx=k[0].x,cy=k[0].y;if(v(14)&&v(15)){cx=(k[14].x+k[15].x+k[0].x)/3;cy=(k[14].y+k[15].y+k[0].y)/3-r*.15;}h+=`<circle cx="${cx}" cy="${cy}" r="${r}" stroke-width="0"/>`;}
+  else if(v(16)||v(17)){const e=v(16)?16:17,r=u*.38;h+=`<circle cx="${k[e].x}" cy="${k[e].y-r*.2}" r="${r}" stroke-width="0"/>`;}
+  return h+'</g>';}
+/* OpenPose の点のつながり（親）。首（1）がもと。長さを固定して動かすときに使う */
+const OP_PAR=[1,null,1,2,3,1,5,6,1,8,9,1,11,12,0,0,14,15];
+function opSub(J){const out=[J];for(let k=0;k<out.length;k++)OP_PAR.forEach((p,i)=>{if(p===out[k])out.push(i);});return out;}
+/* しまう画像を小さくする（長い辺 max まで、JPEG） */
+function opShrink(blob,max){return new Promise(res=>{const u=URL.createObjectURL(blob),im=new Image();im.onload=()=>{const s=Math.min(1,max/Math.max(im.naturalWidth,im.naturalHeight));
+  const c=document.createElement('canvas');c.width=Math.round(im.naturalWidth*s);c.height=Math.round(im.naturalHeight*s);const g=c.getContext('2d');g.fillStyle='#fff';g.fillRect(0,0,c.width,c.height);g.drawImage(im,0,0,c.width,c.height);URL.revokeObjectURL(u);c.toBlob(b=>res(b||blob),'image/jpeg',.88);};im.onerror=()=>{URL.revokeObjectURL(u);res(blob);};im.src=u;});}
 function openOpTrace(o){
   o=o||{};$$('#opt').forEach(x=>x.remove());/* 前に開いたものが残っていれば消す */
-  const T=OPT={img:null,W:OP_GEN[0],H:OP_GEN[1],people:[],cur:0,sel:null,mode:'pt',op:.6,out:'gen',vb:null,drag:null,src:o};
-  const init=()=>{T.people=o.kps?opFromKps(o.kps,T.W,T.H):[opDefault(T.W,T.H,o.P)];T.cur=0;T.sel=null;T.vb={x:0,y:0,w:T.W,h:T.H};};
+  const T=OPT={img:null,imgBlob:null,W:OP_GEN[0],H:OP_GEN[1],people:[],cur:0,sel:null,mode:'pt',op:.6,out:'gen',vb:null,drag:null,src:o,lock:true,partId:null,lastTap:null,saved:false};
+  /* 部品（OpenPose）から開くときは、その点と大きさで始める（点は 0〜1 の割合でしまってある） */
+  const fromPart=p=>{const d=p.op||{};T.W=d.W||OP_GEN[0];T.H=d.H||OP_GEN[1];T.out=d.out||'gen';T.partId=p.id;
+    T.people=(d.people||[]).map(k=>k.map(q=>({x:q.x*T.W,y:q.y*T.H,z:(q.z||0)*T.W,h:!!q.h})));if(!T.people.length)T.people=[opDefault(T.W,T.H)];};
+  const init=()=>{if(o.part)fromPart(o.part);else T.people=o.kps?opFromKps(o.kps,T.W,T.H):[opDefault(T.W,T.H,o.P)];T.cur=0;T.sel=null;T.vb={x:0,y:0,w:T.W,h:T.H};};
   init();
+  const saved=S.parts.filter(p=>p.type==='openpose'&&p.id!==T.partId).sort((a,b)=>(b.updated||0)-(a.updated||0));
   const el=document.createElement('div');el.id='opt';el.className='opt';
   const imgs=(o.sc&&o.sc.images)||[];
   el.innerHTML=`<div class="optin">
-    <div class="opthd"><b>🖼 画像に合わせて OpenPose を作る</b><button type="button" class="btn ghost sm" id="optX">閉じる</button></div>
+    <div class="opthd"><b id="optTtl">${o.part?`🦴 OpenPose「${esc(o.part.name||'名前なし')}」を直す`:'🖼 画像に合わせて OpenPose を作る'}</b><button type="button" class="btn ghost sm" id="optX">閉じる</button></div>
+    ${saved.length?`<details class="nh" style="margin:0 0 8px"><summary>📂 保存した OpenPose を呼び出す（${saved.length}）</summary><div class="nhb"><div class="optimgs">${saved.map(p=>`<button type="button" data-ops="${p.id}" title="${esc(p.name||'')}">${p.img?`<img src="${partImgUrl(p)}" alt="">`:'🦴'}<small>${esc(p.name||'名前なし')}</small></button>`).join('')}</div>
+      <div id="optPick"><p class="hint" style="margin:4px 0 0">押して選ぶと、その形を今の画面に呼び出せます（今作っているものの元にできます）。</p></div></div></details>`:''}
     <div class="row" style="margin:0 0 6px"><label class="btn sm">画像を選ぶ<input type="file" accept="image/*" hidden id="optFile"></label>${pasteBtn('optFile')}<span class="hint" id="optImgN" style="align-self:center">画像なし（黒地）</span></div>${pasteBox('optFile')}
     <div class="row" style="margin:0 0 4px;align-items:center"><button type="button" class="btn sm" id="optAuto" disabled>🤖 全員を自動で合わせる</button><button type="button" class="btn ghost sm" id="optAutoOne" disabled>👤 選んでいる人物だけ</button><button type="button" class="btn ghost sm" id="optAutoBox" disabled>🔲 囲んで合わせる</button></div>
     <p class="hint" id="optAutoMsg" style="margin:0 0 6px">画像を選ぶと使えます。</p>
@@ -2860,9 +2898,16 @@ function openOpTrace(o){
     <div class="picstage optstage" id="optStage"><svg id="optSvg" xmlns="http://www.w3.org/2000/svg"></svg></div>
     <div class="row optzoom"><button type="button" class="btn ghost sm" data-oz="1.5">＋ 拡大</button><button type="button" class="btn ghost sm" data-oz="0.67">－ 縮小</button><button type="button" class="btn ghost sm" data-oz="0">全体</button>
       <label class="optop">画像の濃さ<input type="range" id="optOp" min="0" max="1" step="0.05" value="${T.op}"></label></div>
-    <p class="hint" style="margin:0 0 8px">点を指で動かして、画像の関節に合わせます。点のない所をなぞると画面が動きます（拡大したとき）。右・左は<b>人物から見た向き</b>です。</p>
+    <p class="hint" style="margin:0 0 8px">点を指で動かして、画像の関節に合わせます。点を<b>ダブルタップ</b>すると「隠す（見えていない）」になり、もう一度ダブルタップで戻ります。点のない所をなぞると画面が動きます（拡大したとき）。右・左は<b>人物から見た向き</b>です。</p>
+    <label class="switch" style="margin:0 0 6px"><input type="checkbox" id="optFlesh"><span>🧍 肉付けを見る<span class="hint">棒人形に、だいたいの体（胴・手足・頭）を重ねて出します。体つきの目安を見るためのもので、保存する OpenPose の画像には入りません。</span></span></label>
+    <label class="switch" style="margin:0 0 8px"><input type="checkbox" id="optLock" checked><span>手足・胴の長さを固定する<span class="hint">オンのときは、点を動かすと、長さを変えずに関節を軸に回ります（その先の手足も一緒に回ります。首を動かすと人物ごと動きます）。長さを画像に合わせたいときはオフにします。</span></span></label>
     <div class="tgs" id="optPeople"></div>
     <div class="ptabs" id="optMode" style="margin-top:8px"><button data-om="pt">点を動かす</button><button data-om="all">人物ごと動かす</button></div>
+    <div class="optrot"><label><span>体の向き（回す）</span><input type="range" id="optYaw" min="-180" max="180" step="1" value="0" aria-label="体の向き"></label>
+      <label><span>傾き</span><input type="range" id="optRoll" min="-90" max="90" step="1" value="0" aria-label="傾き"></label>
+      <div class="row" style="margin:0"><button type="button" class="btn ghost sm" data-oy="-45">◀ 45°</button><button type="button" class="btn ghost sm" data-oy="45">45° ▶</button><button type="button" class="btn ghost sm" data-oy="180">後ろ向きに</button></div>
+      <span class="hint">選んでいる人物を、縦の軸のまわりに回します（バーは動かしている間だけ回り、離すと 0 に戻ります）。鼻・目は、向こうを向くと自動で隠れます。奥行きは、自動で合わせた点・見本のポーズにはありますが、手で置いた点は平らなので、回すと細くなります。</span></div>
+    <details class="nh" style="margin:6px 0"><summary>🧍 ポーズの見本から始める</summary><div class="nhb" id="optPre"></div></details>
     <div class="row" style="margin:6px 0"><button type="button" class="btn ghost sm" data-os="1.1">人物を大きく</button><button type="button" class="btn ghost sm" data-os="0.91">人物を小さく</button><button type="button" class="btn ghost sm" id="optSwap">左右の点を入れかえる</button></div>
     <div id="optSel"></div>
     <div class="f" style="margin:10px 0 6px"><span>保存する大きさ</span><div class="tgs" id="optOut"></div></div>
@@ -2879,7 +2924,12 @@ function openOpTrace(o){
       <li>「🤖 自動で合わせる」は、写真や、人の体の形がはっきりした絵が得意です。デフォルメの強い絵・ちびキャラ・大きく重なった人物は、見つけられなかったり、ずれたりします。そのときは、ずれた点だけ指で直してください。</li>
       <li>人物が2人以上・小さい人物がいるときは、全員で見つからない人物があります。その人物を選んで（いなければ「＋ 人物を足す」）、「🔲 囲んで合わせる」でその人物を指で囲むと、その所だけを大きくして調べるので、見つけやすくなります。</li></ul>
       <p class="hint" style="margin:8px 0 0">自動で合わせる AI のデータ（約${POSE_AI.mb}MB）は、この端末にしまってあります。<button type="button" class="linkb" id="optAiDel">AI のデータを消す</button></p></div></details>
-    <div class="row" style="margin-top:12px"><button type="button" class="btn" id="optSave">OpenPose 画像を保存</button><button type="button" class="btn ghost" id="optX2">閉じる</button></div>
+    <div class="optpart"><b>🦴 OpenPose の部品として保存</b>
+      <label class="f" style="margin:6px 0"><span>名前</span><input id="optName" value="${esc(o.part?o.part.name:(o.title&&o.title!=='pose'&&o.title!=='trace'?o.title:''))}" placeholder="例：向かい合って腕組み"></label>
+      <label class="f" style="margin:0 0 6px"><span>タグ（なくてもよい・メモ用）</span><input id="optTags" value="${esc(o.part?o.part.tags||'':'')}" placeholder="crossed arms, facing another"></label>
+      <span class="hint">点と、下に敷いた画像を一緒にしまいます。部品の「OpenPose」から開くと、画像と点がそのまま出ます。</span>
+      <div class="row" style="margin:8px 0 0"><button type="button" class="btn" id="optPart">${o.part?'部品を上書き保存':'部品として保存'}</button>${o.part?'<button type="button" class="btn ghost" id="optPartNew">別の部品として保存</button><button type="button" class="btn danger" id="optPartDel">この部品を削除</button>':''}</div></div>
+    <div class="row" style="margin-top:12px"><button type="button" class="btn" id="optSave">OpenPose 画像（PNG）を保存</button><button type="button" class="btn ghost" id="optX2">閉じる</button></div>
   </div>`;
   document.body.appendChild(el);hydrate(el);history.pushState({opt:1},'');
   const svg=$('#optSvg',el),st=$('#optStage',el);
@@ -2895,7 +2945,7 @@ function openOpTrace(o){
     const r=R(),w=sw();
     if(T.box)h+=`<rect x="${T.box.x}" y="${T.box.y}" width="${T.box.w}" height="${T.box.h}" fill="rgba(255,255,255,.12)" stroke="#fff" stroke-width="${r*.25}" stroke-dasharray="${r} ${r*.6}"/>`;
     if(T.mode==='box')h+=`<rect x="${T.vb.x}" y="${T.vb.y}" width="${T.vb.w}" height="${T.vb.h}" fill="none" stroke="#f59e0b" stroke-width="${r*.5}"/>`;
-    T.people.forEach((kp,pi)=>{const on=pi===T.cur;let g=`<g opacity="${on?1:.45}">`;
+    T.people.forEach((kp,pi)=>{const on=pi===T.cur;let g=`<g opacity="${on?1:.45}">`;if(T.flesh)g+=opFleshSVG(kp);
       OP_LIMB.forEach(([a,b],i)=>{const A=kp[a],B=kp[b];if(A.h||B.h)return;g+=`<line x1="${A.x}" y1="${A.y}" x2="${B.x}" y2="${B.y}" stroke="rgb(${OP_COL[i]})" stroke-width="${w}" stroke-opacity=".75" stroke-linecap="round"/>`;});
       kp.forEach((q,i)=>{const c=`rgb(${OP_COL[i]})`;
         if(q.h){if(on)g+=`<circle cx="${q.x}" cy="${q.y}" r="${r*.7}" fill="none" stroke="#9aa1ad" stroke-width="${r*.18}" stroke-dasharray="${r*.35} ${r*.25}"/>`;return;}
@@ -2931,20 +2981,29 @@ function openOpTrace(o){
     if(T.mode==='box'){const q=toImg(e);T.drag={k:'box',x0:q.x,y0:q.y};T.box={x:q.x,y:q.y,w:0,h:0};st.setPointerCapture(e.pointerId);draw();return;}
     const q=toImg(e),rr=R()*1.9;let best=null,bd=rr,bp=T.cur;
     T.people.forEach((kp,pi)=>kp.forEach((p2,i)=>{if(p2.h&&pi!==T.cur)return;const d=Math.hypot(p2.x-q.x,p2.y-q.y)*(pi===T.cur?1:1.4);if(d<bd){bd=d;best=i;bp=pi;}}));
-    if(best!=null){if(bp!==T.cur){T.cur=bp;}T.sel=best;T.drag={k:T.mode==='all'?'all':'pt',x:q.x,y:q.y};}
+    if(best!=null){
+      /* ダブルタップ：その点を隠す・戻す */
+      const now=Date.now(),lt=T.lastTap;
+      if(lt&&lt.i===best&&lt.p===bp&&now-lt.t<400){const p2=T.people[bp][best];p2.h=!p2.h;T.cur=bp;T.sel=best;T.lastTap=null;T.drag=null;draw();drawPanel();toast(`${OP_JA[best]}を${p2.h?'隠しました':'見えるに戻しました'}`);return;}
+      T.lastTap={i:best,p:bp,t:now};
+      if(bp!==T.cur){T.cur=bp;}T.sel=best;T.drag={k:T.mode==='all'||(T.lock&&best===1)?'all':'pt',x:q.x,y:q.y};}
     else T.drag={k:'pan',cx:e.clientX,cy:e.clientY,vb:Object.assign({},T.vb)};
     st.setPointerCapture(e.pointerId);draw();drawPanel();});
   st.addEventListener('pointermove',e=>{const d=T.drag;if(!d)return;
     if(d.k==='box'){const q=toImg(e),x=Math.max(0,Math.min(q.x,d.x0)),y=Math.max(0,Math.min(q.y,d.y0));T.box={x,y,w:Math.min(T.W,Math.max(q.x,d.x0))-x,h:Math.min(T.H,Math.max(q.y,d.y0))-y};draw();return;}
     if(d.k==='pan'){const r=svg.getBoundingClientRect(),v=d.vb;const nx=v.x-(e.clientX-d.cx)/r.width*v.w,ny=v.y-(e.clientY-d.cy)/r.height*v.h;T.vb.x=Math.min(Math.max(0,nx),T.W-v.w);T.vb.y=Math.min(Math.max(0,ny),T.H-v.h);draw();return;}
-    const q=toImg(e);if(d.k==='pt'){const p2=P()[T.sel];p2.x=q.x;p2.y=q.y;}else{const dx=q.x-d.x,dy=q.y-d.y;for(const p2 of P()){p2.x+=dx;p2.y+=dy;}d.x=q.x;d.y=q.y;}draw();});
+    const q=toImg(e);
+    if(d.k==='pt'&&T.lock){/* 長さを固定：親の関節を軸に、その点から先をまとめて回す */
+      const k=P(),J=T.sel,A=k[OP_PAR[J]],B=k[J];const a=Math.atan2(q.y-A.y,q.x-A.x)-Math.atan2(B.y-A.y,B.x-A.x),c=Math.cos(a),s=Math.sin(a);
+      for(const i of opSub(J)){const p2=k[i],rx=p2.x-A.x,ry=p2.y-A.y;p2.x=A.x+rx*c-ry*s;p2.y=A.y+rx*s+ry*c;}draw();return;}
+    if(d.k==='pt'){const p2=P()[T.sel];p2.x=q.x;p2.y=q.y;}else{const dx=q.x-d.x,dy=q.y-d.y;for(const p2 of P()){p2.x+=dx;p2.y+=dy;}d.x=q.x;d.y=q.y;}draw();});
   const end=()=>{if(T.drag){const k=T.drag.k;T.drag=null;
       if(k==='box'){const b=T.box;if(!b||b.w<T.W*.03||b.h<T.H*.03){T.box=null;draw();return toast('もう少し大きく囲んでください');}runAI('one',b);return;}
       if(k!=='pan')drawPanel();}};st.addEventListener('pointerup',end);st.addEventListener('pointercancel',end);
   /* 画像を敷く。点は、前の画像の中での位置の割合のまま移す */
   const setImg=(blob,name)=>{const u=URL.createObjectURL(blob),im=new Image();im.onload=()=>{const oW=T.W,oH=T.H;
-      if(T.img)URL.revokeObjectURL(T.img.url);T.img={url:u,name};T.W=im.naturalWidth;T.H=im.naturalHeight;
-      for(const kp of T.people)for(const q of kp){q.x=q.x/oW*T.W;q.y=q.y/oH*T.H;}
+      if(T.img)URL.revokeObjectURL(T.img.url);T.img={url:u,name};T.imgBlob=blob;T.W=im.naturalWidth;T.H=im.naturalHeight;
+      for(const kp of T.people)for(const q of kp){q.x=q.x/oW*T.W;q.y=q.y/oH*T.H;q.z=(q.z||0)*T.H/oH;}
       /* 比率が変わったので、人物の形がくずれないよう、縦に合わせて横を直す */
       const sx=T.W/oW,sy=T.H/oH;if(Math.abs(sx/sy-1)>.01)for(const kp of T.people){const c=kp[1];for(const q of kp)q.x=c.x+(q.x-c.x)*sy/sx;}
       fit();$('#optImgN',el).textContent=`${name||'画像'}（${T.W}×${T.H}）`;aiBtns().forEach(b=>b.disabled=false);amsg.textContent='「全員を自動で合わせる」で、画像の人物の関節を見つけます。人物が多い・小さいときは、「囲んで合わせる」で1人ずつ合わせると正確になります。';draw();drawPanel();};im.onerror=()=>toast('画像を読み込めませんでした');im.src=u;};
@@ -2983,6 +3042,57 @@ function openOpTrace(o){
   const ad=$('#optAiDel',el);if(ad)ad.onclick=async()=>{if(!confirm('しまってある AI のデータを消しますか？（次に「自動で合わせる」を押すと、もう一度読み込みます）'))return;try{await caches.delete(POSE_AI.cache);}catch(_){}poseAI=null;toast('AI のデータを消しました');};
   $('#optFile',el).onchange=e=>{const f=e.target.files[0];e.target.value='';if(f)setImg(f,f.name);};
   $$('[data-oi]',el).forEach(b=>b.onclick=async()=>{const r=await dbGet('images',b.dataset.oi);if(r&&r.blob)setImg(r.blob,r.name||'シーンの画像');});
+  /* 長さの固定 */
+  $('#optFlesh',el).onchange=e=>{T.flesh=e.target.checked;draw();};
+  /* 体の向き・傾き。バーを動かしている間は、動かしはじめの形から回す */
+  const turn=(k,deg,roll)=>{const c=k[1],a=deg*Math.PI/180,co=Math.cos(a),si=Math.sin(a);const cz=c.z||0;
+    for(const q of k){const dx=q.x-c.x,dz=(q.z||0)-cz,dy=q.y-c.y;if(roll){q.x=c.x+dx*co-dy*si;q.y=c.y+dx*si+dy*co;}else{q.x=c.x+dx*co-dz*si;q.z=cz+dx*si+dz*co;}}
+    if(!roll){/* 向こうを向いた顔の点は隠す（耳は横を向いたときも見える） */const sh=Math.hypot(k[2].x-k[5].x,(k[2].z||0)-(k[5].z||0))||1;
+      if(k.some(q=>Math.abs(q.z||0)>1e-6)){for(const i of[0,14,15])k[i].h=(k[i].z||0)<cz-sh*.05;for(const i of[16,17])k[i].h=(k[i].z||0)<cz-sh*.35;}}};
+  const rotIn=(id,roll)=>{const r=$(id,el);r.oninput=()=>{if(!T.rb||T.rb.pi!==T.cur)T.rb={pi:T.cur,pts:JSON.parse(JSON.stringify(P()))};
+      const k=JSON.parse(JSON.stringify(T.rb.pts));turn(k,+r.value,roll);T.people[T.cur]=k;draw();};
+    r.onchange=()=>{T.rb=null;r.value=0;drawPanel();};};
+  rotIn('#optYaw',false);rotIn('#optRoll',true);
+  $$('[data-oy]',el).forEach(b=>b.onclick=()=>{turn(P(),+b.dataset.oy,false);draw();drawPanel();});
+  /* ポーズの見本（65種類）から始める：今の人物の位置・大きさに合わせて置きかえる */
+  let preGrp=PIC_GROUPS[0][0];
+  const drawPre=()=>{const box=$('#optPre',el);box.innerHTML=picGroupTabs(preGrp,0)+`<div class="tgs">${picGroupKeys(preGrp,[]).map(k=>`<button type="button" class="tg" data-opre="${esc(k)}">${esc(picPoseName(k))}</button>`).join('')}</div><p class="hint" style="margin:6px 0 0">押すと、選んでいる人物（人物${T.cur+1}）をそのポーズにします。位置と大きさは今の人物に合わせます。</p>`;
+    $$('[data-pgrp]',box).forEach(b=>b.onclick=()=>{preGrp=b.dataset.pgrp;drawPre();});
+    $$('[data-opre]',box).forEach(b=>b.onclick=()=>{const old=P(),n=opDefault(T.W,T.H,picSkelOf(b.dataset.opre));
+      const box2=k=>{const q=k.filter(x=>!x.h);const ys=q.map(x=>x.y);return Math.max(1,Math.max(...ys)-Math.min(...ys));};
+      const f=box2(old)/box2(n),c0=old[1],c1=n[1];for(const q of n){q.x=c0.x+(q.x-c1.x)*f;q.y=c0.y+(q.y-c1.y)*f;q.z=(q.z||0)*f;}
+      T.people[T.cur]=n;T.sel=null;draw();drawPanel();toast(`人物${T.cur+1}を「${picPoseName(b.dataset.opre)}」にしました`);});};
+  drawPre();
+  $('#optLock',el).onchange=e=>{T.lock=e.target.checked;toast(T.lock?'手足・胴の長さを固定しました':'長さを自由に変えられるようにしました');};
+  /* OpenPose の部品として保存。点は 0〜1 の割合、画像は長い辺 1600px の JPEG（画像がなければ棒人形の絵）を p.img にしまう */
+  const savePart=async asNew=>{const name=$('#optName',el).value.trim();if(!name){$('#optName',el).focus();return toast('名前を入れてください');}
+    const op={W:Math.round(T.W),H:Math.round(T.H),out:T.out,hasImg:!!T.img,people:T.people.map(k=>k.map(q=>({x:+(q.x/T.W).toFixed(5),y:+(q.y/T.H).toFixed(5),z:+((q.z||0)/T.W).toFixed(5),h:q.h?1:0})))};
+    const old=T.partId&&!asNew?byId('parts',T.partId):null;
+    let img;if(T.img&&T.imgBlob)img=(old&&old.img===T.imgBlob)?T.imgBlob:await opShrink(T.imgBlob,1600);
+    else img=await new Promise(r=>opRender(Object.assign({},T,{out:'img'})).toBlob(r,'image/png'));
+    let p=old;if(p){p.name=name;p.tags=$('#optTags',el).value.trim();p.op=op;p.img=img;}
+    else{p={id:uid(),type:'openpose',name,tags:$('#optTags',el).value.trim(),subject:'',weight:'',loraName:'',neg:'',memo:'',text:'',op,img,created:Date.now()};S.parts.push(p);}
+    await saveNow('parts',p);T.partId=p.id;T.saved=true;if(T.img)T.imgBlob=img;
+    $('#optTtl',el).textContent=`🦴 OpenPose「${name}」を直す`;$('#optPart',el).textContent='部品を上書き保存';toast(old?'上書き保存しました':'OpenPose の部品として保存しました');};
+  $('#optPart',el).onclick=()=>savePart(false);
+  const pn=$('#optPartNew',el);if(pn)pn.onclick=()=>savePart(true);
+  const pdl=$('#optPartDel',el);if(pdl)pdl.onclick=async()=>{const p=byId('parts',T.partId);if(!p||!confirm(`OpenPose「${p.name||'名前なし'}」を削除しますか？（しまった画像も消えます）`))return;
+    S.parts=S.parts.filter(x=>x.id!==p.id);await dbDel('parts',p.id);markDeleted(p.id);T.saved=true;T.partId=null;toast('削除しました');history.back();};
+  /* 保存した OpenPose を開く */
+  /* 保存した OpenPose を呼び出す：選ぶと、置きかえる・足す・その部品を開く を選べる。
+     呼び出した人物は、元の大きさの比率のまま、今の画面の真ん中に収める */
+  const takePeople=p=>{const d=p.op||{},W=d.W||OP_GEN[0],H=d.H||OP_GEN[1],s=Math.min(T.W/W,T.H/H),ox=(T.W-W*s)/2,oy=(T.H-H*s)/2;
+    return(d.people||[]).map(k=>k.map(q=>({x:q.x*W*s+ox,y:q.y*H*s+oy,z:(q.z||0)*W*s,h:!!q.h})));};
+  $$('[data-ops]',el).forEach(b=>b.onclick=()=>{const p=byId('parts',b.dataset.ops);if(!p)return;$$('[data-ops]',el).forEach(x=>x.classList.toggle('on',x===b));
+    const n=((p.op||{}).people||[]).length;
+    $('#optPick',el).innerHTML=`<p class="hint" style="margin:6px 0 4px"><b>${esc(p.name||'名前なし')}</b>（人物 ${n} 人）を</p><div class="row" style="margin:0"><button type="button" class="btn sm" data-opk="rep">人物を置きかえて呼び出す</button><button type="button" class="btn ghost sm" data-opk="add">人物を足して呼び出す</button><button type="button" class="btn ghost sm" data-opk="open">この部品を開いて直す</button></div>`;
+    $$('[data-opk]',el).forEach(x=>x.onclick=()=>{const k=x.dataset.opk;
+      if(k==='open'){history.back();setTimeout(()=>openOpTrace({part:p,onDone:o.onDone}),60);return;}
+      const L=takePeople(p);if(!L.length)return toast('人物が入っていません');
+      if(k==='rep'){T.people=L;T.cur=0;}else{T.people.push(...L);T.cur=T.people.length-L.length;}T.sel=null;draw();drawPanel();
+      toast(`「${p.name||'名前なし'}」を呼び出しました${T.img?'。画像に合わせて、人物ごと動かしたり大きさを変えたりしてください':''}`);});});
+  /* 部品から開いたときは、しまった画像を敷く */
+  if(o.part&&o.part.img&&o.part.op&&o.part.op.hasImg)setImg(o.part.img,'保存した画像');
   $('#optSave',el).onclick=()=>{const cv=opRender(T);cv.toBlob(b=>{if(!b)return toast('画像を作れませんでした');
     downloadBlob(b,`openpose_${String(o.title||'trace').replace(/[\\/:*?"<>|\s]+/g,'_')}_${ymdhm()}.png`);toast(`OpenPose の画像を保存しました（${cv.width}×${cv.height}）`);},'image/png');};
   const close=()=>history.back();
@@ -3023,12 +3133,12 @@ async function poseAIDetect(T,prog,box){
   if(box){const m=.12,x=Math.max(0,box.x-box.w*m),y=Math.max(0,box.y-box.h*m),x2=Math.min(T.W,box.x+box.w*(1+m)),y2=Math.min(T.H,box.y+box.h*(1+m));bx={x,y,w:Math.max(1,x2-x),h:Math.max(1,y2-y)};
     const s=Math.min(4,Math.max(1,640/Math.max(bx.w,bx.h))),cv=document.createElement('canvas');cv.width=Math.max(1,Math.round(bx.w*s));cv.height=Math.max(1,Math.round(bx.h*s));cv.getContext('2d').drawImage(im,bx.x,bx.y,bx.w,bx.h,0,0,cv.width,cv.height);src=cv;}
   const r=lm.detect(src);
-  const pt=(x,y,v)=>({x:bx.x+x*bx.w,y:bx.y+y*bx.h,h:v<.5||x<0||x>1||y<0||y>1});
-  const L=(r.landmarks||[]).map(L=>MP_TO_OP.map((m,i)=>{if(m==null){const a=L[11],b=L[12];return pt((a.x+b.x)/2,(a.y+b.y)/2,Math.min(V(a),V(b)));}const q=L[m];return pt(q.x,q.y,V(q));}));
+  const pt=(x,y,v,z)=>({x:bx.x+x*bx.w,y:bx.y+y*bx.h,z:-(z||0)*bx.w,h:v<.5||x<0||x>1||y<0||y>1});
+  const L=(r.landmarks||[]).map(L=>MP_TO_OP.map((m,i)=>{if(m==null){const a=L[11],b=L[12];return pt((a.x+b.x)/2,(a.y+b.y)/2,Math.min(V(a),V(b)),((a.z||0)+(b.z||0))/2);}const q=L[m];return pt(q.x,q.y,V(q),q.z);}));
   if(!box)return L.sort((a,b)=>a[1].x-b[1].x);
   const cx=box.x+box.w/2,cy=box.y+box.h/2,sc=k=>k.filter(q=>!q.h).length-Math.hypot(k[1].x-cx,k[1].y-cy)/Math.max(box.w,box.h)*6;
   return L.sort((a,b)=>sc(b)-sc(a)).slice(0,1);}
-function closeOpt(){const el=$('#opt');if(!el)return;if(OPT&&OPT.img)URL.revokeObjectURL(OPT.img.url);OPT=null;el.remove();}
+function closeOpt(){const el=$('#opt');if(!el)return;const T=OPT;if(T&&T.img)URL.revokeObjectURL(T.img.url);OPT=null;el.remove();if(T&&T.saved&&T.src&&T.src.onDone)T.src.onDone(T.partId);else if(0)T.src.onDone();}
 /* 800×912 に合わせるときの切り取り（画像の画素で、左右 x・上下 y を切る） */
 function opCrop(W,H){const r=OP_GEN[0]/OP_GEN[1];if(W/H>r){const w=H*r;return{x:(W-w)/2,y:0,w,h:H};}const h=W/r;return{x:0,y:(H-h)/2,w:W,h};}
 function opRender(T){let cw,ch,f;
@@ -3067,7 +3177,33 @@ function opChecks(T){const out=[],W=T.W,H=T.H;const v=q=>q&&!q.h;
 function picSaveOpenPose(sc,ov){const cv=picOpenPose(sc,ov);cv.toBlob(b=>{if(!b)return toast('画像を作れませんでした');
   downloadBlob(b,`openpose_${(sc.title||'scene').replace(/[\\/:*?"<>|\s]+/g,'_')}_${ymdhm()}.png`);toast('OpenPose の画像を保存しました');},'image/png');}
 
-/* ===== シーンの画面の「向き・位置」の欄 ===== */
+/* ===== シーンの OpenPose の欄（立ち位置・ポーズ） =====
+   保存した OpenPose の部品を1つ選ぶ（sc.openpose）。部品のタグはプロンプトに入る。
+   「開いて直す」で画像に合わせる画面を開く。「このシーン用に作る」はシーンの画像を下に敷いて作り、保存したら選ぶ */
+function opSecHTML(sc){const p=byId('parts',sc.openpose);
+  return `<div class="sec" id="opSec"><h2>🦴 OpenPose <small>立ち位置・ポーズ</small></h2>
+    ${partSel('OpenPose','openpose',sc.openpose,'data-scf="openpose"')}
+    ${p?`<div class="opsc"><img data-opthumb="${p.id}" alt="OpenPose の見本"><div class="row" style="margin:0;flex-direction:column;align-items:flex-start"><button type="button" class="btn sm" id="opScEdit">開いて直す</button><button type="button" class="btn ghost sm" id="opScPng">PNG を保存</button></div></div>`:''}
+    <div class="row" style="margin:6px 0 0"><button type="button" class="btn ghost sm" id="opScNew">＋ このシーン用に新しく作る</button></div>
+    <span class="hint">人物の立ち位置・向き・ポーズは、OpenPose で決めます。部品の「タグ」に書いたもの（例：facing each other）は、このシーンのプロンプトに入ります。PixAI では、保存した PNG を ControlNet の OpenPose に入れます。</span>
+  </div>`;}
+function opSecWire(sc){
+  $$('#opSec img[data-opthumb]').forEach(async im=>{const pp=byId('parts',im.dataset.opthumb);if(pp)im.src=await opThumb(pp);});
+  const p=byId('parts',sc.openpose);
+  const ed=$('#opScEdit');if(ed)ed.onclick=()=>openOpTrace({part:p,sc,onDone:pid=>{if(!pid||!byId('parts',pid)){sc.openpose='';saveNow('scenes',sc);}render(true);}});
+  const pg=$('#opScPng');if(pg)pg.onclick=()=>{const d=p.op||{},W=d.W||800,H=d.H||912;const T={W,H,out:d.out||'gen',people:(d.people||[]).map(k=>k.map(q=>({x:q.x*W,y:q.y*H,h:!!q.h})))};
+    opRender(T).toBlob(b=>{if(b)downloadBlob(b,`openpose_${String(p.name||'pose').replace(/[\\/:*?"<>|\s]+/g,'_')}_${ymdhm()}.png`);toast('OpenPose の画像を保存しました');},'image/png');};
+  const nw=$('#opScNew');if(nw)nw.onclick=()=>openOpTrace({sc,title:sc.title||'',onDone:pid=>{if(pid&&byId('parts',pid)){sc.openpose=pid;saveNow('scenes',sc);}render(true);}});
+}
+/* OpenPose の見本の絵（下に敷いた画像を薄く出し、棒人形を重ねる）。部品の一覧・シーンで使う */
+const opThumbCache={};
+async function opThumb(p){const key=p.id+':'+(p.updated||0);if(opThumbCache[key])return opThumbCache[key];
+  const d=p.op||{},W=d.W||800,H=d.H||912,s=360/Math.max(W,H),cw=Math.max(1,Math.round(W*s)),ch=Math.max(1,Math.round(H*s));
+  const c=document.createElement('canvas');c.width=cw;c.height=ch;const g=c.getContext('2d');g.fillStyle='#000';g.fillRect(0,0,cw,ch);
+  if(d.hasImg&&p.img){try{const u=URL.createObjectURL(p.img),im=new Image();im.src=u;await im.decode();g.globalAlpha=.45;g.drawImage(im,0,0,cw,ch);g.globalAlpha=1;URL.revokeObjectURL(u);}catch(_){}}
+  g.drawImage(opPaint((d.people||[]).map(k=>k.map(q=>q.h?null:[q.x*cw,q.y*ch])),cw,ch,true),0,0);
+  return opThumbCache[key]=c.toDataURL('image/jpeg',.85);}
+/* ===== シーンの画面の「向き・位置」の欄（v59 から使っていない） ===== */
 let picSel=0,picMode='move';const picUndo={};
 /* カメラの高さ・体の向き・大きさのバーを出しているか（ふだんは出さない） */
 let picBarsOn=false;
