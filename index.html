@@ -516,7 +516,7 @@ const FMT={
 
 /* ========== データベース（IndexedDB） ========== */
 let db=null;
-const APP_VER='v64';/* sw.js の VERSION と同じにする */
+const APP_VER='v65';/* sw.js の VERSION と同じにする */
 const STORES=['parts','scenes','works','images','meta','fonts','stamps'];
 function openDB(){return new Promise((res,rej)=>{const r=indexedDB.open('manga4koma',3);r.onupgradeneeded=()=>{const d=r.result;for(const s of STORES)if(!d.objectStoreNames.contains(s))d.createObjectStore(s,{keyPath:'id'});};r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error);});}
 function tx(store,mode,fn){return new Promise((res,rej)=>{if(!db)return res(undefined);const t=db.transaction(store,mode);const req=fn(t.objectStore(store));let out;if(req)req.onsuccess=()=>{out=req.result;};t.oncomplete=()=>res(out);t.onerror=()=>rej(t.error);t.onabort=()=>rej(t.error);});}
@@ -2855,15 +2855,20 @@ function picOpKps(sc,ov,all){
 }
 function picOpenPose(sc,ov){const k=picOpKps(sc,ov);return opPaint(k.people,k.cw,k.ch);}
 /* OpenPose の棒人形を描く（people：人物ごとに18点。[x,y] か null） */
+/* 点は [x, y, 奥行き（なくてもよい）]。描く順番は、奥の人物から（大きく写っている人物ほど手前）、人物の中でも奥の手足から。
+   重なった所で手前の線が上に来る。線の色・濃さはどれも同じ（ふつうの OpenPose と同じ） */
 function opPaint(people,cw,ch,clear){
   const cv=document.createElement('canvas');cv.width=cw;cv.height=ch;const g=cv.getContext('2d');
   if(!clear){g.fillStyle='#000';g.fillRect(0,0,cw,ch);}const sw=Math.max(4,Math.round(Math.min(cw,ch)/512*4));
-  for(const kp of people){
+  const zz=q=>(q&&q[2])||0;
+  const size=kp=>{const q=kp.filter(Boolean);if(q.length<2)return 0;const xs=q.map(a=>a[0]),ys=q.map(a=>a[1]);return Math.hypot(Math.max(...xs)-Math.min(...xs),Math.max(...ys)-Math.min(...ys));};
+  const order=people.map((kp,n)=>({kp,n,s:size(kp)})).sort((a,b)=>a.s-b.s||a.n-b.n);
+  for(const{kp}of order){
     g.globalAlpha=.6;
-    OP_LIMB.forEach(([a,b],i)=>{const A=kp[a],B=kp[b];if(!A||!B)return;
+    OP_LIMB.map(([a,b],i)=>({a,b,i,z:(zz(kp[a])+zz(kp[b]))/2})).sort((x,y)=>x.z-y.z||x.i-y.i).forEach(({a,b,i})=>{const A=kp[a],B=kp[b];if(!A||!B)return;
       g.fillStyle=`rgb(${OP_COL[i]})`;g.beginPath();g.ellipse((A[0]+B[0])/2,(A[1]+B[1])/2,Math.hypot(A[0]-B[0],A[1]-B[1])/2,sw,Math.atan2(B[1]-A[1],B[0]-A[0]),0,Math.PI*2);g.fill();});
     g.globalAlpha=1;
-    kp.forEach((q,i)=>{if(!q)return;g.fillStyle=`rgb(${OP_COL[i]})`;g.beginPath();g.arc(q[0],q[1],sw,0,Math.PI*2);g.fill();});
+    kp.map((q,i)=>({q,i})).filter(x=>x.q).sort((x,y)=>zz(x.q)-zz(y.q)||x.i-y.i).forEach(({q,i})=>{g.fillStyle=`rgb(${OP_COL[i]})`;g.beginPath();g.arc(q[0],q[1],sw,0,Math.PI*2);g.fill();});
   }
   return cv;
 }
@@ -3072,7 +3077,7 @@ function openOpTrace(o){
     if(T.box)h+=`<rect x="${T.box.x}" y="${T.box.y}" width="${T.box.w}" height="${T.box.h}" fill="rgba(255,255,255,.12)" stroke="#fff" stroke-width="${r*.25}" stroke-dasharray="${r} ${r*.6}"/>`;
     if(T.mode==='box')h+=`<rect x="${T.vb.x}" y="${T.vb.y}" width="${T.vb.w}" height="${T.vb.h}" fill="none" stroke="#f59e0b" stroke-width="${r*.5}"/>`;
     T.people.forEach((kp,pi)=>{const on=pi===T.cur;let g=`<g opacity="${on?1:.45}">`;if(T.flesh)g+=opFleshSVG(kp,bodyOf(pi));
-      OP_LIMB.forEach(([a,b],i)=>{const A=kp[a],B=kp[b];if(A.h||B.h)return;g+=`<line x1="${A.x}" y1="${A.y}" x2="${B.x}" y2="${B.y}" stroke="rgb(${OP_COL[i]})" stroke-width="${w}" stroke-opacity=".75" stroke-linecap="round"/>`;});
+      OP_LIMB.map((l,i)=>[l,i,((kp[l[0]].z||0)+(kp[l[1]].z||0))/2]).sort((x,y)=>x[2]-y[2]||x[1]-y[1]).forEach(([[a,b],i])=>{const A=kp[a],B=kp[b];if(A.h||B.h)return;g+=`<line x1="${A.x}" y1="${A.y}" x2="${B.x}" y2="${B.y}" stroke="rgb(${OP_COL[i]})" stroke-width="${w}" stroke-opacity=".75" stroke-linecap="round"/>`;});
       kp.forEach((q,i)=>{const c=`rgb(${OP_COL[i]})`;
         /* 顔の点（鼻・目・耳）は、1つずつ動かすのでなければ小さく */
         const rp=!T.faceOne&&(i===0||i>=14)?r*.5:r;
@@ -3295,7 +3300,7 @@ function opCrop(W,H){const r=OP_GEN[0]/OP_GEN[1];if(W/H>r){const w=H*r;return{x:
 function opRender(T){let cw,ch,f;
   if(T.out==='gen'){const c=opCrop(T.W,T.H);cw=OP_GEN[0];ch=OP_GEN[1];const s=cw/c.w;f=q=>[(q.x-c.x)*s,(q.y-c.y)*s];}
   else{const s=Math.min(1,1536/Math.max(T.W,T.H));cw=Math.max(8,Math.round(T.W*s/8)*8);ch=Math.max(8,Math.round(T.H*s/8)*8);f=q=>[q.x*cw/T.W,q.y*ch/T.H];}
-  const people=T.people.map(kp=>kp.map(q=>{if(q.h)return null;const[x,y]=f(q);return(x<0||y<0||x>cw||y>ch)?null:[x,y];}));
+  const people=T.people.map(kp=>kp.map(q=>{if(q.h)return null;const[x,y]=f(q);return(x<0||y<0||x>cw||y>ch)?null:[x,y,q.z||0];}));
   return opPaint(people,cw,ch);}
 /* うまく読み込まれないことが多い形を調べる */
 function opChecks(T){const out=[],W=T.W,H=T.H;const v=q=>q&&!q.h;
@@ -3406,7 +3411,7 @@ function opSecWire(sc){
   $$('#opSec img[data-opthumb]').forEach(async im=>{const pp=byId('parts',im.dataset.opthumb);if(pp)im.src=await opThumb(pp);});
   const p=byId('parts',sc.openpose);
   const ed=$('#opScEdit');if(ed)ed.onclick=()=>openOpTrace({part:p,sc,onDone:pid=>{if(!pid||!byId('parts',pid)){sc.openpose='';saveNow('scenes',sc);}render(true);}});
-  const pg=$('#opScPng');if(pg)pg.onclick=()=>{const d=p.op||{},W=d.W||800,H=d.H||912;const T={W,H,out:d.out||'gen',people:(d.people||[]).map(k=>k.map(q=>({x:q.x*W,y:q.y*H,h:!!q.h})))};
+  const pg=$('#opScPng');if(pg)pg.onclick=()=>{const d=p.op||{},W=d.W||800,H=d.H||912;const T={W,H,out:d.out||'gen',people:(d.people||[]).map(k=>k.map(q=>({x:q.x*W,y:q.y*H,z:(q.z||0)*W,h:!!q.h})))};
     opRender(T).toBlob(b=>{if(b)downloadBlob(b,`openpose_${String(p.name||'pose').replace(/[\\/:*?"<>|\s]+/g,'_')}_${ymdhm()}.png`);toast('OpenPose の画像を保存しました');},'image/png');};
   const oa=$('#opScAuto');if(oa)oa.onchange=()=>{sc.opAuto=oa.checked;saveNow('scenes',sc);render(true);};
   const nw=$('#opScNew');if(nw)nw.onclick=()=>openOpTrace({sc,title:sc.title||'',onDone:pid=>{if(pid&&byId('parts',pid)){sc.openpose=pid;saveNow('scenes',sc);}render(true);}});
@@ -3417,7 +3422,7 @@ async function opThumb(p){const key=p.id+':'+(p.updated||0);if(opThumbCache[key]
   const d=p.op||{},W=d.W||800,H=d.H||912,s=360/Math.max(W,H),cw=Math.max(1,Math.round(W*s)),ch=Math.max(1,Math.round(H*s));
   const c=document.createElement('canvas');c.width=cw;c.height=ch;const g=c.getContext('2d');g.fillStyle='#000';g.fillRect(0,0,cw,ch);
   if(d.hasImg&&p.img){try{const u=URL.createObjectURL(p.img),im=new Image();im.src=u;await im.decode();g.globalAlpha=.45;g.drawImage(im,0,0,cw,ch);g.globalAlpha=1;URL.revokeObjectURL(u);}catch(_){}}
-  g.drawImage(opPaint((d.people||[]).map(k=>k.map(q=>q.h?null:[q.x*cw,q.y*ch])),cw,ch,true),0,0);
+  g.drawImage(opPaint((d.people||[]).map(k=>k.map(q=>q.h?null:[q.x*cw,q.y*ch,q.z||0])),cw,ch,true),0,0);
   return opThumbCache[key]=c.toDataURL('image/jpeg',.85);}
 /* ===== シーンの画面の「向き・位置」の欄（v59 から使っていない） ===== */
 let picSel=0,picMode='move';const picUndo={};
