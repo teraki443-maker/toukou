@@ -527,7 +527,7 @@ const FMT={
 
 /* ========== データベース（IndexedDB） ========== */
 let db=null;
-const APP_VER='v66';/* sw.js の VERSION と同じにする */
+const APP_VER='v67';/* sw.js の VERSION と同じにする */
 const STORES=['parts','scenes','works','images','meta','fonts','stamps'];
 function openDB(){return new Promise((res,rej)=>{const r=indexedDB.open('manga4koma',3);r.onupgradeneeded=()=>{const d=r.result;for(const s of STORES)if(!d.objectStoreNames.contains(s))d.createObjectStore(s,{keyPath:'id'});};r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error);});}
 function tx(store,mode,fn){return new Promise((res,rej)=>{if(!db)return res(undefined);const t=db.transaction(store,mode);const req=fn(t.objectStore(store));let out;if(req)req.onsuccess=()=>{out=req.result;};t.oncomplete=()=>res(out);t.onerror=()=>rej(t.error);t.onabort=()=>rej(t.error);});}
@@ -2631,9 +2631,10 @@ const PIC_PRESETS={stand:['立ち','standing'],walk:['歩き','walking'],sit:['�
   eat:['食べる','eating'],drink:['飲む','drinking'],cook:['料理する','cooking'],smoke:['タバコを吸う','smoking'],selfie:['自撮り','selfie'],photo:['写真を撮る','taking picture'],read:['読書する','reading'],study:['勉強する','studying'],
   instrument:['楽器を演奏する','playing instrument'],sing:['歌う','singing'],
   arched:['背中を反らせる','arched back'],bent:['前屈み（前かがみ）','bent over'],leanback:['後ろに寄りかかる','leaning back'],armsupport:['手をつく、腕で体を支える','arm support'],leanfwd:['前に寄りかかる、前かがみ','leaning forward'],leanside:['体を横に傾ける','leaning to the side'],peek:['物陰から覗く','peeking out'],slouch:['猫背','slouching'],
+  squatwide:['股を開いてしゃがむ','squatting, spread legs'],handsonhips:['腰に両手を当てて立つ','standing, hands on hips'],allfours:['前を向いた四つん這い','all fours, facing viewer'],daiji:['大の字','spread arms, spread legs'],
   landing:['三点着地','superhero landing'],fight:['戦闘態勢、ファイティングポーズ','fighting stance'],dual:['二刀流','dual wielding'],aim:['狙う','aiming'],twist:['体をひねる、振り返る','twisted torso'],dynamic:['ダイナミックポーズ','dynamic pose'],action:['アクションシーン','action shot']};
 /* ポーズのボタンの分け方 */
-const PIC_GROUPS=[['よく使う',['stand','walk','sit','wave','cross','point']],
+const PIC_GROUPS=[['よく使う',['stand','walk','sit','wave','cross','point','squatwide','handsonhips','allfours','daiji']],
   ['寝る',['lying','onback','onside','onstomach','thepose','sleeping','fetal']],
   ['座る',['kneel','oneknee','squat','crosslegs','butterfly','indian','hugknees','seiza','wariza','yokozuwari','reclining','sitback','airchair']],
   ['立つ・動く',['legsapart','oneleg','contra','sway','wall','run','jump','hop','fly','ride','stretch','yoga','balance']],
@@ -2663,6 +2664,16 @@ function picFloor(P){picUpper(P,.5);Object.assign(P,{rK:[-.55,.45,1.9],lK:[.55,.
 const pR=picRot;
 /* それぞれのポーズの形（立ちの形から動かす） */
 const PIC_SHAPE={
+  /* 股を開いてしゃがむ：しゃがみから、ひざを外へ大きく開く。手はひざの内側に下ろす */
+  squatwide:P=>{PIC_SHAPE.squat(P);pR(P,'rK',-38,'f');pR(P,'lK',38,'f');pR(P,'rE',-10,'f');pR(P,'lE',10,'f');picGround(P);},
+  /* 腰に両手を当てて立つ：ひじを外へ張り、手首を腰の横に */
+  handsonhips:P=>Object.assign(P,{rE:[-1.6,5.15,-.15],rH:[-.72,4.2,.05],lE:[1.6,5.15,-.15],lH:[.72,4.2,.05]}),
+  /* 前を向いた四つん這い：頭をカメラ側（z の＋）に、手は肩の下、ひざは腰の下で床につく */
+  allfours:P=>{Object.assign(P,{pel:[0,2,-1.2],rP:[-.5,2,-1.2],lP:[.5,2,-1.2],rK:[-.55,.05,-1],lK:[.55,.05,-1],rF:[-.55,.15,-2.9],lF:[.55,.15,-2.9],rT:[-.6,0,-3.3],lT:[.6,0,-3.3],
+    neck:[0,2.25,1.4],rS:[-.95,2.1,1.2],lS:[.95,2.1,1.2],rE:[-1,.95,1.25],lE:[1,.95,1.25],rH:[-1,0,1.45],lH:[1,0,1.45],
+    head:[0,2.65,2.05],eyeR:[-.2,2.73,2.55],eyeL:[.2,2.73,2.55],nose:[0,2.6,2.63],earR:[-.55,2.65,2],earL:[.55,2.65,2]});picGround(P);},
+  /* 大の字：腕をななめ上へ、脚をななめに大きく開く */
+  daiji:P=>{pR(P,'rE',-118,'f');pR(P,'lE',118,'f');pR(P,'rK',-24,'f');pR(P,'lK',24,'f');picGround(P);},
   walk:P=>Object.assign(P,{rK:[-.5,2.05,.55],rF:[-.5,.25,.75],rT:[-.52,.15,1.3],lK:[.5,2,-.25],lF:[.5,.35,-.85],lT:[.52,.05,-.4],lE:[1.1,5,.45],lH:[1.1,3.9,.85],rE:[-1.1,5,-.4],rH:[-1.1,3.85,-.75]}),
   sit:P=>picChair(P),
   wave:P=>{P.rE=[-1.75,6.6,.1];P.rH=[-1.6,7.9,.2];},
@@ -2930,6 +2941,14 @@ function opFaceVis(k){const e1=k[16],e2=k[17];if(!e1||!e2||![0,14,15,16,17].some
 /* 頭（首から上：鼻・目・耳）だけを、首の上で縦の軸のまわりに回す（＋は画像の右を向く方） */
 function opHeadTurn(k,deg){const e1=k[16],e2=k[17],c=e1&&e2?{x:(e1.x+e2.x)/2,z:((e1.z||0)+(e2.z||0))/2}:{x:k[1].x,z:k[1].z||0};
   const a=deg*Math.PI/180,co=Math.cos(a),si=Math.sin(a);for(const i of[0,14,15,16,17]){const q=k[i],dx=q.x-c.x,dz=(q.z||0)-c.z;q.x=c.x+dx*co+dz*si;q.z=c.z-dx*si+dz*co;}opFaceVis(k);}
+/* 体格を引き継ぐ：新しい形 n の向きのまま、骨の長さ（肩幅・腰幅・手足・胴・首から顔）を今の形 old にそろえる。首の位置は n のまま */
+function opInherit(old,n){if(!old||!n)return n;const src=n.map(q=>({x:q.x,y:q.y,z:q.z||0})),L=(k,a,b)=>Math.hypot(k[a].x-k[b].x,k[a].y-k[b].y,(k[a].z||0)-(k[b].z||0));
+  for(const i of opSub(1)){const p=OP_PAR[i];if(p==null)continue;const dx=src[i].x-src[p].x,dy=src[i].y-src[p].y,dz=src[i].z-src[p].z,l=Math.hypot(dx,dy,dz);if(l<1e-6)continue;
+    let lo=L(old,i,p);if(lo<1e-3)lo=l;n[i].x=n[p].x+dx/l*lo;n[i].y=n[p].y+dy/l*lo;n[i].z=(n[p].z||0)+dz/l*lo;}
+  /* 肩幅・腰幅は、左右の間の長さもそろえる（向きによって首からの角度が変わっても、幅は今のまま）。腕・脚は付け根と一緒に動かす */
+  for(const[a,b]of[[2,5],[8,11]]){const wo=L(old,a,b),wn=L(n,a,b);if(wo<1e-3||wn<1e-3)continue;const f=wo/wn,m={x:(n[a].x+n[b].x)/2,y:(n[a].y+n[b].y)/2,z:((n[a].z||0)+(n[b].z||0))/2};
+    for(const j of[a,b]){const tx=m.x+(n[j].x-m.x)*f-n[j].x,ty=m.y+(n[j].y-m.y)*f-n[j].y,tz=m.z+((n[j].z||0)-m.z)*f-(n[j].z||0);for(const i of opSub(j)){n[i].x+=tx;n[i].y+=ty;n[i].z=(n[i].z||0)+tz;}}}
+  return n;}
 /* 頭（鼻・目・耳）を、耳の真ん中を軸に上下に向ける（＋は上を見る方） */
 function opHeadTilt(k,deg){if(!deg)return;const e1=k[16],e2=k[17],c=e1&&e2?{y:(e1.y+e2.y)/2,z:((e1.z||0)+(e2.z||0))/2}:{y:k[0].y,z:k[0].z||0};
   const a=deg*Math.PI/180,co=Math.cos(a),si=Math.sin(a);for(const i of[0,14,15,16,17]){const q=k[i],dy=q.y-c.y,dz=(q.z||0)-c.z;q.y=c.y+dy*co-dz*si;q.z=c.z+dy*si+dz*co;}opFaceVis(k);}
@@ -2998,7 +3017,7 @@ function opShrink(blob,max){return new Promise(res=>{const u=URL.createObjectURL
   const c=document.createElement('canvas');c.width=Math.round(im.naturalWidth*s);c.height=Math.round(im.naturalHeight*s);const g=c.getContext('2d');g.fillStyle='#fff';g.fillRect(0,0,c.width,c.height);g.drawImage(im,0,0,c.width,c.height);URL.revokeObjectURL(u);c.toBlob(b=>res(b||blob),'image/jpeg',.88);};im.onerror=()=>{URL.revokeObjectURL(u);res(blob);};im.src=u;});}
 function openOpTrace(o){
   o=o||{};$$('#opt').forEach(x=>x.remove());/* 前に開いたものが残っていれば消す */
-  const T=OPT={img:null,imgBlob:null,W:OP_GEN[0],H:OP_GEN[1],people:[],cur:0,sel:null,mode:'pt',op:.6,out:'gen',vb:null,drag:null,src:o,lock:true,wlock:true,partId:null,lastTap:null,saved:false,body:[],autoHide:true,faceOne:false};
+  const T=OPT={img:null,imgBlob:null,W:OP_GEN[0],H:OP_GEN[1],people:[],cur:0,sel:null,mode:'pt',op:.6,out:'gen',vb:null,drag:null,src:o,lock:true,wlock:true,inherit:true,preTags:[],partId:null,lastTap:null,saved:false,body:[],autoHide:true,faceOne:false};
   /* 部品（OpenPose）から開くときは、その点と大きさで始める（点は 0〜1 の割合でしまってある） */
   const fromPart=p=>{const d=p.op||{};T.W=d.W||OP_GEN[0];T.H=d.H||OP_GEN[1];T.out=d.out||'gen';T.partId=p.id;
     T.autoHide=d.autoHide!==false;
@@ -3022,6 +3041,7 @@ function openOpTrace(o){
       ${imgs.length?`<div class="optimgs">${imgs.map(id=>`<button type="button" data-oi="${id}"><img data-img="${id}" alt=""></button>`).join('')}</div><p class="hint" style="margin:0 0 6px">このシーンの画像から選ぶこともできます。</p>`:''}
       <label class="optop">画像の濃さ<input type="range" id="optOp" min="0" max="1" step="0.05" value="${T.op}"></label>
       ${saved.length?`<div class="f" style="margin:10px 0 0"><span>📂 保存した OpenPose を呼び出す</span><div class="optimgs">${saved.map(p=>`<button type="button" data-ops="${p.id}" title="${esc(p.name||'')}">${p.img?`<img src="${partImgUrl(p)}" alt="">`:'🦴'}<small>${esc(p.name||'名前なし')}</small></button>`).join('')}</div>
+        <label class="switch" style="margin:6px 0 0"><input type="checkbox" class="optInh" ${T.inherit?'checked':''}><span>今の人物の体格を引き継ぐ<span class="hint">呼び出した人物1・人物2…に、今の人物1・人物2…の肩幅・手足の長さ・肉付きを使います。</span></span></label>
         <div id="optPick"><p class="hint" style="margin:4px 0 0">押して選ぶと、その形を今の画面に呼び出せます（今作っているものの元にできます）。</p></div></div>`:''}
     </div>
     <div class="optpane" data-pane="auto">
@@ -3034,7 +3054,8 @@ function openOpTrace(o){
       <div class="row" style="margin:6px 0"><button type="button" class="btn ghost sm" data-os="1.1">大きく</button><button type="button" class="btn ghost sm" data-os="0.91">小さく</button><button type="button" class="btn ghost sm" id="optSwap">左右の点を入れかえ</button></div>
       <label class="switch" style="margin:0 0 4px"><input type="checkbox" id="optWLock" checked><span>肩幅・腰幅を固定する<span class="hint">オンのときは、肩（腰）の点を動かすと、反対側の肩（腰）も一緒に動き、幅が変わりません。幅を変えたいときだけオフにします。</span></span></label>
       <div class="oplab">左右対称にする（右・左は人物から見た向き）</div>
-      <div class="opmir">${[['rArm','右腕を左腕と同じ形に',`rgb(${OP_COL[2]})`],['lArm','左腕を右腕と同じ形に',`rgb(${OP_COL[4]})`],['rLeg','右脚を左脚と同じ形に',`rgb(${OP_COL[7]})`],['lLeg','左脚を右脚と同じ形に',`rgb(${OP_COL[10]})`]].map(([k,l,c])=>`<button type="button" data-omir="${k}" style="--c:${c}">${l}</button>`).join('')}</div>
+      <p class="hint" style="margin:0 0 6px">上半身は肩幅・腕の長さと形を、下半身は腰幅・脚の長さと形を、体のまん中の線で折り返してそろえます。</p>
+      <div class="opmir">${[['rArm','上半身：右を左に合わせる',`rgb(${OP_COL[2]})`],['lArm','上半身：左を右に合わせる',`rgb(${OP_COL[4]})`],['rLeg','下半身：右を左に合わせる',`rgb(${OP_COL[7]})`],['lLeg','下半身：左を右に合わせる',`rgb(${OP_COL[10]})`]].map(([k,l,c])=>`<button type="button" data-omir="${k}" style="--c:${c}">${l}</button>`).join('')}</div>
       <label class="switch" style="margin:0 0 4px"><input type="checkbox" id="optLock" checked><span>手足・胴の長さを固定する<span class="hint">オンのときは、長さを変えずに関節を軸に回ります（首を動かすと人物ごと動きます）。</span></span></label>
       <label class="switch" style="margin:0 0 4px"><input type="checkbox" id="optFlesh"><span>🧍 肉付けを見る<span class="hint">だいたいの体を重ねて出します（保存する画像には入りません）。男女と肉の厚みを、人物ごとに決められます。</span></span></label>
       <label class="switch sm" style="margin:2px 0 4px"><input type="checkbox" id="optFaceOne"><span>顔の点を1つずつ動かす<span class="hint">オフのときは、鼻・目・耳のどれを動かしても、頭ごと動きます（顔の向きは「🔄 向き」の「顔の向き」で変えます）。</span></span></label>
@@ -3051,7 +3072,7 @@ function openOpTrace(o){
         <div class="row" style="margin:0"><button type="button" class="btn ghost sm" data-oy="-45">◀ 45°</button><button type="button" class="btn ghost sm" data-oy="45">45° ▶</button><button type="button" class="btn ghost sm" data-oy="180">後ろ向きに</button></div>
         <span class="hint">選んでいる人物を回します（バーは動かしている間だけ回り、離すと 0 に戻ります）。手で置いた点は奥行きがないので、回すと細くなります。</span></div>
 
-      <details class="nh" style="margin:6px 0"><summary>🧍 ポーズの見本から始める</summary><div class="nhb" id="optPre"></div></details>
+      <details class="nh" style="margin:6px 0" open><summary>🧍 ポーズの見本から始める</summary><div class="nhb"><label class="switch" style="margin:0 0 8px"><input type="checkbox" class="optInh" ${T.inherit?'checked':''}><span>今の人物の体格を引き継ぐ<span class="hint">肩幅・腰幅・手足や胴の長さ・肉付きを、今の人物のまま使います。オフにすると、見本の体格になります。</span></span></label><div id="optPre"></div></div></details>
     </div>
     <div class="optpane" data-pane="save">
       <div id="optChk"></div>
@@ -3263,10 +3284,12 @@ function openOpTrace(o){
   $$('[data-omir]',el).forEach(b=>b.onclick=()=>{const k=P(),m=b.dataset.omir,arm=m.endsWith('Arm'),toR=m[0]==='r';
     const R0=arm?[2,3,4]:[8,9,10],L0=arm?[5,6,7]:[11,12,13],[dst,src]=toR?[R0,L0]:[L0,R0];
     const n=k[1],hp=k[8]&&k[11]?{x:(k[8].x+k[11].x)/2,y:(k[8].y+k[11].y)/2}:{x:n.x,y:n.y+1};let dx=hp.x-n.x,dy=hp.y-n.y;const dl=Math.hypot(dx,dy)||1;dx/=dl;dy/=dl;
-    const S0=k[src[0]],D0=k[dst[0]];
+    /* 付け根（肩・腰）も、首を通るまん中の線で折り返す → 肩幅・腰幅がそろう */
+    const S0=k[src[0]],D0=k[dst[0]];{const vx=S0.x-n.x,vy=S0.y-n.y,dot=vx*dx+vy*dy;D0.x=n.x+2*dot*dx-vx;D0.y=n.y+2*dot*dy-vy;D0.z=S0.z||0;D0.h=!!S0.h;delete D0.auto;}
     for(let j=1;j<src.length;j++){const v=k[src[j]],vx=v.x-S0.x,vy=v.y-S0.y,dot=vx*dx+vy*dy,rx=2*dot*dx-vx,ry=2*dot*dy-vy,q=k[dst[j]];
       q.x=D0.x+rx;q.y=D0.y+ry;q.z=(D0.z||0)+((v.z||0)-(S0.z||0));q.h=!!v.h;if(v.man)q.man=true;else delete q.man;delete q.auto;}
-    draw();drawPanel();toast(`${toR?'右':'左'}${arm?'腕':'脚'}を反対側と同じ形にしました`);});
+    draw();drawPanel();toast(`${arm?'上半身':'下半身'}の${toR?'右':'左'}を反対側に合わせました`);});
+  $$('.optInh',el).forEach(c=>c.onchange=()=>{T.inherit=c.checked;$$('.optInh',el).forEach(x=>x.checked=T.inherit);toast(T.inherit?'体格を引き継ぎます':'見本の体格で呼び出します');});
   $('#optWLock',el).onchange=e=>{T.wlock=e.target.checked;toast(T.wlock?'肩幅・腰幅を固定しました':'肩幅・腰幅を変えられるようにしました');};
   $('#optHeadBody',el).onclick=()=>{const k=P(),t=opTorso(k,bodyOf(T.cur)),h=opHeadYaw(k);if(!t||h==null)return toast('奥行きがないので、そろえられません');
     let dd=(t.th-h)*180/Math.PI;dd=((dd+540)%360)-180;opHeadTurn(k,dd);draw();drawPanel();toast('顔の向きを体にそろえました');};
@@ -3275,10 +3298,16 @@ function openOpTrace(o){
   let preGrp=PIC_GROUPS[0][0];
   const drawPre=()=>{const box=$('#optPre',el);box.innerHTML=picGroupTabs(preGrp,0)+`<div class="tgs">${picGroupKeys(preGrp,[]).map(k=>`<button type="button" class="tg" data-opre="${esc(k)}">${esc(picPoseName(k))}</button>`).join('')}</div><p class="hint" style="margin:6px 0 0">押すと、選んでいる人物（人物${T.cur+1}）をそのポーズにします。位置と大きさは今の人物に合わせます。</p>`;
     $$('[data-pgrp]',box).forEach(b=>b.onclick=()=>{preGrp=b.dataset.pgrp;drawPre();});
-    $$('[data-opre]',box).forEach(b=>b.onclick=()=>{const old=P(),n=opDefault(T.W,T.H,picSkelOf(b.dataset.opre));
+    $$('[data-opre]',box).forEach(b=>b.onclick=()=>{const key=b.dataset.opre,old=P(),n=opDefault(T.W,T.H,picSkelOf(key));
       const box2=k=>{const q=k.filter(x=>!x.h);const ys=q.map(x=>x.y);return Math.max(1,Math.max(...ys)-Math.min(...ys));};
       const f=box2(old)/box2(n),c0=old[1],c1=n[1];for(const q of n){q.x=c0.x+(q.x-c1.x)*f;q.y=c0.y+(q.y-c1.y)*f;q.z=(q.z||0)*f;}
-      T.people[T.cur]=n;T.sel=null;draw();drawPanel();toast(`人物${T.cur+1}を「${picPoseName(b.dataset.opre)}」にしました`);});};
+      /* 体格を引き継ぐ（オフなら、肉付きもふつうに戻す） */
+      if(T.inherit)opInherit(old,n);else T.body[T.cur]=null;
+      T.people[T.cur]=n;T.sel=null;
+      /* タグ（プロンプト）も入れる。前に見本から入れたタグは入れかえる */
+      const ti=$('#optTags',el),tg=picPoseTags(key),cur=splitTags(ti.value).filter(t=>!T.preTags.includes(t));ti.value=uniq([...cur,...tg]).join(', ');T.preTags=tg;
+      const nm=$('#optName',el);if(!nm.value.trim()||nm.value===T.autoName){nm.value=picPoseName(key);T.autoName=nm.value;}
+      draw();drawPanel();toast(`人物${T.cur+1}を「${picPoseName(key)}」にしました${T.inherit?'（体格はそのまま）':''}。タグ：${tg.join(', ')}`);});};
   drawPre();
   $('#optLock',el).onchange=e=>{T.lock=e.target.checked;toast(T.lock?'手足・胴の長さを固定しました':'長さを自由に変えられるようにしました');};
   /* OpenPose の部品として保存。点は 0〜1 の割合、画像は長い辺 1600px の JPEG（画像がなければ棒人形の絵）を p.img にしまう */
@@ -3307,7 +3336,9 @@ function openOpTrace(o){
     $$('[data-opk]',el).forEach(x=>x.onclick=()=>{const k=x.dataset.opk;
       if(k==='open'){history.back();setTimeout(()=>openOpTrace({part:p,onDone:o.onDone}),60);return;}
       const L=takePeople(p);if(!L.length)return toast('人物が入っていません');
-      if(k==='rep'){T.people=L;T.body=JSON.parse(JSON.stringify((p.op&&p.op.body)||[]));T.cur=0;}else{const pb=(p.op&&p.op.body)||[];T.body.length=T.people.length;L.forEach((_,j)=>T.body.push(pb[j]?JSON.parse(JSON.stringify(pb[j])):null));T.people.push(...L);T.cur=T.people.length-L.length;}T.sel=null;draw();drawPanel();
+      /* 体格を引き継ぐ：呼び出した人物 j に、今の人物 j の長さを使う（足すときは今選んでいる人物の長さ）。肉付きも今のまま */
+      if(T.inherit)L.forEach((n,j)=>{const o2=k==='rep'?T.people[j]:P();if(o2){const c=n[1];opInherit(o2,n);const d0=c.x-n[1].x,d1=c.y-n[1].y;for(const q of n){q.x+=d0;q.y+=d1;}}});
+      if(k==='rep'){const ob=T.body;T.people=L;T.body=T.inherit?L.map((_,j)=>ob[j]||null):JSON.parse(JSON.stringify((p.op&&p.op.body)||[]));T.cur=0;}else if(T.inherit){const cb=T.body[T.cur]||null;T.body.length=T.people.length;L.forEach(()=>T.body.push(cb?JSON.parse(JSON.stringify(cb)):null));T.people.push(...L);T.cur=T.people.length-L.length;}else{const pb=(p.op&&p.op.body)||[];T.body.length=T.people.length;L.forEach((_,j)=>T.body.push(pb[j]?JSON.parse(JSON.stringify(pb[j])):null));T.people.push(...L);T.cur=T.people.length-L.length;}T.sel=null;draw();drawPanel();
       toast(`「${p.name||'名前なし'}」を呼び出しました${T.img?'。画像に合わせて、人物ごと動かしたり大きさを変えたりしてください':''}`);});});
   /* 部品から開いたときは、しまった画像を敷く */
   if(o.part&&o.part.img&&o.part.op&&o.part.op.hasImg)setImg(o.part.img,'保存した画像');
