@@ -59,6 +59,27 @@ nav#tabs button.on{color:var(--acc);font-weight:700}
 .lkrow select{min-width:0}
 .lkrow [data-lkp],.lkrow [data-lkt]{grid-column:1/-1}
 .lkh{margin:-4px 0 6px}
+.pastebox{border:2px dashed var(--acc);border-radius:10px;padding:14px 10px;margin:8px 0;min-height:48px;text-align:center;color:var(--sub);font-size:13px;outline:none;background:var(--card)}
+.pastebox:empty::before{content:'ここを長押しして「貼り付け」を選びます（PC は Ctrl＋V）'}
+/* 画像に合わせて OpenPose を作る */
+.opt{position:fixed;inset:0;z-index:55;background:var(--bg);overflow:auto;-webkit-overflow-scrolling:touch}
+.optin{max-width:640px;margin:0 auto;padding:12px 14px calc(40px + env(safe-area-inset-bottom))}
+.opthd{display:flex;justify-content:space-between;align-items:center;gap:8px;margin:0 0 10px}
+.optstage{max-height:62vh;max-height:62dvh;margin:6px auto 6px}
+.optstage svg{width:100%;height:100%;max-height:none}
+.optzoom{align-items:center;margin:0 0 4px}
+.optop{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--sub);margin-left:auto}
+.optop input{width:110px}
+.optimgs{display:flex;gap:6px;overflow-x:auto;margin:0 0 4px;padding-bottom:4px}
+.optimgs button{flex:0 0 auto;border:1px solid var(--line);border-radius:8px;padding:0;background:var(--soft);width:64px;height:64px;overflow:hidden;cursor:pointer}
+.optimgs img{width:100%;height:100%;object-fit:cover;display:block}
+.optsel{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:14px}
+.optchk{border:1px solid var(--line);border-radius:10px;padding:8px 10px;margin:8px 0}
+.optchk>b{display:block;font-size:13px;margin-bottom:4px}
+.oc{font-size:13px;line-height:1.5;padding:4px 0;border-top:1px dashed var(--line)}
+.oc.warn{color:var(--warn)}
+.oc.ok{color:#15803d}
+.optips ul{margin:0;padding-left:1.2em;font-size:13px;line-height:1.6}
 .pool{border:1px dashed var(--line3,var(--line));border-radius:10px;padding:8px 10px;margin:0 0 8px}
 .poolh{font-size:13px;font-weight:700;margin:0 0 8px}
 .poolto{display:grid;grid-template-columns:1fr 1fr auto;gap:4px}
@@ -465,7 +486,7 @@ const FMT={
 
 /* ========== データベース（IndexedDB） ========== */
 let db=null;
-const APP_VER='v52';/* sw.js の VERSION と同じにする */
+const APP_VER='v57';/* sw.js の VERSION と同じにする */
 const STORES=['parts','scenes','works','images','meta','fonts','stamps'];
 function openDB(){return new Promise((res,rej)=>{const r=indexedDB.open('manga4koma',3);r.onupgradeneeded=()=>{const d=r.result;for(const s of STORES)if(!d.objectStoreNames.contains(s))d.createObjectStore(s,{keyPath:'id'});};r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error);});}
 function tx(store,mode,fn){return new Promise((res,rej)=>{if(!db)return res(undefined);const t=db.transaction(store,mode);const req=fn(t.objectStore(store));let out;if(req)req.onsuccess=()=>{out=req.result;};t.oncomplete=()=>res(out);t.onerror=()=>rej(t.error);t.onabort=()=>rej(t.error);});}
@@ -620,6 +641,28 @@ function partImgUrl(p){if(!p||!p.img)return '';const c=partUrls[p.id];if(c&&c.b=
 const IMG_TYPES=['face','style'];/* 見本を並べて選べる種類 */
 function makeThumb(blob,max){return new Promise(res=>{const u=URL.createObjectURL(blob);const im=new Image();im.onload=()=>{const s=Math.min(1,max/Math.max(im.width,im.height));const c=document.createElement('canvas');c.width=Math.max(1,Math.round(im.width*s));c.height=Math.max(1,Math.round(im.height*s));c.getContext('2d').drawImage(im,0,0,c.width,c.height);c.toBlob(b=>{URL.revokeObjectURL(u);res(b||blob);},'image/jpeg',.82);};im.onerror=()=>{URL.revokeObjectURL(u);res(blob);};im.src=u;});}
 async function addImage(file){const blob=new Blob([file],{type:file.type||'image/png'});const thumb=await makeThumb(blob,480);const id=uid();await dbPut('images',{id,blob,thumb,name:file.name||'image',type:blob.type});return id;}
+/* ===== 画像の貼り付け =====
+   画像を選ぶ所には「📋 貼り付け」ボタンを付ける。押すと、コピーした画像を読み取り、その「画像を選ぶ」で選んだのと同じように取り込む。
+   読み取れないとき（ブラウザが許可しないときなど）は、長押しで貼り付ける欄を出す。
+   PC では Ctrl＋V でも貼り付けられる（開いている画面の、画像を選ぶ所に入る） */
+const pasteBtn=id=>`<button type="button" class="btn ghost sm" data-paste="${id}">📋 貼り付け</button>`;
+const pasteBox=id=>`<div class="pastebox" contenteditable="true" data-pastefor="${id}" hidden aria-label="ここに画像を貼り付け"></div>`;
+function imgsFromData(dt){return[...((dt&&dt.items)||[])].filter(i=>i.kind==='file'&&/^image\//.test(i.type)).map(i=>i.getAsFile()).filter(Boolean);}
+function feedImage(input,blobs){const dt=new DataTransfer();
+  (input.multiple?blobs:blobs.slice(0,1)).forEach((b,i)=>{const ext=((b.type||'image/png').split('/')[1]||'png').replace('jpeg','jpg');dt.items.add(new File([b],(b.name&&b.name!=='image.png')?b.name:`貼り付け_${ymdhm()}${i?'_'+(i+1):''}.${ext}`,{type:b.type||'image/png'}));});
+  input.files=dt.files;input.dispatchEvent(new Event('change',{bubbles:true}));}
+/* Ctrl＋V のときの入れ先：画像に合わせる画面 → 開いているシート → 画面 の順で、画像を選ぶ所の1つ目 */
+function pasteTarget(){const o=$('#opt');if(o)return $('#optFile',o);const sh=$('#sheet.open #sheetBody');const f=r=>r?$$('input[type=file][accept^="image"]',r)[0]:null;return sh?f(sh):f(view);}
+document.addEventListener('paste',e=>{const fs=imgsFromData(e.clipboardData);if(!fs.length)return;
+  const pb=e.target&&e.target.closest?e.target.closest('.pastebox'):null;const inp=pb?$('#'+pb.dataset.pastefor):pasteTarget();if(!inp)return;
+  e.preventDefault();feedImage(inp,fs);if(pb){pb.textContent='';pb.hidden=true;}toast('貼り付けた画像を取り込みました');});
+document.addEventListener('input',e=>{if(e.target.classList&&e.target.classList.contains('pastebox'))e.target.textContent='';});
+document.addEventListener('click',async e=>{const b=e.target.closest&&e.target.closest('[data-paste]');if(!b)return;const id=b.dataset.paste,inp=$('#'+id);if(!inp)return;
+  try{if(!navigator.clipboard||!navigator.clipboard.read)throw new Error('no');const items=await navigator.clipboard.read();const fs=[];
+    for(const it of items){const t=it.types.find(x=>/^image\//.test(x));if(t)fs.push(await it.getType(t));}
+    if(!fs.length){toast('コピーした画像がありません。画像をコピーしてから押してください');return;}
+    feedImage(inp,fs);toast('貼り付けた画像を取り込みました');}
+  catch(_){const box=$(`.pastebox[data-pastefor="${id}"]`);if(!box)return toast('貼り付けられませんでした');box.hidden=false;box.focus();toast('出てきた枠を長押しして「貼り付け」を選んでください');}});
 function hydrate(root){$$('img[data-img]',root).forEach(img=>{if(img.src)return;imgURL(img.dataset.img,!img.dataset.full).then(u=>{if(u)img.src=u;});});}
 /* 消したものの記録。スマホとPCでファイルを受け渡したとき、相手の端末でも消すために使う */
 function markDeleted(id){if(!S.meta.deleted)S.meta.deleted={};S.meta.deleted[id]=Date.now();dbPut('meta',S.meta);}
@@ -885,6 +928,7 @@ function go(v,p){stack.push(Object.assign({v},p||{}));history.pushState({n:stack
 function goBack(){if(stack.length>1)history.back();}
 addEventListener('popstate',()=>{
   if(ignorePop>0){ignorePop--;return;}
+  if($('#opt')){closeOpt();return;}
   if($('#sheet').classList.contains('open')){hideSheet();return;}
   if(stack.length>1){flush();stack.pop();render();}
 });
@@ -1208,6 +1252,7 @@ function vScene(c){
     <p class="hint" style="margin:-4px 0 10px">画像を追加すると、そのときのプロンプトの設定も一緒に記録します。画像を押すと、その設定をシーンに取り込めます。</p>
     <div class="imgs">${sc.images.map((id,k)=>`<button class="im" data-imgi="${k}"><img data-img="${id}" alt="">${k===0?'<em>表紙</em>':''}${(sc.imgMeta||{})[id]?'<i class="snapb" title="設定を記録済み">設定</i>':''}</button>`).join('')}
     <label class="im add">＋ 画像を追加<input type="file" accept="image/*" multiple hidden id="addImg"></label></div>
+    <div class="row" style="margin:8px 0 0">${pasteBtn('addImg')}</div>${pasteBox('addImg')}
   </div>
 
   <label class="f"><span>メモ（シード値・モデル名・気づいたことなど）</span><textarea id="sMemo" rows="3">${esc(sc.memo||'')}</textarea></label>
@@ -1472,7 +1517,7 @@ function openStamps(onPick){
   openSheet(`<h2>セリフ画像</h2>
   <p class="hint" style="margin:-6px 0 12px">文字を書いた画像（手書きのセリフ・ロゴ・効果音など）を取り込んでおくと、あとから押すだけでコマに置けます。${onPick?'<b>押すとこのコマに置きます。</b>':'コマに置くときは、仕上げの画面の「セリフ画像」から選びます。'}</p>
   <label class="switch" style="margin-bottom:10px"><input type="checkbox" id="stWhite" ${S.meta.stWhite!==false?'checked':''}><span>白い背景を透明にする<span class="hint">白い紙に書いた文字・白地の画像に。もともと背景が透明な PNG なら、オフでも大丈夫です。</span></span></label>
-  <div class="row"><label class="btn">＋ 画像を取り込む<input type="file" accept="image/*" multiple hidden id="stAdd"></label></div>
+  <div class="row"><label class="btn">＋ 画像を取り込む<input type="file" accept="image/*" multiple hidden id="stAdd"></label>${pasteBtn('stAdd')}</div>${pasteBox('stAdd')}
   ${STAMPS.length?`<div class="stgrid">${STAMPS.map(r=>`<div class="stc"><button class="pick" data-stp="${r.id}" aria-label="${esc(r.name)}"><img src="${stampSrc(r)}" alt=""></button><small>${esc(r.name)}</small><div class="acts"><button data-stren="${r.id}">名前</button><button class="d" data-stdel="${r.id}">削除</button></div></div>`).join('')}</div>`:'<p class="hint">まだありません。</p>'}
   <div class="row"><button class="btn ghost" id="stClose">閉じる</button></div>`);
   $('#stWhite').onchange=e=>{S.meta.stWhite=e.target.checked;dbPut('meta',S.meta);};
@@ -1966,8 +2011,8 @@ function vPList(c){
     return p.img?`<button class="pitem hasimg" data-id="${p.id}"><img class="pim" src="${partImgUrl(p)}" alt=""><div>${inner}</div></button>`:`<button class="pitem" data-id="${p.id}">${inner}</button>`;}).join('')
   :`<div class="empty"><b>${T.label}はまだありません</b>「＋ 新しい${T.label}」で登録します。</div>`}
   <button class="fab" id="newPart">＋ 新しい${T.label}</button>`;
-  if(t==='action'){const h=$('p.hint',view);if(h)h.insertAdjacentHTML('afterend','<div class="row" style="margin:-4px 0 12px"><button class="btn sm" id="newPicPose">🕴 ピクトグラムでポーズを作る</button></div>');
-    $('#newPicPose').onclick=()=>openPoseEditor(null,0,null,()=>render(true));}
+  if(t==='action'){const h=$('p.hint',view);if(h)h.insertAdjacentHTML('afterend','<div class="row" style="margin:-4px 0 12px"><button class="btn sm" id="newPicPose">🕴 ピクトグラムでポーズを作る</button><button class="btn ghost sm" id="newOpT">🖼 画像から OpenPose を作る</button></div>');
+    $('#newPicPose').onclick=()=>openPoseEditor(null,0,null,()=>render(true));$('#newOpT').onclick=()=>openOpTrace({});}
   $$('.pitem',view).forEach(b=>b.onclick=()=>openPart(b.dataset.id,null,()=>render(true)));
   $('#newPart').onclick=()=>openPart(null,t,()=>render(true));
   mergeWire(t);simWire(t);
@@ -2058,7 +2103,7 @@ function openPart(id,type,onSave){
   openSheet(`<h2>${src?T.label+'を直す':'新しい'+T.label}</h2>
   <label class="f"><span>名前（アプリの中での呼び名）</span><input id="pName" value="${esc(p.name)}" placeholder="${esc(T.namePh)}"></label>
   <div class="f"><span>見本の画像${IMG_TYPES.includes(p.type)?'（シーンで選ぶとき、画像を並べて選べます）':'（なくてもよい）'}</span><div class="pimg"><div class="ph" id="pImgPh">画像なし</div>
-    <div class="row" style="margin:0;flex-direction:column;align-items:flex-start;gap:6px"><label class="btn ghost sm">画像を選ぶ<input type="file" accept="image/*" hidden id="pImgIn"></label><button type="button" class="btn ghost sm" id="pImgDel" hidden>外す</button></div></div>
+    <div class="row" style="margin:0;flex-direction:column;align-items:flex-start;gap:6px"><label class="btn ghost sm">画像を選ぶ<input type="file" accept="image/*" hidden id="pImgIn"></label>${pasteBtn('pImgIn')}<button type="button" class="btn ghost sm" id="pImgDel" hidden>外す</button></div></div>${pasteBox('pImgIn')}
     <span class="hint">PixAI で作った絵など、どんな感じかがわかる画像を入れておくと選びやすくなります。</span></div>
   ${p.type==='chara'?`<label class="f"><span>呼び方（プロンプトの先頭の言葉）</span><input id="pSubj" list="subjList" value="${esc(p.subject)}" placeholder="girl"><datalist id="subjList"><option value="girl"><option value="boy"><option value="woman"><option value="man"><option value="1girl"><option value="1boy"></datalist><span class="hint">girl・boy などで書くと、人数のタグ（1girl・2girls・1boy）が自動で付きます</span></label>`:''}
   ${p.type==='lora'?`<label class="f"><span>LoRA の正式な名前（PixAI で探すときの名前）</span><input id="pLname" value="${esc(p.loraName)}" placeholder="名前と同じなら空のまま"></label>
@@ -2758,18 +2803,27 @@ function picFigSVG(p,k,eyeTest){
 const OP_COL=[[255,0,0],[255,85,0],[255,170,0],[255,255,0],[170,255,0],[85,255,0],[0,255,0],[0,255,85],[0,255,170],[0,255,255],[0,170,255],[0,85,255],[0,0,255],[85,0,255],[170,0,255],[255,0,255],[255,0,170],[255,0,85]];
 const OP_LIMB=[[1,2],[1,5],[2,3],[3,4],[5,6],[6,7],[1,8],[8,9],[9,10],[1,11],[11,12],[12,13],[1,0],[0,14],[14,16],[0,15],[15,17]];
 const OP_KEYS=['nose','neck','rS','rE','rH','lS','lE','lH','rP','rK','rF','lP','lK','lF','eyeR','eyeL','earR','earL'];
-function picOpenPose(sc,ov){
+/* ピクトグラムから OpenPose の点を出す。{cw,ch,people:[[18点：[x,y] か null（見えない）]]}。all が true なら、見えない点・画面の外の点も {h:true} 付きで返す */
+function picOpKps(sc,ov,all){
   const L=picLayout(sc,ov),cfg=picCfgR(sc);let cw,ch;
   if(cfg.ar==='800x912'){cw=800;ch=912;}else{const s=1024/Math.max(L.W,L.H);cw=Math.round(L.W*s/8)*8;ch=Math.round(L.H*s/8)*8;}
-  const sc2=cw/L.W,cv=document.createElement('canvas');cv.width=cw;cv.height=ch;const g=cv.getContext('2d');
-  g.fillStyle='#000';g.fillRect(0,0,cw,ch);const sw=Math.max(4,Math.round(Math.min(cw,ch)/512*4));
-  for(const it of L.items){const p=it.c.p;
-    const kp=OP_KEYS.map(n=>{let q=p[n];
+  const sc2=cw/L.W;
+  const people=L.items.map(it=>{const p=it.c.p;
+    return OP_KEYS.map(n=>{let q=p[n];
       if(n==='neck')q={X:(p.rS.X+p.lS.X)/2,Y:(p.rS.Y+p.lS.Y)/2,z1:0};
-      if((n==='eyeR'||n==='eyeL')&&q.z1<=.05)return null;
-      if(n==='nose'&&q.z1<=0)return null;
-      if((n==='earR'||n==='earL')&&q.z1<-.45)return null;
-      const x=q.X*sc2,y=q.Y*sc2;return(x<0||y<0||x>cw||y>ch)?null:[x,y];});
+      if(n==='nose'&&!q)q=p.head;
+      if(!q)return null;
+      const x=q.X*sc2,y=q.Y*sc2;
+      const hid=((n==='eyeR'||n==='eyeL')&&q.z1<=.05)||(n==='nose'&&q.z1<=0)||((n==='earR'||n==='earL')&&q.z1<-.45)||x<0||y<0||x>cw||y>ch;
+      return hid?(all?[x,y,1]:null):[x,y];});});
+  return{cw,ch,people};
+}
+function picOpenPose(sc,ov){const k=picOpKps(sc,ov);return opPaint(k.people,k.cw,k.ch);}
+/* OpenPose の棒人形を描く（people：人物ごとに18点。[x,y] か null） */
+function opPaint(people,cw,ch){
+  const cv=document.createElement('canvas');cv.width=cw;cv.height=ch;const g=cv.getContext('2d');
+  g.fillStyle='#000';g.fillRect(0,0,cw,ch);const sw=Math.max(4,Math.round(Math.min(cw,ch)/512*4));
+  for(const kp of people){
     g.globalAlpha=.6;
     OP_LIMB.forEach(([a,b],i)=>{const A=kp[a],B=kp[b];if(!A||!B)return;
       g.fillStyle=`rgb(${OP_COL[i]})`;g.beginPath();g.ellipse((A[0]+B[0])/2,(A[1]+B[1])/2,Math.hypot(A[0]-B[0],A[1]-B[1])/2,sw,Math.atan2(B[1]-A[1],B[0]-A[0]),0,Math.PI*2);g.fill();});
@@ -2778,6 +2832,238 @@ function picOpenPose(sc,ov){
   }
   return cv;
 }
+/* ===== 画像に合わせて OpenPose を作る =====
+   手持ちの画像（端末の画像・シーンの画像）を下に敷いて、棒人形の18点を指で合わせる。人物は何人でも。
+   点は画像の画素の位置で持つ（T.people：人物ごとに18点 {x,y,h}。h は「隠す」）。保存は画像と同じ比率か 800×912。
+   下の「チェック」で、うまく読み込まれないことが多い形を知らせる */
+const OP_JA=['鼻','首','右肩','右ひじ','右手首','左肩','左ひじ','左手首','右腰','右ひざ','右足首','左腰','左ひざ','左足首','右目','左目','右耳','左耳'];
+const OP_GEN=[800,912];
+let OPT=null;
+function opFromKps(k,W,H){/* 別の大きさ（cw×ch）の点を、画像（W×H）の真ん中に収める */
+  const s=Math.min(W/k.cw,H/k.ch)*.9,ox=(W-k.cw*s)/2,oy=(H-k.ch*s)/2;
+  return k.people.map(kp=>{const nk=kp[1]||[k.cw/2,k.ch*.3];return kp.map((q,i)=>{const r=q||[nk[0]+(i===0?0:(i%2?-1:1)*k.cw*.02),nk[1]-k.ch*.05,1];return{x:r[0]*s+ox,y:r[1]*s+oy,h:!q||!!r[2]};});});}
+function opDefault(W,H,P){const t={title:'pose',chars:[{pic:Object.assign(picNew({chars:[0]},0),{on:true,gaze:true,yaw:0})}],pic:{pitch:0,ar:'800x912'}};
+  return opFromKps(picOpKps(t,{i:0,P:P||picSkelOf('stand')},true),W,H)[0];}
+function openOpTrace(o){
+  o=o||{};$$('#opt').forEach(x=>x.remove());/* 前に開いたものが残っていれば消す */
+  const T=OPT={img:null,W:OP_GEN[0],H:OP_GEN[1],people:[],cur:0,sel:null,mode:'pt',op:.6,out:'gen',vb:null,drag:null,src:o};
+  const init=()=>{T.people=o.kps?opFromKps(o.kps,T.W,T.H):[opDefault(T.W,T.H,o.P)];T.cur=0;T.sel=null;T.vb={x:0,y:0,w:T.W,h:T.H};};
+  init();
+  const el=document.createElement('div');el.id='opt';el.className='opt';
+  const imgs=(o.sc&&o.sc.images)||[];
+  el.innerHTML=`<div class="optin">
+    <div class="opthd"><b>🖼 画像に合わせて OpenPose を作る</b><button type="button" class="btn ghost sm" id="optX">閉じる</button></div>
+    <div class="row" style="margin:0 0 6px"><label class="btn sm">画像を選ぶ<input type="file" accept="image/*" hidden id="optFile"></label>${pasteBtn('optFile')}<span class="hint" id="optImgN" style="align-self:center">画像なし（黒地）</span></div>${pasteBox('optFile')}
+    <div class="row" style="margin:0 0 4px;align-items:center"><button type="button" class="btn sm" id="optAuto" disabled>🤖 全員を自動で合わせる</button><button type="button" class="btn ghost sm" id="optAutoOne" disabled>👤 選んでいる人物だけ</button><button type="button" class="btn ghost sm" id="optAutoBox" disabled>🔲 囲んで合わせる</button></div>
+    <p class="hint" id="optAutoMsg" style="margin:0 0 6px">画像を選ぶと使えます。</p>
+    ${imgs.length?`<div class="optimgs">${imgs.map(id=>`<button type="button" data-oi="${id}"><img data-img="${id}" alt=""></button>`).join('')}</div><p class="hint" style="margin:0 0 6px">このシーンの画像から選ぶこともできます。</p>`:''}
+    <div class="picstage optstage" id="optStage"><svg id="optSvg" xmlns="http://www.w3.org/2000/svg"></svg></div>
+    <div class="row optzoom"><button type="button" class="btn ghost sm" data-oz="1.5">＋ 拡大</button><button type="button" class="btn ghost sm" data-oz="0.67">－ 縮小</button><button type="button" class="btn ghost sm" data-oz="0">全体</button>
+      <label class="optop">画像の濃さ<input type="range" id="optOp" min="0" max="1" step="0.05" value="${T.op}"></label></div>
+    <p class="hint" style="margin:0 0 8px">点を指で動かして、画像の関節に合わせます。点のない所をなぞると画面が動きます（拡大したとき）。右・左は<b>人物から見た向き</b>です。</p>
+    <div class="tgs" id="optPeople"></div>
+    <div class="ptabs" id="optMode" style="margin-top:8px"><button data-om="pt">点を動かす</button><button data-om="all">人物ごと動かす</button></div>
+    <div class="row" style="margin:6px 0"><button type="button" class="btn ghost sm" data-os="1.1">人物を大きく</button><button type="button" class="btn ghost sm" data-os="0.91">人物を小さく</button><button type="button" class="btn ghost sm" id="optSwap">左右の点を入れかえる</button></div>
+    <div id="optSel"></div>
+    <div class="f" style="margin:10px 0 6px"><span>保存する大きさ</span><div class="tgs" id="optOut"></div></div>
+    <div id="optChk"></div>
+    <details class="nh optips"><summary>うまく読み込ませるコツ</summary><div class="nhb"><ul>
+      <li>PixAI では、ControlNet の <b>OpenPose（ポーズ）</b>にこの画像を入れます。すでに棒人形の画像なので、写真から骨を読み取る「前処理」は<b>使わない</b>設定にします（前処理をかけると、棒人形を読み直して崩れることがあります）。</li>
+      <li><b>生成する画像と同じ縦横比</b>で作ります。800×912 で作るなら、ここも「800×912」で保存します。比率が違うと、引きのばされたり切られたりして位置がずれます。</li>
+      <li><b>見えていない関節は「隠す」</b>にします。見えない所に点を置くと、そこに手足が描かれます（後ろの腕・重なった脚など）。</li>
+      <li>右・左は<b>人物から見た向き</b>です。正面向きなら、右肩は画像の左側。入れかわると、体の向きが逆に読まれます。</li>
+      <li>指・表情は入りません（体の18点だけ）。手の形・表情は、プロンプトで指定します。</li>
+      <li>人物は<b>大きめ</b>に。小さい人物・大きく重なった人物は、読み違えやすくなります。</li>
+      <li>効きすぎて絵が硬くなるときは、ControlNet の強さを下げます（0.6〜0.8 くらいから）。プロンプトのポーズのタグと合わせると安定します。</li>
+      <li>保存した画像は黒地のまま使います（白地・半透明にしない）。</li>
+      <li>「🤖 自動で合わせる」は、写真や、人の体の形がはっきりした絵が得意です。デフォルメの強い絵・ちびキャラ・大きく重なった人物は、見つけられなかったり、ずれたりします。そのときは、ずれた点だけ指で直してください。</li>
+      <li>人物が2人以上・小さい人物がいるときは、全員で見つからない人物があります。その人物を選んで（いなければ「＋ 人物を足す」）、「🔲 囲んで合わせる」でその人物を指で囲むと、その所だけを大きくして調べるので、見つけやすくなります。</li></ul>
+      <p class="hint" style="margin:8px 0 0">自動で合わせる AI のデータ（約${POSE_AI.mb}MB）は、この端末にしまってあります。<button type="button" class="linkb" id="optAiDel">AI のデータを消す</button></p></div></details>
+    <div class="row" style="margin-top:12px"><button type="button" class="btn" id="optSave">OpenPose 画像を保存</button><button type="button" class="btn ghost" id="optX2">閉じる</button></div>
+  </div>`;
+  document.body.appendChild(el);hydrate(el);history.pushState({opt:1},'');
+  const svg=$('#optSvg',el),st=$('#optStage',el);
+  const P=()=>T.people[T.cur];
+  const R=()=>T.vb.w/Math.max(1,st.clientWidth)*13;/* 点の半径（画面で約13px） */
+  const sw=()=>Math.max(3,Math.min(T.W,T.H)/512*4);
+  const draw=()=>{const v=T.vb;svg.setAttribute('viewBox',`${v.x} ${v.y} ${v.w} ${v.h}`);
+    st.style.aspectRatio=`${T.W} / ${T.H}`;st.style.width=`min(100%, calc(62dvh * ${(T.W/T.H).toFixed(4)}))`;
+    let h=`<rect x="0" y="0" width="${T.W}" height="${T.H}" fill="#000"/>`;
+    if(T.img)h+=`<image href="${T.img.url}" x="0" y="0" width="${T.W}" height="${T.H}" opacity="${T.op}" preserveAspectRatio="none"/>`;
+    /* 800×912 で切り取る所を薄く */
+    if(T.out==='gen'){const c=opCrop(T.W,T.H);if(c.x>0)h+=`<rect x="0" y="0" width="${c.x}" height="${T.H}" fill="rgba(255,0,0,.18)"/><rect x="${T.W-c.x}" y="0" width="${c.x}" height="${T.H}" fill="rgba(255,0,0,.18)"/>`;if(c.y>0)h+=`<rect x="0" y="0" width="${T.W}" height="${c.y}" fill="rgba(255,0,0,.18)"/><rect x="0" y="${T.H-c.y}" width="${T.W}" height="${c.y}" fill="rgba(255,0,0,.18)"/>`;}
+    const r=R(),w=sw();
+    if(T.box)h+=`<rect x="${T.box.x}" y="${T.box.y}" width="${T.box.w}" height="${T.box.h}" fill="rgba(255,255,255,.12)" stroke="#fff" stroke-width="${r*.25}" stroke-dasharray="${r} ${r*.6}"/>`;
+    if(T.mode==='box')h+=`<rect x="${T.vb.x}" y="${T.vb.y}" width="${T.vb.w}" height="${T.vb.h}" fill="none" stroke="#f59e0b" stroke-width="${r*.5}"/>`;
+    T.people.forEach((kp,pi)=>{const on=pi===T.cur;let g=`<g opacity="${on?1:.45}">`;
+      OP_LIMB.forEach(([a,b],i)=>{const A=kp[a],B=kp[b];if(A.h||B.h)return;g+=`<line x1="${A.x}" y1="${A.y}" x2="${B.x}" y2="${B.y}" stroke="rgb(${OP_COL[i]})" stroke-width="${w}" stroke-opacity=".75" stroke-linecap="round"/>`;});
+      kp.forEach((q,i)=>{const c=`rgb(${OP_COL[i]})`;
+        if(q.h){if(on)g+=`<circle cx="${q.x}" cy="${q.y}" r="${r*.7}" fill="none" stroke="#9aa1ad" stroke-width="${r*.18}" stroke-dasharray="${r*.35} ${r*.25}"/>`;return;}
+        g+=on?`<circle cx="${q.x}" cy="${q.y}" r="${T.sel===i?r*1.25:r}" fill="${c}" stroke="${T.sel===i?'#fff':'#111'}" stroke-width="${r*.22}"/>`:`<circle cx="${q.x}" cy="${q.y}" r="${r*.55}" fill="${c}"/>`;});
+      if(on&&T.sel!=null){const q=kp[T.sel];g+=`<text x="${q.x+r*1.5}" y="${q.y-r*1.2}" fill="#fff" stroke="#000" stroke-width="${r*.25}" paint-order="stroke" font-size="${r*1.6}" font-weight="700">${OP_JA[T.sel]}${q.h?'（隠す）':''}</text>`;}
+      h+=g+'</g>';});
+    svg.innerHTML=h;};
+  const drawPanel=()=>{
+    $('#optPeople',el).innerHTML=T.people.map((_,i)=>`<button type="button" class="tg ${i===T.cur?'on':''}" data-op="${i}">👤 人物${i+1}</button>`).join('')+`<button type="button" class="tg new" data-op="add">＋ 人物を足す</button>${T.people.length>1?'<button type="button" class="tg new" data-op="del">この人物を消す</button>':''}`;
+    $$('#optMode button',el).forEach(b=>b.classList.toggle('on',b.dataset.om===T.mode));
+    const q=T.sel!=null?P()[T.sel]:null;
+    $('#optSel',el).innerHTML=q?`<div class="optsel"><b>${OP_JA[T.sel]}</b>（人物${T.cur+1}）<button type="button" class="btn ghost sm" id="optHide">${q.h?'見えるに戻す':'隠す（見えていない）'}</button></div>`:'<p class="hint" style="margin:0">点を押すと、その点を「隠す」にできます（見えていない関節）。</p>';
+    $('#optOut',el).innerHTML=[['gen','800×912（PixAI の生成サイズ。はみ出しは切る）'],['img','画像と同じ比率']].map(([k,l])=>`<button type="button" class="tg ${T.out===k?'on':''}" data-oo="${k}">${l}</button>`).join('');
+    $('#optChk',el).innerHTML=`<div class="optchk"><b>チェック</b>${opChecks(T).map(c=>`<div class="oc ${c.lv}">${c.lv==='warn'?'⚠':c.lv==='ok'?'✓':'ℹ'} ${c.t}</div>`).join('')}</div>`;
+    const hb=$('#optHide',el);if(hb)hb.onclick=()=>{q.h=!q.h;draw();drawPanel();};
+    $$('[data-op]',el).forEach(b=>b.onclick=()=>{const v=b.dataset.op;
+      if(v==='add'){const n=opDefault(T.W,T.H);const dx=T.W*.18*(T.people.length%2?1:-1);n.forEach(q=>q.x+=dx);T.people.push(n);T.cur=T.people.length-1;}
+      else if(v==='del'){if(!confirm(`人物${T.cur+1}を消しますか？`))return;T.people.splice(T.cur,1);T.cur=0;}
+      else T.cur=+v;T.sel=null;draw();drawPanel();});
+    $$('[data-oo]',el).forEach(b=>b.onclick=()=>{T.out=b.dataset.oo;draw();drawPanel();});};
+  const fit=()=>{T.vb={x:0,y:0,w:T.W,h:T.H};};
+  const zoom=f=>{if(!f){fit();return draw();}const v=T.vb,cx=v.x+v.w/2,cy=v.y+v.h/2;let w=Math.min(T.W,Math.max(T.W/8,v.w/f)),h=w*T.H/T.W;T.vb={x:Math.min(Math.max(0,cx-w/2),T.W-w),y:Math.min(Math.max(0,cy-h/2),T.H-h),w,h};draw();};
+  $$('[data-oz]',el).forEach(b=>b.onclick=()=>zoom(+b.dataset.oz));
+  st.addEventListener('wheel',e=>{e.preventDefault();zoom(e.deltaY<0?1.2:1/1.2);},{passive:false});
+  $('#optOp',el).oninput=e=>{T.op=+e.target.value;draw();};
+  $$('#optMode button',el).forEach(b=>b.onclick=()=>{T.mode=b.dataset.om;drawPanel();});
+  $$('[data-os]',el).forEach(b=>b.onclick=()=>{const k=P(),f=+b.dataset.os,c=k[1];for(const q of k){q.x=c.x+(q.x-c.x)*f;q.y=c.y+(q.y-c.y)*f;}draw();drawPanel();});
+  $('#optSwap',el).onclick=()=>{const k=P();for(const[a,b]of[[2,5],[3,6],[4,7],[8,11],[9,12],[10,13],[14,15],[16,17]]){const t=k[a];k[a]=k[b];k[b]=t;}draw();drawPanel();toast('右と左の点を入れかえました');};
+  /* 指で動かす */
+  const toImg=e=>{const r=svg.getBoundingClientRect(),v=T.vb;return{x:v.x+(e.clientX-r.left)/r.width*v.w,y:v.y+(e.clientY-r.top)/r.height*v.h};};
+  st.addEventListener('pointerdown',e=>{
+    /* 囲んで合わせる：なぞった四角を出す */
+    if(T.mode==='box'){const q=toImg(e);T.drag={k:'box',x0:q.x,y0:q.y};T.box={x:q.x,y:q.y,w:0,h:0};st.setPointerCapture(e.pointerId);draw();return;}
+    const q=toImg(e),rr=R()*1.9;let best=null,bd=rr,bp=T.cur;
+    T.people.forEach((kp,pi)=>kp.forEach((p2,i)=>{if(p2.h&&pi!==T.cur)return;const d=Math.hypot(p2.x-q.x,p2.y-q.y)*(pi===T.cur?1:1.4);if(d<bd){bd=d;best=i;bp=pi;}}));
+    if(best!=null){if(bp!==T.cur){T.cur=bp;}T.sel=best;T.drag={k:T.mode==='all'?'all':'pt',x:q.x,y:q.y};}
+    else T.drag={k:'pan',cx:e.clientX,cy:e.clientY,vb:Object.assign({},T.vb)};
+    st.setPointerCapture(e.pointerId);draw();drawPanel();});
+  st.addEventListener('pointermove',e=>{const d=T.drag;if(!d)return;
+    if(d.k==='box'){const q=toImg(e),x=Math.max(0,Math.min(q.x,d.x0)),y=Math.max(0,Math.min(q.y,d.y0));T.box={x,y,w:Math.min(T.W,Math.max(q.x,d.x0))-x,h:Math.min(T.H,Math.max(q.y,d.y0))-y};draw();return;}
+    if(d.k==='pan'){const r=svg.getBoundingClientRect(),v=d.vb;const nx=v.x-(e.clientX-d.cx)/r.width*v.w,ny=v.y-(e.clientY-d.cy)/r.height*v.h;T.vb.x=Math.min(Math.max(0,nx),T.W-v.w);T.vb.y=Math.min(Math.max(0,ny),T.H-v.h);draw();return;}
+    const q=toImg(e);if(d.k==='pt'){const p2=P()[T.sel];p2.x=q.x;p2.y=q.y;}else{const dx=q.x-d.x,dy=q.y-d.y;for(const p2 of P()){p2.x+=dx;p2.y+=dy;}d.x=q.x;d.y=q.y;}draw();});
+  const end=()=>{if(T.drag){const k=T.drag.k;T.drag=null;
+      if(k==='box'){const b=T.box;if(!b||b.w<T.W*.03||b.h<T.H*.03){T.box=null;draw();return toast('もう少し大きく囲んでください');}runAI('one',b);return;}
+      if(k!=='pan')drawPanel();}};st.addEventListener('pointerup',end);st.addEventListener('pointercancel',end);
+  /* 画像を敷く。点は、前の画像の中での位置の割合のまま移す */
+  const setImg=(blob,name)=>{const u=URL.createObjectURL(blob),im=new Image();im.onload=()=>{const oW=T.W,oH=T.H;
+      if(T.img)URL.revokeObjectURL(T.img.url);T.img={url:u,name};T.W=im.naturalWidth;T.H=im.naturalHeight;
+      for(const kp of T.people)for(const q of kp){q.x=q.x/oW*T.W;q.y=q.y/oH*T.H;}
+      /* 比率が変わったので、人物の形がくずれないよう、縦に合わせて横を直す */
+      const sx=T.W/oW,sy=T.H/oH;if(Math.abs(sx/sy-1)>.01)for(const kp of T.people){const c=kp[1];for(const q of kp)q.x=c.x+(q.x-c.x)*sy/sx;}
+      fit();$('#optImgN',el).textContent=`${name||'画像'}（${T.W}×${T.H}）`;aiBtns().forEach(b=>b.disabled=false);amsg.textContent='「全員を自動で合わせる」で、画像の人物の関節を見つけます。人物が多い・小さいときは、「囲んで合わせる」で1人ずつ合わせると正確になります。';draw();drawPanel();};im.onerror=()=>toast('画像を読み込めませんでした');im.src=u;};
+  /* 自動で合わせる */
+  const amsg=$('#optAutoMsg',el),abtn=$('#optAuto',el);
+  poseAIHas().then(h=>{if(!T.img)amsg.textContent=h?'画像を選ぶと使えます（AI のデータは入っています）。':`画像を選ぶと使えます（はじめての1回だけ、AI のデータ 約${POSE_AI.mb}MB を読み込みます）。`;});
+  const aiBtns=()=>[abtn,$('#optAutoOne',el),$('#optAutoBox',el)];
+  /* kind：'all'＝画像の全員／'one'＝box の所の1人を、選んでいる人物（T.cur）に入れる */
+  const runAI=async(kind,box)=>{if(!T.img){T.box=null;draw();return toast('先に画像を選んでください');}
+    const has=await poseAIHas();
+    if(!has&&!confirm(`関節を見つける AI のデータ（約${POSE_AI.mb}MB）を読み込みます。
+
+はじめての1回だけで、次からは読み込みません（この端末にしまいます）。画像はどこにも送らず、端末の中で調べます。Wi-Fi のときがおすすめです。
+
+読み込みますか？`)){T.box=null;T.mode='pt';draw();drawPanel();return;}
+    aiBtns().forEach(b=>b.disabled=true);amsg.textContent=has?'AI が人物を探しています…':'AI のデータを読み込んでいます…';
+    try{const L=await poseAIDetect(T,n=>{amsg.textContent=`AI のデータを読み込んでいます… ${(n/1048576).toFixed(1)}MB`;},box);
+      const hidN=k=>k.filter(q=>q.h).length;
+      if(kind==='all'){
+        if(!L.length){amsg.textContent='人物を見つけられませんでした。「囲んで合わせる」で1人ずつ試すか、手で合わせてください。';toast('人物を見つけられませんでした');}
+        else{T.people=L;T.cur=0;T.sel=null;const hid=L.reduce((a,k)=>a+hidN(k),0);
+          amsg.textContent=`人物を ${L.length} 人見つけました（左から 人物1・人物2…）。${hid?`見つけられなかった点（${hid}個）は「隠す」にしてあります。`:''}ずれている人物は、その人物を選んで「選んでいる人物だけ」か「囲んで合わせる」で合わせ直せます。`;toast(`人物を ${L.length} 人見つけました`);}
+      }else{
+        if(!L.length){amsg.textContent='その所に人物を見つけられませんでした。人物の全身が入るように、少し大きく囲んでみてください。';toast('人物を見つけられませんでした');}
+        else{T.people[T.cur]=L[0];T.sel=null;const hid=hidN(L[0]);amsg.textContent=`人物${T.cur+1}を合わせました。${hid?`見つけられなかった点（${hid}個）は「隠す」にしてあります。`:''}ずれている点は指で直してください。`;toast(`人物${T.cur+1}を合わせました`);}
+      }
+    }catch(e){amsg.textContent='AI を使えませんでした（インターネットにつながっているか確かめてください）。';toast('AI を使えませんでした');}
+    finally{aiBtns().forEach(b=>b.disabled=!T.img);T.box=null;T.mode='pt';draw();drawPanel();}};
+  abtn.onclick=()=>runAI('all');
+  /* 選んでいる人物だけ：今の点のまわり（少し広め）を調べる */
+  $('#optAutoOne',el).onclick=()=>{const k=P().filter(q=>!q.h).length>=3?P().filter(q=>!q.h):P();const xs=k.map(q=>q.x),ys=k.map(q=>q.y);
+    let x0=Math.min(...xs),x1=Math.max(...xs),y0=Math.min(...ys),y1=Math.max(...ys);const w=Math.max(x1-x0,T.W*.15),h=Math.max(y1-y0,T.H*.2),cx=(x0+x1)/2,cy=(y0+y1)/2;
+    const b={x:Math.max(0,cx-w*.85),y:Math.max(0,cy-h*.85)};b.w=Math.min(T.W,cx+w*.85)-b.x;b.h=Math.min(T.H,cy+h*.85)-b.y;T.box=b;draw();runAI('one',b);};
+  $('#optAutoBox',el).onclick=()=>{if(!T.img)return toast('先に画像を選んでください');T.mode='box';T.box=null;T.sel=null;
+    amsg.textContent=`合わせたい人物を、画像の上で指でななめになぞって四角で囲んでください（全身が入るように）。人物${T.cur+1}に入ります。新しい人物にするときは、先に「＋ 人物を足す」を押します。`;drawPanel();toast('人物を指で囲んでください');};
+  const ad=$('#optAiDel',el);if(ad)ad.onclick=async()=>{if(!confirm('しまってある AI のデータを消しますか？（次に「自動で合わせる」を押すと、もう一度読み込みます）'))return;try{await caches.delete(POSE_AI.cache);}catch(_){}poseAI=null;toast('AI のデータを消しました');};
+  $('#optFile',el).onchange=e=>{const f=e.target.files[0];e.target.value='';if(f)setImg(f,f.name);};
+  $$('[data-oi]',el).forEach(b=>b.onclick=async()=>{const r=await dbGet('images',b.dataset.oi);if(r&&r.blob)setImg(r.blob,r.name||'シーンの画像');});
+  $('#optSave',el).onclick=()=>{const cv=opRender(T);cv.toBlob(b=>{if(!b)return toast('画像を作れませんでした');
+    downloadBlob(b,`openpose_${String(o.title||'trace').replace(/[\\/:*?"<>|\s]+/g,'_')}_${ymdhm()}.png`);toast(`OpenPose の画像を保存しました（${cv.width}×${cv.height}）`);},'image/png');};
+  const close=()=>history.back();
+  $('#optX',el).onclick=close;$('#optX2',el).onclick=close;
+  requestAnimationFrame(()=>{draw();drawPanel();});draw();drawPanel();
+}
+/* ===== 画像から関節を見つける AI（Google の MediaPipe・Pose Landmarker） =====
+   はじめて使うときに、下の4つのファイル（合わせて約15MB）をインターネットから読み込み、この端末の保存場所（Cache の pose-ai-1）にしまう。
+   次からは、しまったものを使う（ダウンロードしない・オフラインでも動く）。画像はどこにも送らず、端末の中で調べる。
+   版は決めてある（0.10.14 とモデルの 1）。変えるときは cache の名前も変える */
+const POSE_AI={cache:'pose-ai-1',mb:15,files:{
+  bundle:'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/vision_bundle.mjs',
+  loader:'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm/vision_wasm_internal.js',
+  wasm:'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm/vision_wasm_internal.wasm',
+  model:'https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task'}};
+let poseAI=null;
+async function poseAIHas(){try{const c=await caches.open(POSE_AI.cache);for(const u of Object.values(POSE_AI.files))if(!await c.match(u))return false;return true;}catch(_){return false;}}
+async function poseAIGet(prog){
+  if(poseAI)return poseAI;
+  const c=await caches.open(POSE_AI.cache);const B={};let got=0;
+  for(const[k,u]of Object.entries(POSE_AI.files)){let r=await c.match(u);
+    if(!r){const res=await fetch(u,{mode:'cors'});if(!res.ok)throw new Error('net');
+      const rd=res.body.getReader(),parts=[];for(;;){const{done,value}=await rd.read();if(done)break;parts.push(value);got+=value.length;prog&&prog(got);}
+      const type=res.headers.get('content-type')||'application/octet-stream',b=new Blob(parts,{type});
+      await c.put(u,new Response(b,{headers:{'content-type':type}}));r=new Response(b);}
+    B[k]=await r.blob();}
+  const url=(b,t)=>URL.createObjectURL(new Blob([b],{type:t}));
+  const mod=await import(url(B.bundle,'text/javascript'));
+  const fs={wasmLoaderPath:url(B.loader,'text/javascript'),wasmBinaryPath:url(B.wasm,'application/wasm')};
+  poseAI=await mod.PoseLandmarker.createFromOptions(fs,{baseOptions:{modelAssetBuffer:new Uint8Array(await B.model.arrayBuffer()),delegate:'CPU'},runningMode:'IMAGE',numPoses:4,minPoseDetectionConfidence:.3,minPosePresenceConfidence:.3,minTrackingConfidence:.3});
+  return poseAI;}
+/* MediaPipe の33点 → OpenPose の18点（右・左はどちらも人物から見た向き） */
+const MP_TO_OP=[0,null,12,14,16,11,13,15,24,26,28,23,25,27,5,2,8,7];
+/* box（画像の画素の四角）を渡すと、その所だけを切り出して大きくしてから調べ、いちばん合う1人を返す */
+async function poseAIDetect(T,prog,box){
+  const lm=await poseAIGet(prog);const im=new Image();im.src=T.img.url;await im.decode();
+  const V=q=>q.visibility==null?1:q.visibility;let src=im,bx={x:0,y:0,w:T.W,h:T.H};
+  if(box){const m=.12,x=Math.max(0,box.x-box.w*m),y=Math.max(0,box.y-box.h*m),x2=Math.min(T.W,box.x+box.w*(1+m)),y2=Math.min(T.H,box.y+box.h*(1+m));bx={x,y,w:Math.max(1,x2-x),h:Math.max(1,y2-y)};
+    const s=Math.min(4,Math.max(1,640/Math.max(bx.w,bx.h))),cv=document.createElement('canvas');cv.width=Math.max(1,Math.round(bx.w*s));cv.height=Math.max(1,Math.round(bx.h*s));cv.getContext('2d').drawImage(im,bx.x,bx.y,bx.w,bx.h,0,0,cv.width,cv.height);src=cv;}
+  const r=lm.detect(src);
+  const pt=(x,y,v)=>({x:bx.x+x*bx.w,y:bx.y+y*bx.h,h:v<.5||x<0||x>1||y<0||y>1});
+  const L=(r.landmarks||[]).map(L=>MP_TO_OP.map((m,i)=>{if(m==null){const a=L[11],b=L[12];return pt((a.x+b.x)/2,(a.y+b.y)/2,Math.min(V(a),V(b)));}const q=L[m];return pt(q.x,q.y,V(q));}));
+  if(!box)return L.sort((a,b)=>a[1].x-b[1].x);
+  const cx=box.x+box.w/2,cy=box.y+box.h/2,sc=k=>k.filter(q=>!q.h).length-Math.hypot(k[1].x-cx,k[1].y-cy)/Math.max(box.w,box.h)*6;
+  return L.sort((a,b)=>sc(b)-sc(a)).slice(0,1);}
+function closeOpt(){const el=$('#opt');if(!el)return;if(OPT&&OPT.img)URL.revokeObjectURL(OPT.img.url);OPT=null;el.remove();}
+/* 800×912 に合わせるときの切り取り（画像の画素で、左右 x・上下 y を切る） */
+function opCrop(W,H){const r=OP_GEN[0]/OP_GEN[1];if(W/H>r){const w=H*r;return{x:(W-w)/2,y:0,w,h:H};}const h=W/r;return{x:0,y:(H-h)/2,w:W,h};}
+function opRender(T){let cw,ch,f;
+  if(T.out==='gen'){const c=opCrop(T.W,T.H);cw=OP_GEN[0];ch=OP_GEN[1];const s=cw/c.w;f=q=>[(q.x-c.x)*s,(q.y-c.y)*s];}
+  else{const s=Math.min(1,1536/Math.max(T.W,T.H));cw=Math.max(8,Math.round(T.W*s/8)*8);ch=Math.max(8,Math.round(T.H*s/8)*8);f=q=>[q.x*cw/T.W,q.y*ch/T.H];}
+  const people=T.people.map(kp=>kp.map(q=>{if(q.h)return null;const[x,y]=f(q);return(x<0||y<0||x>cw||y>ch)?null:[x,y];}));
+  return opPaint(people,cw,ch);}
+/* うまく読み込まれないことが多い形を調べる */
+function opChecks(T){const out=[],W=T.W,H=T.H;const v=q=>q&&!q.h;
+  if(!T.img)out.push({lv:'info',t:'「画像を選ぶ」で画像を敷くと、その上で関節を合わせられます。'});
+  const r=W/H,g=OP_GEN[0]/OP_GEN[1];
+  if(T.img&&Math.abs(r/g-1)>.03){if(T.out==='img')out.push({lv:'warn',t:`画像の縦横比（${W}×${H}）が、PixAI の生成サイズ 800×912 と違います。このまま使うと、引きのばされたり切られたりして位置がずれます。「800×912」で保存するか、生成するサイズを画像と同じ比率にしてください。`});
+    else out.push({lv:'info',t:'800×912 に合わせるため、赤い所（はみ出す部分）を切って保存します。'});}
+  const crop=T.out==='gen'?opCrop(W,H):{x:0,y:0,w:W,h:H};
+  const box=kp=>{const q=kp.filter(v);if(!q.length)return null;const xs=q.map(a=>a.x),ys=q.map(a=>a.y);return{x0:Math.min(...xs),x1:Math.max(...xs),y0:Math.min(...ys),y1:Math.max(...ys)};};
+  T.people.forEach((k,i)=>{const n=`人物${i+1}`,N=k.filter(v).length;
+    if(N<5){out.push({lv:'warn',t:`${n}：見えている点が ${N} 個しかありません。点が少ないと、人として読み取られにくくなります。`});return;}
+    if(!v(k[1])||(!v(k[2])&&!v(k[5])))out.push({lv:'warn',t:`${n}：首と肩がありません。首・肩は、人物として読み取る土台になる点です。`});
+    const b=box(k);if(b&&(b.y1-b.y0)/crop.h<.2&&(b.x1-b.x0)/crop.w<.2)out.push({lv:'warn',t:`${n}：人物が小さすぎます（画面の${Math.round(Math.max(b.y1-b.y0,b.x1-b.x0)/crop.h*100)}%）。小さい人物は関節を読み違えやすいので、寄りの構図にするか、人物を大きく写した画像を使ってください。`});
+    const out1=k.filter(q=>v(q)&&(q.x<crop.x||q.y<crop.y||q.x>crop.x+crop.w||q.y>crop.y+crop.h)).length;
+    if(out1)out.push({lv:'info',t:`${n}：画面の外にある点が ${out1} 個あります（その点は描かれません）。手足が画面から切れている絵なら、そのままで大丈夫です。`});
+    const front=v(k[0])&&v(k[14])&&v(k[15]),back=!v(k[0])&&!v(k[14])&&!v(k[15]);
+    const sideBad=(a,b)=>v(k[a])&&v(k[b])&&(front?k[a].x>k[b].x+2:back?k[a].x<k[b].x-2:false);
+    if(sideBad(2,5)||sideBad(8,11))out.push({lv:'warn',t:`${n}：${front?'正面向きなのに、右肩（右腰）が画像の右側にあります。OpenPose の右・左は人物から見た向きなので、正面向きなら右肩は画像の左側です':'後ろ向き（鼻・目が隠れている）なのに、右肩（右腰）が画像の左側にあります。後ろ向きなら右肩は画像の右側です'}。入れかわると、体の向きが逆に読まれます。「左右の点を入れかえる」で直せます。`});
+    if(!v(k[0])&&(v(k[14])||v(k[15])))out.push({lv:'warn',t:`${n}：鼻を隠して目を残しています。顔の向きを読み違えやすいので、横顔なら鼻と見えている側の目・耳を残し、後ろ向きなら鼻・目を隠して耳だけにします。`});
+    const L=(a,b)=>v(k[a])&&v(k[b])?Math.hypot(k[a].x-k[b].x,k[a].y-k[b].y):0;
+    const sh=L(2,5)||L(8,11);
+    for(const[a,b,c,d,nm]of[[2,3,5,6,'上の腕'],[3,4,6,7,'下の腕'],[8,9,11,12,'太もも'],[9,10,12,13,'すね']]){const x=L(a,b),y=L(c,d);if(x&&y&&Math.max(x,y)/Math.min(x,y)>2.5){out.push({lv:'info',t:`${n}：左右の${nm}の長さが大きく違います（${(Math.max(x,y)/Math.min(x,y)).toFixed(1)}倍）。手前・奥で長さが違うのは自然ですが、違いすぎると、曲がった手足や別の向きに読まれることがあります。`});break;}}
+    if(sh)for(const[a,b,nm]of[[2,3,'右の上の腕'],[5,6,'左の上の腕'],[8,9,'右の太もも'],[11,12,'左の太もも']]){const x=L(a,b);if(x&&x<sh*.2){out.push({lv:'info',t:`${n}：${nm}がとても短く、点が重なっています。腕や脚がまっすぐこちらを向いているなら、そのままで大丈夫です。見えていないなら「隠す」にします。`});break;}}
+  });
+  for(let a=0;a<T.people.length;a++)for(let b=a+1;b<T.people.length;b++){const A=box(T.people[a]),B=box(T.people[b]);if(!A||!B)continue;
+    const ix=Math.max(0,Math.min(A.x1,B.x1)-Math.max(A.x0,B.x0)),iy=Math.max(0,Math.min(A.y1,B.y1)-Math.max(A.y0,B.y0)),u=(A.x1-A.x0)*(A.y1-A.y0)+(B.x1-B.x0)*(B.y1-B.y0)-ix*iy;
+    if(u>0&&ix*iy/u>.4)out.push({lv:'warn',t:`人物${a+1}と人物${b+1}が大きく重なっています。重なった手足は、どちらの人物のものか読み違えやすくなります。奥の人物の隠れた関節は「隠す」にしてください。`});}
+  if(!out.some(c=>c.lv==='warn'))out.push({lv:'ok',t:'大きな問題は見つかりません。'});
+  return out;}
 function picSaveOpenPose(sc,ov){const cv=picOpenPose(sc,ov);cv.toBlob(b=>{if(!b)return toast('画像を作れませんでした');
   downloadBlob(b,`openpose_${(sc.title||'scene').replace(/[\\/:*?"<>|\s]+/g,'_')}_${ymdhm()}.png`);toast('OpenPose の画像を保存しました');},'image/png');}
 
@@ -2815,7 +3101,7 @@ function picSecHTML(sc){
     <div id="picFrontW" style="margin:0 0 10px"><label class="switch" style="margin-bottom:6px"><input type="checkbox" id="picDepth"><span>手前・奥のタグを入れる</span></label>
       <div class="f" id="picFrontB" style="margin:0"><span>手前の人物</span><div class="tgs" id="picFront"></div><span class="hint">「自動」は、大きさで決めます（はっきり大きさが違うときだけ、手前・奥のタグを入れます）。</span></div></div>
     <div class="picout" id="picOut"></div>
-    <div class="row" style="margin-bottom:6px"><button class="btn ghost sm" id="picOpB">OpenPose 画像を保存</button></div>
+    <div class="row" style="margin-bottom:6px"><button class="btn ghost sm" id="picOpB">OpenPose 画像を保存</button><button class="btn ghost sm" id="picOpT">🖼 画像に合わせて作る</button></div>
     <span class="hint">ここで決めた構図・向き・ポーズのタグは、その人物のタグ（「かっこでまとめる」形では かっこの中）に入ります。上の「ポーズ」「構図」の部品とぶつかるときは、プロンプトの下の「重複・反対のタグ」で選べます。<br>左右どちら向きかと、画面のどこにいるかは、タグではほとんど効きません。左右を決めたいときは OpenPose の画像を一緒に使うのが確実です。</span>
   </div>`;
 }
@@ -2895,6 +3181,7 @@ function picWire(sc,upd){
     else if(b.dataset.pnew){const i=picSel==='all'?on()[0].i:picSel;openPoseEditor(sc,i,null);}
     else if(b.dataset.pedit){const t=targets()[0];if(t)openPoseEditor(sc,picSel,t.pose);}
     else if(b.id==='picOpB')picSaveOpenPose(sc);
+    else if(b.id==='picOpT')openOpTrace({sc,title:sc.title,kps:picOpKps(sc,null,true)});
   });
   $('#picPitch').oninput=e=>{markOnce();targets().forEach(t=>t.pitch=+e.target.value);live();};
   $('#picYaw').oninput=e=>{markOnce();targets().forEach(t=>t.yaw=+e.target.value);live();};
@@ -2943,15 +3230,17 @@ function picKeepLocks(old,nw,lock){if(!lock.size)return nw;const R=picClone(nw);
 /* sc がないとき（部品の画面から）は、シーンに付けずにポーズの部品だけを作る・直す。onDone は保存のあとに呼ぶ */
 function openPoseEditor(sc,slotI,partId,onDone){
   const part=partId?P_(partId):null,pc=sc&&sc.chars[slotI]&&sc.chars[slotI].pic;
-  const ED={P:part&&part.skel?picFill(picClone(part.skel)):picSkelOf(pc?pc.pose:'stand'),view:'front',drag:null,grp:'よく使う',lock:new Set()};
+  const ED={P:part&&part.skel?picFill(picClone(part.skel)):picSkelOf(pc?pc.pose:'stand'),yaw:0,drag:null,grp:'よく使う',lock:new Set()};
   const K=70,OX=300,GY=640;
   openSheet(`<h2>${part&&part.skel?'ポーズを直す':'ポーズを作る'}</h2>
   <div class="f"><span>元にするポーズ</span><div id="edBase"></div></div>
-  <div class="ptabs" id="edView"><button data-ev="front" class="on">正面から</button><button data-ev="side">横から</button></div>
+  <div class="f" style="margin:0 0 6px"><span>見る向き（360度） <b id="edYawV"></b></span>
+    <div class="ptabs" id="edView"><button data-ev="0">正面</button><button data-ev="90">右から</button><button data-ev="180">後ろ</button><button data-ev="270">左から</button></div>
+    <input type="range" id="edYaw" min="0" max="359" step="1" value="0" aria-label="見る向き" style="width:100%;margin-top:6px"></div>
   <div class="f" style="margin:8px 0 6px"><span>固定する部位</span><div class="tgs" id="edLock"></div>
     <span class="hint">固定した部位は白い丸を動かせなくなり（灰色の四角になります）、「元にするポーズ」を選び直しても今の形のまま残ります。</span></div>
   <div class="picstage" id="edStage" style="max-width:340px;margin:0 auto 4px"><svg id="edSvg" viewBox="0 0 600 680" xmlns="http://www.w3.org/2000/svg"></svg></div>
-  <p class="hint" style="margin:0 0 12px">白い丸を動かすと、関節を軸に手足・頭・上半身が回ります。腕を前に出すなど前後の動きは「横から」で動かします。</p>
+  <p class="hint" style="margin:0 0 12px">白い丸を動かすと、関節を軸に手足・頭・上半身が回ります（今見ている向きの面の中で回ります）。白い丸のない所を左右になぞると、見る向きが回ります。腕を前に出すなど前後の動きは「右から」「左から」で動かします。</p>
   <div class="f jain"><span>日本語で入れる（英語に直して、下のタグに足します）</span><div class="sel"><input id="edJa" placeholder="例：片手を腰に当てる、振り返る"><button type="button" class="btn sm" id="edJaGo">英語に</button></div>
     <span class="hint" id="edJaMsg">「、」で区切って入れます。よく使う言葉はアプリの辞書で、ほかはインターネットの翻訳（MyMemory）で直します。名前が空なら、この日本語を名前にします。</span></div>
   <label class="f"><span>名前</span><input id="edName" value="${esc(part?part.name:'')}" placeholder="例：片手を腰に当てる"></label>
@@ -2959,16 +3248,20 @@ function openPoseEditor(sc,slotI,partId,onDone){
   <div class="f edmemo"><span>メモ（組み合わせ用・一時置き）</span><div class="memol" id="edMemo"></div>
     <div class="row" style="margin:6px 0 0"><button type="button" class="btn ghost sm" id="edMemoIn">↓ 今のポーズをメモに足す</button><button type="button" class="btn ghost sm" id="edMemoOut">↑ メモのタグをすべて足す</button><button type="button" class="btn ghost sm" id="edMemoClr">メモを消す</button></div>
     <span class="hint">「今のポーズをメモに足す」を押すと、「名前：タグ」と、そのときの形を1行足します（元にするポーズを選んだだけでは足しません）。行をタップすると、そのポーズの形とタグを呼び出します（固定した部位はそのまま）。✕でその行を消します。メモは、この画面を閉じると消えます。</span></div>
-  <div class="row"><button class="btn" id="edSave">${part?'保存':sc?'登録して使う':'登録'}</button><button class="btn ghost" id="edOp">OpenPose 画像を保存</button><button class="btn ghost" id="edCancel">やめる</button></div>`);
+  <div class="row"><button class="btn" id="edSave">${part?'保存':sc?'登録して使う':'登録'}</button><button class="btn ghost" id="edOp">OpenPose 画像を保存</button><button class="btn ghost" id="edOpT">🖼 画像に合わせる</button><button class="btn ghost" id="edCancel">やめる</button></div>`);
   const svg=$('#edSvg'),st=$('#edStage');
-  const proj=()=>{const o={};for(const n in ED.P){const[x,y,z]=ED.P[n];o[n]=ED.view==='front'?{X:OX+x*K,Y:GY-y*K,d:z,s:1,z1:z}:{X:OX+z*K,Y:GY-y*K,d:x,s:1,z1:x};}return o;};
+  /* 見る向き（ED.yaw 度）。人物を y 軸のまわりに回して、正面から見た形にする。右から（90度）は人物の右側から見る */
+  const yc=()=>Math.cos(ED.yaw*Math.PI/180),ys=()=>Math.sin(ED.yaw*Math.PI/180);
+  const toV=(x,z)=>{const c=yc(),s=ys();return[x*c+z*s,-x*s+z*c];},fromV=(a,d)=>{const c=yc(),s=ys();return[a*c-d*s,a*s+d*c];};
+  const proj=()=>{const o={};for(const n in ED.P){const[x,y,z]=ED.P[n];const[a,d]=toV(x,z);o[n]={X:OX+a*K,Y:GY-y*K,d,s:1,z1:d};}return o;};
+  const yawName=()=>{const y=((ED.yaw%360)+360)%360;return y<23||y>=338?'正面':y<68?'右ななめ前':y<113?'右から':y<158?'右ななめ後ろ':y<203?'後ろ':y<248?'左ななめ後ろ':y<293?'左から':'左ななめ前';};
   const draw=()=>{const p=proj();let h=`<rect x="0" y="0" width="600" height="680" fill="#2a2f38"/><line x1="40" y1="${GY}" x2="560" y2="${GY}" stroke="#555" stroke-width="2"/>`;
-    h+=picFigSVG(p,K,e=>ED.view==='front'?e.z1>.12:e.z1>0);
+    h+=picFigSVG(p,K,e=>e.z1>.06);
     for(const n of PIC_HANDLES){const q=p[n];
       if(ED.lock.has(PIC_LOCK_OF[n]))h+=`<rect x="${q.X-9}" y="${q.Y-9}" width="18" height="18" rx="3" fill="#8a909a" stroke="#1e2127" stroke-width="3"/>`;
       else h+=`<circle cx="${q.X}" cy="${q.Y}" r="${ED.drag===n?17:13}" fill="${ED.drag===n?'#fff':'rgba(255,255,255,.85)'}" stroke="#1e2127" stroke-width="3"/>`;}
-    h+=`<text x="20" y="34" fill="#9aa1ad" font-size="22">${ED.view==='front'?'正面（左右・上下）':'横から（右が前）'}</text>`;svg.innerHTML=h;
-    $$('#edView button').forEach(b=>b.classList.toggle('on',b.dataset.ev===ED.view));};
+    h+=`<text x="20" y="34" fill="#9aa1ad" font-size="22">${yawName()}（${Math.round(ED.yaw)}°）</text>`;svg.innerHTML=h;
+    $$('#edView button').forEach(b=>b.classList.toggle('on',+b.dataset.ev===Math.round(ED.yaw)%360));$('#edYaw').value=Math.round(ED.yaw)%360;$('#edYawV').textContent=`${yawName()}・${Math.round(ED.yaw)%360}°`;};
   draw();
   /* 元にするポーズ：分類のタブとボタン */
   const drawBase=()=>{const mine=S.parts.filter(p=>p.type==='action'&&p.skel&&(!part||p.id!==part.id));
@@ -3006,18 +3299,26 @@ function openPoseEditor(sc,slotI,partId,onDone){
       if(r.fail.length)m.innerHTML=`<b style="color:var(--warn)">「${esc(r.fail.join('、'))}」は直せませんでした。</b><a href="${gtLink(r.fail.join('\n'))}" target="_blank" rel="noopener">Google翻訳で開く</a>（英語をコピーして、タグに貼ってください）`;
       else{m.textContent=`タグに足しました（辞書 ${r.dict}・翻訳 ${r.net}）。合っているか確かめてください。`;$('#edJa').value='';}
     }finally{b.disabled=false;b.textContent='英語に';}};
-  $$('[data-ev]').forEach(b=>b.onclick=()=>{ED.view=b.dataset.ev;draw();});
+  $$('[data-ev]').forEach(b=>b.onclick=()=>{ED.yaw=+b.dataset.ev;draw();});
+  $('#edYaw').oninput=e=>{ED.yaw=+e.target.value;draw();};
   const toS=e=>{const r=svg.getBoundingClientRect();return{x:(e.clientX-r.left)/r.width*600,y:(e.clientY-r.top)/r.height*680};};
   st.addEventListener('pointerdown',e=>{const q=toS(e),p=proj();let best=null,bd=45;for(const n of PIC_HANDLES){if(ED.lock.has(PIC_LOCK_OF[n]))continue;/* 固定した部位は動かさない */const d=Math.hypot(p[n].X-q.x,p[n].Y-q.y);if(d<bd){bd=d;best=n;}}
-    if(best){ED.drag=best;st.setPointerCapture(e.pointerId);draw();}});
-  st.addEventListener('pointermove',e=>{if(!ED.drag)return;const q=toS(e),ia=ED.view==='front'?0:2,J=ED.drag,Pa=ED.P[PIC_PARENT[J]];
-    const ma=(q.x-OX)/K,mb=(GY-q.y)/K,d=Math.atan2(mb-Pa[1],ma-Pa[ia])-Math.atan2(ED.P[J][1]-Pa[1],ED.P[J][ia]-Pa[ia]),c=Math.cos(d),s=Math.sin(d),pa=Pa[ia],pb=Pa[1];
-    for(const n of picSub(J)){const v=ED.P[n];if(!v)continue;const ra=v[ia]-pa,rb=v[1]-pb;v[ia]=pa+ra*c-rb*s;v[1]=pb+ra*s+rb*c;}draw();});
-  const end=()=>{if(ED.drag){ED.drag=null;draw();}};st.addEventListener('pointerup',end);st.addEventListener('pointercancel',end);
+    if(best){ED.drag=best;st.setPointerCapture(e.pointerId);draw();}
+    else{ED.spin={x:e.clientX,yaw:ED.yaw};st.setPointerCapture(e.pointerId);}});
+  st.addEventListener('pointermove',e=>{
+    if(ED.spin){const r=svg.getBoundingClientRect();ED.yaw=((ED.spin.yaw-(e.clientX-ED.spin.x)/r.width*360)%360+360)%360;draw();return;}
+    if(!ED.drag)return;const q=toS(e),J=ED.drag,Pa=ED.P[PIC_PARENT[J]];
+    /* 今見ている面（横 a・縦 y）の中で、親の関節を軸に回す */
+    const[pa,pd]=toV(Pa[0],Pa[2]),pb=Pa[1],[ja]=toV(ED.P[J][0],ED.P[J][2]);
+    const ma=(q.x-OX)/K,mb=(GY-q.y)/K,d=Math.atan2(mb-pb,ma-pa)-Math.atan2(ED.P[J][1]-pb,ja-pa),c=Math.cos(d),s=Math.sin(d);
+    for(const n of picSub(J)){const v=ED.P[n];if(!v)continue;const[va,vd]=toV(v[0]-Pa[0],v[2]-Pa[2]),rb=v[1]-pb;const na=va*c-rb*s,nb=va*s+rb*c;const[nx,nz]=fromV(na,vd);v[0]=Pa[0]+nx;v[2]=Pa[2]+nz;v[1]=pb+nb;}draw();});
+  const end=()=>{ED.spin=null;if(ED.drag){ED.drag=null;draw();}};st.addEventListener('pointerup',end);st.addEventListener('pointercancel',end);
   $('#edCancel').onclick=closeSheet;
   /* OpenPose：シーンの人物がピクトグラムを使っていればその位置で、そうでなければ真ん中に1人で */
   $('#edOp').onclick=()=>{if(pc&&pc.on)return picSaveOpenPose(sc,{i:slotI,P:ED.P});
     const t={title:$('#edName').value.trim()||'pose',chars:[{pic:Object.assign(picNew({chars:[0]},0),{on:true,gaze:true,yaw:0})}],pic:{pitch:0,ar:(sc&&sc.pic&&sc.pic.ar)||'800x912'}};picSaveOpenPose(t,{i:0,P:ED.P});};
+  /* 画像に合わせる：今の形から始める（この画面は開いたまま） */
+  $('#edOpT').onclick=()=>{const nm=$('#edName').value.trim()||'pose';if(pc&&pc.on)return openOpTrace({sc,title:nm,kps:picOpKps(sc,{i:slotI,P:ED.P},true)});openOpTrace({sc,title:nm,P:picClone(ED.P)});};
   $('#edSave').onclick=async()=>{
     const name=$('#edName').value.trim(),tags=$('#edTags').value.trim();
     if(!name)return toast('名前を入れてください');if(!tags)return toast('タグを入れてください');
