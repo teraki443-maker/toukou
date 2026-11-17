@@ -110,6 +110,16 @@ nav#tabs button.on{color:var(--acc);font-weight:700}
 .opmir button{min-height:48px;font-size:13px;line-height:1.3;border-radius:10px;border:1px solid var(--line2);border-left:6px solid var(--c);background:var(--card);color:var(--ink);padding:6px 8px;text-align:left}
 .opmir button:active{background:var(--soft)}
 .oplab{font-size:12px;color:var(--sub);font-weight:700;margin:10px 0 4px}
+.opmirw{margin:16px 0 0;padding:10px 0 0;border-top:1px dashed var(--line2)}
+.opface{border:1px solid var(--line);border-radius:12px;padding:10px;margin:8px 0}
+.opface .ofh{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:0 0 6px}
+.opface .ofh b{font-size:14px}.opface .ofs{font-size:12px;font-weight:700;padding:2px 8px;border-radius:999px;background:var(--soft)}
+.opface .ofs.lk{background:#e7f6ec;color:#167a3b}.opface .ofs.ul{background:#fff3df;color:#9a5b00}
+.opface label.ofr{display:flex;align-items:center;gap:8px;font-size:13px;margin:4px 0 8px}.opface label.ofr span{flex:0 0 6.5em}.opface label.ofr input{flex:1;min-width:0}
+.opface .btn{min-height:44px}
+.opface ol{margin:6px 0 0;padding-left:1.3em;font-size:12px;color:var(--sub);line-height:1.6}
+.optbar .ico.undo{font-weight:700;position:relative}.optbar .ico.undo:disabled{opacity:.35}
+.optbar .ico.undo i{position:absolute;right:2px;top:0;font-size:10px;font-style:normal;color:var(--acc)}
 .opsc{display:flex;gap:10px;align-items:flex-start;margin:4px 0 0}
 .opsc img{width:150px;border-radius:8px;background:#000;display:block}
 .optpart{border:1px solid var(--line);border-left:4px solid #0f766e;border-radius:10px;padding:8px 10px;margin:10px 0}
@@ -527,7 +537,7 @@ const FMT={
 
 /* ========== データベース（IndexedDB） ========== */
 let db=null;
-const APP_VER='v68';/* sw.js の VERSION と同じにする */
+const APP_VER='v69';/* sw.js の VERSION と同じにする */
 const STORES=['parts','scenes','works','images','meta','fonts','stamps'];
 function openDB(){return new Promise((res,rej)=>{const r=indexedDB.open('manga4koma',3);r.onupgradeneeded=()=>{const d=r.result;for(const s of STORES)if(!d.objectStoreNames.contains(s))d.createObjectStore(s,{keyPath:'id'});};r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error);});}
 function tx(store,mode,fn){return new Promise((res,rej)=>{if(!db)return res(undefined);const t=db.transaction(store,mode);const req=fn(t.objectStore(store));let out;if(req)req.onsuccess=()=>{out=req.result;};t.oncomplete=()=>res(out);t.onerror=()=>rej(t.error);t.onabort=()=>rej(t.error);});}
@@ -2963,6 +2973,15 @@ function opHeadTurn(k,deg){const e1=k[16],e2=k[17],c=e1&&e2?{x:(e1.x+e2.x)/2,z:(
 function opInherit(old,n){if(!old||!n)return n;const src=n.map(q=>({x:q.x,y:q.y,z:q.z||0})),L=(k,a,b)=>Math.hypot(k[a].x-k[b].x,k[a].y-k[b].y,(k[a].z||0)-(k[b].z||0));
   for(const i of opSub(1)){const p=OP_PAR[i];if(p==null)continue;const dx=src[i].x-src[p].x,dy=src[i].y-src[p].y,dz=src[i].z-src[p].z,l=Math.hypot(dx,dy,dz);if(l<1e-6)continue;
     let lo=L(old,i,p);if(lo<1e-3)lo=l;n[i].x=n[p].x+dx/l*lo;n[i].y=n[p].y+dy/l*lo;n[i].z=(n[p].z||0)+dz/l*lo;}
+  /* 顔（鼻・目・耳）は、今の顔の形をひとかたまりのまま、新しいポーズの頭の所へ移す。
+     首から頭の中心までの長さは今のまま、向きは新しいポーズ。顔の左右の向きは、新しいポーズとの差だけ回す */
+  {const F=[0,14,15,16,17],em=k=>{const a=k[16],b=k[17];return a&&b?{x:(a.x+b.x)/2,y:(a.y+b.y)/2,z:((a.z||0)+(b.z||0))/2}:{x:k[0].x,y:k[0].y,z:k[0].z||0};};
+    const oc=em(old),o1=old[1],sc=em(src),s1=src[1],L0=Math.hypot(oc.x-o1.x,oc.y-o1.y,oc.z-(o1.z||0));
+    let ux=sc.x-s1.x,uy=sc.y-s1.y,uz=sc.z-s1.z;const ul=Math.hypot(ux,uy,uz);
+    if(ul>1e-6&&L0>1e-6){ux/=ul;uy/=ul;uz/=ul;const c={x:n[1].x+ux*L0,y:n[1].y+uy*L0,z:(n[1].z||0)+uz*L0};
+      const oy=opHeadYaw(old),ny=opHeadYaw(src),d=(ny==null?0:ny)-(oy==null?0:oy),co=Math.cos(d),si=Math.sin(d);
+      for(const j of F){const q=old[j],vx=q.x-oc.x,vy=q.y-oc.y,vz=(q.z||0)-oc.z;n[j].x=c.x+vx*co+vz*si;n[j].y=c.y+vy;n[j].z=c.z-vx*si+vz*co;}
+      n.fp=old.fp||0;opFaceVis(n);}}
   /* 肩幅・腰幅は、左右の間の長さもそろえる（向きによって首からの角度が変わっても、幅は今のまま）。腕・脚は付け根と一緒に動かす */
   for(const[a,b]of[[2,5],[8,11]]){const wo=L(old,a,b),wn=L(n,a,b);if(wo<1e-3||wn<1e-3)continue;const f=wo/wn,m={x:(n[a].x+n[b].x)/2,y:(n[a].y+n[b].y)/2,z:((n[a].z||0)+(n[b].z||0))/2};
     for(const j of[a,b]){const tx=m.x+(n[j].x-m.x)*f-n[j].x,ty=m.y+(n[j].y-m.y)*f-n[j].y,tz=m.z+((n[j].z||0)-m.z)*f-(n[j].z||0);for(const i of opSub(j)){n[i].x+=tx;n[i].y+=ty;n[i].z=(n[i].z||0)+tz;}}}
@@ -3035,11 +3054,11 @@ function opShrink(blob,max){return new Promise(res=>{const u=URL.createObjectURL
   const c=document.createElement('canvas');c.width=Math.round(im.naturalWidth*s);c.height=Math.round(im.naturalHeight*s);const g=c.getContext('2d');g.fillStyle='#fff';g.fillRect(0,0,c.width,c.height);g.drawImage(im,0,0,c.width,c.height);URL.revokeObjectURL(u);c.toBlob(b=>res(b||blob),'image/jpeg',.88);};im.onerror=()=>{URL.revokeObjectURL(u);res(blob);};im.src=u;});}
 function openOpTrace(o){
   o=o||{};$$('#opt').forEach(x=>x.remove());/* 前に開いたものが残っていれば消す */
-  const T=OPT={img:null,imgBlob:null,W:OP_GEN[0],H:OP_GEN[1],people:[],cur:0,sel:null,mode:'pt',op:.6,out:'gen',vb:null,drag:null,src:o,lock:true,wlock:true,inherit:true,preTags:[],partId:null,lastTap:null,saved:false,body:[],autoHide:true,faceOne:false};
+  const T=OPT={img:null,imgBlob:null,W:OP_GEN[0],H:OP_GEN[1],people:[],cur:0,sel:null,mode:'pt',op:.6,out:'gen',vb:null,drag:null,src:o,lock:true,wlock:true,inherit:true,preTags:[],undo:[],face:[],partId:null,lastTap:null,saved:false,body:[],autoHide:true,faceOne:false};
   /* 部品（OpenPose）から開くときは、その点と大きさで始める（点は 0〜1 の割合でしまってある） */
   const fromPart=p=>{const d=p.op||{};T.W=d.W||OP_GEN[0];T.H=d.H||OP_GEN[1];T.out=d.out||'gen';T.partId=p.id;
     T.autoHide=d.autoHide!==false;
-    T.people=(d.people||[]).map(k=>k.map(q=>Object.assign({x:q.x*T.W,y:q.y*T.H,z:(q.z||0)*T.W,h:!!q.h},q.a?{auto:true}:{},q.m?{man:true}:{})));if(!T.people.length)T.people=[opDefault(T.W,T.H)];T.body=JSON.parse(JSON.stringify(d.body||[]));};
+    T.people=(d.people||[]).map(k=>k.map(q=>Object.assign({x:q.x*T.W,y:q.y*T.H,z:(q.z||0)*T.W,h:!!q.h},q.a?{auto:true}:{},q.m?{man:true}:{})));if(!T.people.length)T.people=[opDefault(T.W,T.H)];T.body=JSON.parse(JSON.stringify(d.body||[]));T.face=JSON.parse(JSON.stringify(d.face||[]));};
   const init=()=>{if(o.part)fromPart(o.part);else T.people=o.kps?opFromKps(o.kps,T.W,T.H):[opDefault(T.W,T.H,o.P)];T.cur=0;T.sel=null;T.vb={x:0,y:0,w:T.W,h:T.H};};
   init();
   const saved=S.parts.filter(p=>p.type==='openpose'&&p.id!==T.partId).sort((a,b)=>(b.updated||0)-(a.updated||0));
@@ -3051,7 +3070,7 @@ function openOpTrace(o){
     <div class="opthd"><b id="optTtl">${o.part?`🦴 OpenPose「${esc(o.part.name||'名前なし')}」を直す`:'🦴 OpenPose を作る'}</b><div class="row" style="margin:0;flex-wrap:nowrap"><button type="button" class="btn sm" id="optQuick">${o.part?'上書き保存':'部品に保存'}</button><button type="button" class="btn ghost sm" id="optX">閉じる</button></div></div>
     <div class="optsticky">
       <div class="picstage optstage" id="optStage"><svg id="optSvg" xmlns="http://www.w3.org/2000/svg"></svg></div>
-      <div class="optbar"><button type="button" class="ico" data-oz="1.5" title="拡大" aria-label="拡大">＋</button><button type="button" class="ico" data-oz="0.67" title="縮小" aria-label="縮小">－</button><button type="button" class="ico" data-oz="0" title="全体" aria-label="全体を見る">⤢</button><span class="optsep"></span><div class="tgs" id="optPeople"></div></div>
+      <div class="optbar"><button type="button" class="ico undo" id="optUndo" title="戻す" aria-label="直前の操作を戻す" disabled>↶</button><button type="button" class="ico" data-oz="1.5" title="拡大" aria-label="拡大">＋</button><button type="button" class="ico" data-oz="0.67" title="縮小" aria-label="縮小">－</button><button type="button" class="ico" data-oz="0" title="全体" aria-label="全体を見る">⤢</button><span class="optsep"></span><div class="tgs" id="optPeople"></div></div>
       <div class="ptabs opttabs" id="optTabs">${[['img','🖼 画像'],['auto','🤖 自動'],['pose','⭐よく使う'],['pt','✋ 点'],['rot','🔄 向き'],['save','💾 保存']].map(([k,l])=>`<button type="button" data-ot="${k}">${l}</button>`).join('')}</div>
     </div>
     <div class="optpane" data-pane="img">
@@ -3076,15 +3095,17 @@ function openOpTrace(o){
       <div class="ptabs" id="optMode" style="margin:6px 0 0"><button data-om="pt">点を動かす</button><button data-om="all">人物ごと動かす</button></div>
       <div class="row" style="margin:6px 0"><button type="button" class="btn ghost sm" data-os="1.1">大きく</button><button type="button" class="btn ghost sm" data-os="0.91">小さく</button><button type="button" class="btn ghost sm" id="optSwap">左右の点を入れかえ</button></div>
       <label class="switch" style="margin:0 0 4px"><input type="checkbox" id="optWLock" checked><span>肩幅・腰幅を固定する<span class="hint">オンのときは、肩（腰）の点を動かすと、反対側の肩（腰）も一緒に動き、幅が変わりません。幅を変えたいときだけオフにします。</span></span></label>
+      <label class="switch" style="margin:0 0 4px"><input type="checkbox" id="optLock" checked><span>手足・胴の長さを固定する<span class="hint">オンのときは、長さを変えずに関節を軸に回ります（首を動かすと人物ごと動きます）。</span></span></label>
+      <label class="switch" style="margin:0 0 4px"><input type="checkbox" id="optFlesh"><span>🧍 肉付けを見る<span class="hint">だいたいの体を重ねて出します（保存する画像には入りません）。男女と肉の厚みを、人物ごとに決められます。</span></span></label>
+      <div class="opface" id="optFaceBox"></div>
+      <div id="optBody"></div>
+      <label class="switch sm" style="margin:2px 0 4px"><input type="checkbox" id="optAutoHide" ${T.autoHide?'checked':''}><span>体の後ろの点を自動で隠す<span class="hint">横向き・後ろ向きで、胴の後ろに入った肩・腕・脚の点を隠します（自分でダブルタップした点はそのまま）。</span></span></label>
+      <p class="hint" style="margin:4px 0 0">点を指で動かして、画像の関節に合わせます。点を<b>ダブルタップ</b>すると「隠す」、もう一度で戻ります。点のない所をなぞると画面が動きます（拡大したとき）。<b>2本指でつまむと拡大・縮小</b>します。右・左は<b>人物から見た向き</b>です。</p>
+      <div class="opmirw">
       <div class="oplab">左右対称にする（右・左は人物から見た向き）</div>
       <p class="hint" style="margin:0 0 6px">上半身は肩幅・腕の長さと形を、下半身は腰幅・脚の長さと形を、体のまん中の線で折り返してそろえます。</p>
       <div class="opmir">${[['rArm','上半身：右を左に合わせる',`rgb(${OP_COL[2]})`],['lArm','上半身：左を右に合わせる',`rgb(${OP_COL[4]})`],['rLeg','下半身：右を左に合わせる',`rgb(${OP_COL[7]})`],['lLeg','下半身：左を右に合わせる',`rgb(${OP_COL[10]})`]].map(([k,l,c])=>`<button type="button" data-omir="${k}" style="--c:${c}">${l}</button>`).join('')}</div>
-      <label class="switch" style="margin:0 0 4px"><input type="checkbox" id="optLock" checked><span>手足・胴の長さを固定する<span class="hint">オンのときは、長さを変えずに関節を軸に回ります（首を動かすと人物ごと動きます）。</span></span></label>
-      <label class="switch" style="margin:0 0 4px"><input type="checkbox" id="optFlesh"><span>🧍 肉付けを見る<span class="hint">だいたいの体を重ねて出します（保存する画像には入りません）。男女と肉の厚みを、人物ごとに決められます。</span></span></label>
-      <label class="switch sm" style="margin:2px 0 4px"><input type="checkbox" id="optFaceOne"><span>顔の点を1つずつ動かす<span class="hint">オフのときは、鼻・目・耳のどれを動かしても、頭ごと動きます（顔の向きは「🔄 向き」の「顔の向き」で変えます）。</span></span></label>
-      <div id="optBody"></div>
-      <label class="switch sm" style="margin:2px 0 4px"><input type="checkbox" id="optAutoHide" ${T.autoHide?'checked':''}><span>体の後ろの点を自動で隠す<span class="hint">横向き・後ろ向きで、胴の後ろに入った肩・腕・脚の点を隠します（自分でダブルタップした点はそのまま）。</span></span></label>
-      <p class="hint" style="margin:4px 0 0">点を指で動かして、画像の関節に合わせます。点を<b>ダブルタップ</b>すると「隠す」、もう一度で戻ります。点のない所をなぞると画面が動きます（拡大したとき）。右・左は<b>人物から見た向き</b>です。</p>
+      </div>
     </div>
     <div class="optpane" data-pane="rot">
       <div class="facebox"><div class="facepad" id="optFace" role="slider" aria-label="顔の向き"><svg viewBox="-60 -60 120 120" xmlns="http://www.w3.org/2000/svg"></svg></div>
@@ -3123,6 +3144,27 @@ function openOpTrace(o){
   $$('#optTabs [data-ot]',el).forEach(x=>x.onclick=()=>{setTab(x.dataset.ot);draw();drawFace();});setTab(T.tab);
   const svg=$('#optSvg',el),st=$('#optStage',el);
   const P=()=>T.people[T.cur];
+  /* ===== 戻す（直前の操作を3回まで）。操作の前に mark() で今の形を覚える ===== */
+  const snapNow=()=>JSON.stringify({p:T.people,fp:T.people.map(k=>k.fp||0),b:T.body,f:T.face,c:T.cur});
+  const mark=()=>{const v=snapNow();if(T.undo[T.undo.length-1]===v)return;T.undo.push(v);while(T.undo.length>3)T.undo.shift();drawUndo();};
+  const drawUndo=()=>{const b=$('#optUndo',el);if(!b)return;b.disabled=!T.undo.length;b.innerHTML=`↶${T.undo.length?`<i>${T.undo.length}</i>`:''}`;};
+  const undo=()=>{if(!T.undo.length)return;const v=JSON.parse(T.undo.pop());T.people=v.p;T.people.forEach((k,i)=>{k.fp=v.fp[i]||0;});T.body=v.b;T.face=v.f;T.cur=Math.min(v.c,T.people.length-1);T.sel=null;draw();drawPanel();drawUndo();toast(`1つ戻しました（あと${T.undo.length}回）`);};
+  /* ===== 顔：頭の丸（大きさ r・中心）と、顔のパーツの固定 =====
+     T.face[人物] = {r:頭の半径（画素）, lock:固定したか, cx,cy:固定していないときの丸の中心（首からの位置）}
+     固定すると、鼻・目は丸の前の面に、耳は丸の横に置いた奥行きを付け、それからは顔をひとかたまりで回すだけにする */
+  const FACE=[0,14,15,16,17];
+  const earMid=k=>{const a=k[16],b=k[17];if(a&&b)return{x:(a.x+b.x)/2,y:(a.y+b.y)/2,z:((a.z||0)+(b.z||0))/2};const n=k[0];return{x:n.x,y:n.y,z:n.z||0};};
+  const faceOf=i=>{const k=T.people[i];let f=T.face[i];if(!f||!(f.r>0)){const a=k[16],b=k[17];
+      const r=a&&b?Math.max(Math.hypot(a.x-b.x,a.y-b.y,(a.z||0)-(b.z||0))/2*1.15,4):Math.max(Math.hypot(k[0].x-k[1].x,k[0].y-k[1].y)*.8,4);
+      f=T.face[i]=Object.assign({lock:true},f||{},{r});}return f;};
+  const faceCenter=i=>{const k=T.people[i],f=faceOf(i);if(!f.lock&&f.cx!=null)return{x:k[1].x+f.cx,y:k[1].y+f.cy,z:k[1].z||0};return earMid(k);};
+  /* 固定：丸に合わせて奥行きを付ける */
+  const lockFace=i=>{const k=T.people[i],f=faceOf(i),c=faceCenter(i),r=f.r;
+    for(const j of FACE){const q=k[j],dx=q.x-c.x,dy=q.y-c.y,d=Math.min(1,Math.hypot(dx,dy)/r);const front=Math.sqrt(Math.max(0,1-d*d))*r;
+      q.z=c.z+(j>=16?-front*.35:front);}
+    k.fp=0;f.lock=true;delete f.cx;delete f.cy;opFaceVis(k);};
+  const unlockFace=i=>{const k=T.people[i],f=faceOf(i),c=earMid(k);f.lock=false;f.cx=c.x-k[1].x;f.cy=c.y-k[1].y;};
+  const faceLocked=i=>faceOf(i).lock!==false;
   /* 人物の体つき。決めていなければ、シーンの人物の呼び方（boy・man なら男性）から決める */
   const bodyOf=i=>{if(T.body[i])return Object.assign({},OP_BODY0,T.body[i]);const sl=o.sc&&o.sc.chars&&o.sc.chars[i],c=sl&&P_(sl.chara);
     return Object.assign({},OP_BODY0,{sex:sl&&subjKind((sl.subj||'').trim()||(c&&c.subject)||'girl')==='boy'?'m':'f'});};
@@ -3141,9 +3183,12 @@ function openOpTrace(o){
       OP_LIMB.map((l,i)=>[l,i,((kp[l[0]].z||0)+(kp[l[1]].z||0))/2]).sort((x,y)=>x[2]-y[2]||x[1]-y[1]).forEach(([[a,b],i])=>{const A=kp[a],B=kp[b];if(A.h||B.h)return;g+=`<line x1="${A.x}" y1="${A.y}" x2="${B.x}" y2="${B.y}" stroke="rgb(${OP_COL[i]})" stroke-width="${w}" stroke-opacity=".75" stroke-linecap="round"/>`;});
       kp.forEach((q,i)=>{const c=`rgb(${OP_COL[i]})`;
         /* 顔の点（鼻・目・耳）は、1つずつ動かすのでなければ小さく */
-        const rp=!T.faceOne&&(i===0||i>=14)?r*.5:r;
+        const rp=faceLocked(pi)&&(i===0||i>=14)?r*.5:r;
         if(q.h){if(on)g+=`<circle cx="${q.x}" cy="${q.y}" r="${rp*.7}" fill="none" stroke="#9aa1ad" stroke-width="${rp*.18}" stroke-dasharray="${rp*.35} ${rp*.25}"/>`;return;}
         g+=on?`<circle cx="${q.x}" cy="${q.y}" r="${T.sel===i?rp*1.25:rp}" fill="${c}" stroke="${T.sel===i?'#fff':'#111'}" stroke-width="${rp*.22}"/>`:`<circle cx="${q.x}" cy="${q.y}" r="${r*.55}" fill="${c}"/>`;});
+      /* 頭の丸（「点」「向き」のタブのとき、選んでいる人物だけ。固定していないときは、はっきり出す） */
+      if(on&&(T.tab==='pt'||T.tab==='rot')){const f=faceOf(pi),c=faceCenter(pi),lk=f.lock!==false;
+        g+=`<circle cx="${c.x}" cy="${c.y}" r="${f.r}" fill="${lk?'none':'rgba(255,216,77,.10)'}" stroke="${lk?'rgba(255,255,255,.35)':'#ffd84d'}" stroke-width="${r*(lk?.18:.3)}" stroke-dasharray="${lk?`${r*.5} ${r*.4}`:'none'}"/>`;}
       /* 顔の向きの矢印（「向き」のタブのとき、選んでいる人物だけ） */
       if(on&&T.tab==='rot'){const hy=opHeadYaw(kp),yw=hy==null?0:hy,pt=(kp.fp||0)*Math.PI/180,e1=kp[16],e2=kp[17];
         const c=e1&&e2&&!(e1.h&&e2.h)?{x:(e1.x+e2.x)/2,y:(e1.y+e2.y)/2}:kp[0],vx=Math.sin(yw)*Math.cos(pt),vy=-Math.sin(pt),vl=Math.hypot(vx,vy);
@@ -3171,12 +3216,24 @@ function openOpTrace(o){
     const CK=opChecks(T),nW=CK.filter(c=>c.lv==='warn').length;
     $('#optChk',el).innerHTML=`<div class="optchk"><b>チェック</b>${CK.map(c=>`<div class="oc ${c.lv}">${c.lv==='warn'?'⚠':c.lv==='ok'?'✓':'ℹ'} ${c.t}</div>`).join('')}</div>`;
     const tb=$('#optTabs [data-ot="save"]',el);if(tb)tb.textContent='💾 保存'+(nW?` ⚠${nW}`:'');
-    drawFace();
+    drawFace();drawUndo();
+    /* 顔のパーツ（選んでいる人物） */
+    const fbx=$('#optFaceBox',el);if(fbx){const f=faceOf(T.cur),lk=f.lock!==false,mx=Math.round(Math.max(T.W,T.H)*.2);
+      fbx.innerHTML=`<div class="ofh"><b>顔（人物${T.cur+1}）</b><span class="ofs ${lk?'lk':'ul'}">${lk?'🔒 固定中':'🔓 パーツを動かせる'}</span></div>
+        <label class="ofr"><span>頭の大きさ</span><input type="range" id="optHeadR" min="4" max="${mx}" step="1" value="${Math.round(f.r)}" ${lk?'disabled':''} aria-label="頭の大きさ"><b id="optHeadRv">${Math.round(f.r)}</b></label>
+        <div class="row" style="margin:0">${lk?'<button type="button" class="btn ghost" id="optFaceUL">🔓 顔のパーツを動かす</button>':'<button type="button" class="btn" id="optFaceLK">🔒 顔を固定する</button>'}</div>
+        <ol><li>「顔のパーツを動かす」を押す</li><li>黄色の丸（頭）の大きさをバーで合わせる（丸の中をなぞると丸が動きます）</li><li>鼻・目・耳の点を置く</li><li>「顔を固定する」を押す → 顔のパーツは動かなくなり、「🔄 向き」の顔の向きで角度だけを変えます</li></ol>`;
+      const hr=$('#optHeadR',fbx);if(hr){hr.onpointerdown=()=>mark();hr.oninput=()=>{faceOf(T.cur).r=+hr.value;$('#optHeadRv',fbx).textContent=hr.value;draw();};}
+      const ul=$('#optFaceUL',fbx);if(ul)ul.onclick=()=>{mark();unlockFace(T.cur);setTab('pt');
+        /* 顔を大きく見せる（頭のまわりに寄る）。元に戻すときは ⤢ */
+        const c=faceCenter(T.cur),w=Math.min(T.W,Math.max(T.W/8,faceOf(T.cur).r*8)),h=w*T.H/T.W;T.vb={x:Math.min(Math.max(0,c.x-w/2),T.W-w),y:Math.min(Math.max(0,c.y-h/2),T.H-h),w,h};
+        draw();drawPanel();toast('顔のパーツを動かせるようにしました（顔に寄りました。⤢ で全体に戻ります）');};
+      const lkb=$('#optFaceLK',fbx);if(lkb)lkb.onclick=()=>{mark();lockFace(T.cur);draw();drawPanel();toast('顔を固定しました。角度は「🔄 向き」で変えます');};}
     const AT=opAutoTags(T);$('#optAutoT',el).innerHTML=`<p class="hint" style="margin:0">シーンで使うと、立ち位置・向き・距離から次のタグも自動で入ります：<br>${opAutoText(AT)}</p>`;
-    const hb=$('#optHide',el);if(hb)hb.onclick=()=>{q.h=!q.h;q.man=true;delete q.auto;draw();drawPanel();};
-    $$('[data-op]',el).forEach(b=>b.onclick=()=>{const v=b.dataset.op;
+    const hb=$('#optHide',el);if(hb)hb.onclick=()=>{mark();q.h=!q.h;q.man=true;delete q.auto;draw();drawPanel();};
+    $$('[data-op]',el).forEach(b=>b.onclick=()=>{const v=b.dataset.op;if(v==='add'||v==='del')mark();
       if(v==='add'){const n=opDefault(T.W,T.H);const dx=T.W*.18*(T.people.length%2?1:-1);n.forEach(q=>q.x+=dx);T.people.push(n);T.cur=T.people.length-1;}
-      else if(v==='del'){if(!confirm(`人物${T.cur+1}を消しますか？`))return;T.people.splice(T.cur,1);T.body.splice(T.cur,1);T.cur=0;}
+      else if(v==='del'){if(!confirm(`人物${T.cur+1}を消しますか？`))return;T.people.splice(T.cur,1);T.body.splice(T.cur,1);T.face.splice(T.cur,1);T.cur=0;}
       else T.cur=+v;T.sel=null;draw();drawPanel();});
     $$('[data-oo]',el).forEach(b=>b.onclick=()=>{T.out=b.dataset.oo;draw();drawPanel();});};
   const fit=()=>{T.vb={x:0,y:0,w:T.W,h:T.H};};
@@ -3185,11 +3242,19 @@ function openOpTrace(o){
   st.addEventListener('wheel',e=>{e.preventDefault();zoom(e.deltaY<0?1.2:1/1.2);},{passive:false});
   $('#optOp',el).oninput=e=>{T.op=+e.target.value;draw();};
   $$('#optMode button',el).forEach(b=>b.onclick=()=>{T.mode=b.dataset.om;drawPanel();});
-  $$('[data-os]',el).forEach(b=>b.onclick=()=>{const k=P(),f=+b.dataset.os,c=k[1];for(const q of k){q.x=c.x+(q.x-c.x)*f;q.y=c.y+(q.y-c.y)*f;}draw();drawPanel();});
-  $('#optSwap',el).onclick=()=>{const k=P();for(const[a,b]of[[2,5],[3,6],[4,7],[8,11],[9,12],[10,13],[14,15],[16,17]]){const t=k[a];k[a]=k[b];k[b]=t;}draw();drawPanel();toast('右と左の点を入れかえました');};
+  $$('[data-os]',el).forEach(b=>b.onclick=()=>{mark();const f0=T.face[T.cur];if(f0&&f0.r)f0.r*=+b.dataset.os;const k=P(),f=+b.dataset.os,c=k[1];for(const q of k){q.x=c.x+(q.x-c.x)*f;q.y=c.y+(q.y-c.y)*f;}draw();drawPanel();});
+  $('#optSwap',el).onclick=()=>{mark();const k=P();for(const[a,b]of[[2,5],[3,6],[4,7],[8,11],[9,12],[10,13],[14,15],[16,17]]){const t=k[a];k[a]=k[b];k[b]=t;}draw();drawPanel();toast('右と左の点を入れかえました');};
   /* 指で動かす */
   const toImg=e=>{const r=svg.getBoundingClientRect(),v=T.vb;return{x:v.x+(e.clientX-r.left)/r.width*v.w,y:v.y+(e.clientY-r.top)/r.height*v.h};};
+  /* 2本指：つまむと拡大・縮小（指の間の所を中心に）。動かすと画面が動く */
+  const ptrs=new Map();let pinch=null;
+  const pinchStart=()=>{const[a,b]=[...ptrs.values()],r=svg.getBoundingClientRect(),v=T.vb,mx=(a.x+b.x)/2,my=(a.y+b.y)/2;
+    pinch={d0:Math.hypot(a.x-b.x,a.y-b.y)||1,vb:Object.assign({},v),ix:v.x+(mx-r.left)/r.width*v.w,iy:v.y+(my-r.top)/r.height*v.h};T.drag=null;T.lastTap=null;};
+  const pinchMove=()=>{const[a,b]=[...ptrs.values()],r=svg.getBoundingClientRect(),mx=(a.x+b.x)/2,my=(a.y+b.y)/2,f=Math.hypot(a.x-b.x,a.y-b.y)/pinch.d0;
+    const w=Math.min(T.W,Math.max(T.W/8,pinch.vb.w/f)),h=w*T.H/T.W;T.vb={x:Math.min(Math.max(0,pinch.ix-(mx-r.left)/r.width*w),T.W-w),y:Math.min(Math.max(0,pinch.iy-(my-r.top)/r.height*h),T.H-h),w,h};draw();};
   st.addEventListener('pointerdown',e=>{
+    ptrs.set(e.pointerId,{x:e.clientX,y:e.clientY});
+    if(ptrs.size>=2){st.setPointerCapture(e.pointerId);if(T.drag&&T.drag.k==='box')T.box=null;pinchStart();draw();return;}
     /* 囲んで合わせる：なぞった四角を出す */
     if(T.mode==='box'){const q=toImg(e);T.drag={k:'box',x0:q.x,y0:q.y};T.box={x:q.x,y:q.y,w:0,h:0};st.setPointerCapture(e.pointerId);draw();return;}
     const q=toImg(e),rr=R()*2.75;let best=null,bd=rr,bp=T.cur;
@@ -3197,12 +3262,20 @@ function openOpTrace(o){
     if(best!=null){
       /* ダブルタップ：その点を隠す・戻す */
       const now=Date.now(),lt=T.lastTap;
-      if(lt&&lt.i===best&&lt.p===bp&&now-lt.t<400){const p2=T.people[bp][best];p2.h=!p2.h;p2.man=true;delete p2.auto;T.cur=bp;T.sel=best;T.lastTap=null;T.drag=null;draw();drawPanel();toast(`${OP_JA[best]}を${p2.h?'隠しました':'見えるに戻しました'}`);return;}
+      if(lt&&lt.i===best&&lt.p===bp&&now-lt.t<400){mark();const p2=T.people[bp][best];p2.h=!p2.h;p2.man=true;delete p2.auto;T.cur=bp;T.sel=best;T.lastTap=null;T.drag=null;draw();drawPanel();toast(`${OP_JA[best]}を${p2.h?'隠しました':'見えるに戻しました'}`);return;}
       T.lastTap={i:best,p:bp,t:now};
-      if(bp!==T.cur){T.cur=bp;}T.sel=best;T.drag={k:T.mode==='all'||(T.lock&&best===1)?'all':(!T.faceOne&&[0,14,15,16,17].includes(best))?'head':'pt',x:q.x,y:q.y};}
-    else T.drag={k:'pan',cx:e.clientX,cy:e.clientY,vb:Object.assign({},T.vb)};
+      if(bp!==T.cur){T.cur=bp;}T.sel=best;mark();
+      /* 顔の点：固定していれば頭ごと（首を軸に回す）、固定していなければその点だけ自由に */
+      const isF=FACE.includes(best);T.drag={k:T.mode==='all'||(T.lock&&best===1)?'all':isF?(faceLocked(bp)?'head':'fpt'):'pt',x:q.x,y:q.y};}
+    else{/* 顔のパーツを動かせるときは、丸の中をなぞると丸が動く */
+      const f=faceOf(T.cur),c=faceCenter(T.cur);
+      if(f.lock===false&&T.tab==='pt'&&Math.hypot(q.x-c.x,q.y-c.y)<f.r){mark();T.drag={k:'sphere',x:q.x,y:q.y};}
+      else T.drag={k:'pan',cx:e.clientX,cy:e.clientY,vb:Object.assign({},T.vb)};}
     st.setPointerCapture(e.pointerId);draw();drawPanel();});
-  st.addEventListener('pointermove',e=>{const d=T.drag;if(!d)return;
+  st.addEventListener('pointermove',e=>{if(ptrs.has(e.pointerId))ptrs.set(e.pointerId,{x:e.clientX,y:e.clientY});if(pinch&&ptrs.size>=2){pinchMove();return;}
+    const d=T.drag;if(!d)return;
+    if(d.k==='sphere'){const q=toImg(e),f=faceOf(T.cur);f.cx+=q.x-d.x;f.cy+=q.y-d.y;d.x=q.x;d.y=q.y;draw();return;}
+    if(d.k==='fpt'){const q=toImg(e),p2=P()[T.sel];p2.x=q.x;p2.y=q.y;draw();return;}
     if(d.k==='box'){const q=toImg(e),x=Math.max(0,Math.min(q.x,d.x0)),y=Math.max(0,Math.min(q.y,d.y0));T.box={x,y,w:Math.min(T.W,Math.max(q.x,d.x0))-x,h:Math.min(T.H,Math.max(q.y,d.y0))-y};draw();return;}
     if(d.k==='pan'){const r=svg.getBoundingClientRect(),v=d.vb;const nx=v.x-(e.clientX-d.cx)/r.width*v.w,ny=v.y-(e.clientY-d.cy)/r.height*v.h;T.vb.x=Math.min(Math.max(0,nx),T.W-v.w);T.vb.y=Math.min(Math.max(0,ny),T.H-v.h);draw();return;}
     const q=toImg(e);
@@ -3222,7 +3295,8 @@ function openOpTrace(o){
       const k=P(),J=T.sel,A=k[OP_PAR[J]],B=k[J];const a=Math.atan2(q.y-A.y,q.x-A.x)-Math.atan2(B.y-A.y,B.x-A.x),c=Math.cos(a),s=Math.sin(a);
       for(const i of opSub(J)){const p2=k[i],rx=p2.x-A.x,ry=p2.y-A.y;p2.x=A.x+rx*c-ry*s;p2.y=A.y+rx*s+ry*c;}draw();return;}
     if(d.k==='pt'){const p2=P()[T.sel];p2.x=q.x;p2.y=q.y;}else{const dx=q.x-d.x,dy=q.y-d.y;for(const p2 of P()){p2.x+=dx;p2.y+=dy;}d.x=q.x;d.y=q.y;}draw();});
-  const end=()=>{if(T.drag){const k=T.drag.k;T.drag=null;
+  const end=e=>{if(e&&e.pointerId!=null)ptrs.delete(e.pointerId);if(pinch){if(ptrs.size<2){pinch=null;T.drag=null;}return;}
+    if(T.drag){const k=T.drag.k;T.drag=null;
       if(k==='box'){const b=T.box;if(!b||b.w<T.W*.03||b.h<T.H*.03){T.box=null;draw();return toast('もう少し大きく囲んでください');}runAI('one',b);return;}
       if(k!=='pan')drawPanel();}};st.addEventListener('pointerup',end);st.addEventListener('pointercancel',end);
   /* 画像を敷く。点は、前の画像の中での位置の割合のまま移す */
@@ -3237,7 +3311,7 @@ function openOpTrace(o){
   poseAIHas().then(h=>{if(!T.img)amsg.textContent=h?'画像を選ぶと使えます（AI のデータは入っています）。':`画像を選ぶと使えます（はじめての1回だけ、AI のデータ 約${POSE_AI.mb}MB を読み込みます）。`;});
   const aiBtns=()=>[abtn,$('#optAutoOne',el),$('#optAutoBox',el)];
   /* kind：'all'＝画像の全員／'one'＝box の所の1人を、選んでいる人物（T.cur）に入れる */
-  const runAI=async(kind,box)=>{if(!T.img){T.box=null;draw();return toast('先に画像を選んでください');}
+  const runAI=async(kind,box)=>{if(!T.img){T.box=null;draw();return toast('先に画像を選んでください');}mark();
     const has=await poseAIHas();
     if(!has&&!confirm(`関節を見つける AI のデータ（約${POSE_AI.mb}MB）を読み込みます。
 
@@ -3249,11 +3323,11 @@ function openOpTrace(o){
       const hidN=k=>k.filter(q=>q.h).length;
       if(kind==='all'){
         if(!L.length){amsg.textContent='人物を見つけられませんでした。「囲んで合わせる」で1人ずつ試すか、手で合わせてください。';toast('人物を見つけられませんでした');}
-        else{T.people=L;T.body=[];T.cur=0;T.sel=null;const hid=L.reduce((a,k)=>a+hidN(k),0);
+        else{T.people=L;T.body=[];T.face=[];T.cur=0;T.sel=null;const hid=L.reduce((a,k)=>a+hidN(k),0);
           amsg.textContent=`人物を ${L.length} 人見つけました（左から 人物1・人物2…）。${hid?`見つけられなかった点（${hid}個）は「隠す」にしてあります。`:''}ずれている人物は、その人物を選んで「選んでいる人物だけ」か「囲んで合わせる」で合わせ直せます。`;toast(`人物を ${L.length} 人見つけました`);}
       }else{
         if(!L.length){amsg.textContent='その所に人物を見つけられませんでした。人物の全身が入るように、少し大きく囲んでみてください。';toast('人物を見つけられませんでした');}
-        else{T.people[T.cur]=L[0];T.sel=null;const hid=hidN(L[0]);amsg.textContent=`人物${T.cur+1}を合わせました。${hid?`見つけられなかった点（${hid}個）は「隠す」にしてあります。`:''}ずれている点は指で直してください。`;toast(`人物${T.cur+1}を合わせました`);}
+        else{T.people[T.cur]=L[0];T.face[T.cur]=null;T.sel=null;const hid=hidN(L[0]);amsg.textContent=`人物${T.cur+1}を合わせました。${hid?`見つけられなかった点（${hid}個）は「隠す」にしてあります。`:''}ずれている点は指で直してください。`;toast(`人物${T.cur+1}を合わせました`);}
       }
     }catch(e){amsg.textContent='AI を使えませんでした（インターネットにつながっているか確かめてください）。';toast('AI を使えませんでした');}
     finally{aiBtns().forEach(b=>b.disabled=!T.img);T.box=null;T.mode='pt';draw();drawPanel();}};
@@ -3269,13 +3343,13 @@ function openOpTrace(o){
   $$('[data-oi]',el).forEach(b=>b.onclick=async()=>{const r=await dbGet('images',b.dataset.oi);if(r&&r.blob)setImg(r.blob,r.name||'シーンの画像');});
   /* 長さの固定 */
   $('#optFlesh',el).onchange=e=>{T.flesh=e.target.checked;draw();drawPanel();};
-  $('#optFaceOne',el).onchange=e=>{T.faceOne=e.target.checked;draw();};
+  $('#optUndo',el).onclick=undo;
   $('#optAutoHide',el).onchange=e=>{T.autoHide=e.target.checked;if(!T.autoHide)T.people.forEach((k,i)=>opAutoHide(k,bodyOf(i),false));draw();drawPanel();toast(T.autoHide?'体の後ろの点を自動で隠します':'自動で隠すのをやめました');};
   /* 体の向き・傾き。バーを動かしている間は、動かしはじめの形から回す */
   const turn=(k,deg,roll)=>{const c=k[1],a=deg*Math.PI/180,co=Math.cos(a),si=Math.sin(a);const cz=c.z||0;
     for(const q of k){const dx=q.x-c.x,dz=(q.z||0)-cz,dy=q.y-c.y;if(roll){q.x=c.x+dx*co-dy*si;q.y=c.y+dx*si+dy*co;}else{/* ＋は画像の右を向く方へ回す */q.x=c.x+dx*co+dz*si;q.z=cz-dx*si+dz*co;}}
     if(!roll)opFaceVis(k);};
-  const rotIn=(id,roll)=>{const r=$(id,el);r.oninput=()=>{if(!T.rb||T.rb.pi!==T.cur)T.rb={pi:T.cur,pts:JSON.parse(JSON.stringify(P()))};
+  const rotIn=(id,roll)=>{const r=$(id,el);r.oninput=()=>{if(!T.rb||T.rb.pi!==T.cur){mark();T.rb={pi:T.cur,pts:JSON.parse(JSON.stringify(P()))};}
       const k=JSON.parse(JSON.stringify(T.rb.pts));turn(k,+r.value,roll);T.people[T.cur]=k;draw();};
     r.onchange=()=>{T.rb=null;r.value=0;drawPanel();};};
   rotIn('#optYaw',false);rotIn('#optRoll',true);
@@ -3298,12 +3372,12 @@ function openOpTrace(o){
     if(Math.hypot(nx,ny)<.16)return[0,0];let ty=Math.max(-1,Math.min(1,nx/.82))*100,tp=Math.max(-1,Math.min(1,-ny/.82))*60;
     /* 正面・真横・真上下の近くは、ぴったりに吸い付く */
     if(Math.abs(ty)<6)ty=0;if(Math.abs(tp)<5)tp=0;return[ty,tp];};
-  fpad.addEventListener('pointerdown',e=>{fb={k:JSON.parse(JSON.stringify(P())),f:faceNow(P()),rect:fpad.getBoundingClientRect()};fpad.setPointerCapture(e.pointerId);const[ty,tp]=faceAt(e);setFaceTo(fb,ty,tp);draw();drawFace();});
+  fpad.addEventListener('pointerdown',e=>{mark();fb={k:JSON.parse(JSON.stringify(P())),f:faceNow(P()),rect:fpad.getBoundingClientRect()};fpad.setPointerCapture(e.pointerId);const[ty,tp]=faceAt(e);setFaceTo(fb,ty,tp);draw();drawFace();});
   fpad.addEventListener('pointermove',e=>{if(!fb)return;const[ty,tp]=faceAt(e);setFaceTo(fb,ty,tp);draw();drawFace();});
   const fend=()=>{if(fb){fb=null;drawPanel();}};fpad.addEventListener('pointerup',fend);fpad.addEventListener('pointercancel',fend);
-  $('#optFace0',el).onclick=()=>{setFaceTo({k:JSON.parse(JSON.stringify(P())),f:faceNow(P())},0,0);draw();drawPanel();toast('顔を正面に向けました');};
+  $('#optFace0',el).onclick=()=>{mark();setFaceTo({k:JSON.parse(JSON.stringify(P())),f:faceNow(P())},0,0);draw();drawPanel();toast('顔を正面に向けました');};
   /* 左右対称：反対側の腕（脚）の形を、体のまん中の線（首〜腰のまん中）で折り返して写す。隠す・見えるもそろえる */
-  $$('[data-omir]',el).forEach(b=>b.onclick=()=>{const k=P(),m=b.dataset.omir,arm=m.endsWith('Arm'),toR=m[0]==='r';
+  $$('[data-omir]',el).forEach(b=>b.onclick=()=>{mark();const k=P(),m=b.dataset.omir,arm=m.endsWith('Arm'),toR=m[0]==='r';
     const R0=arm?[2,3,4]:[8,9,10],L0=arm?[5,6,7]:[11,12,13],[dst,src]=toR?[R0,L0]:[L0,R0];
     const n=k[1],hp=k[8]&&k[11]?{x:(k[8].x+k[11].x)/2,y:(k[8].y+k[11].y)/2}:{x:n.x,y:n.y+1};let dx=hp.x-n.x,dy=hp.y-n.y;const dl=Math.hypot(dx,dy)||1;dx/=dl;dy/=dl;
     /* 付け根（肩・腰）も、首を通るまん中の線で折り返す → 肩幅・腰幅がそろう */
@@ -3313,18 +3387,18 @@ function openOpTrace(o){
     draw();drawPanel();toast(`${arm?'上半身':'下半身'}の${toR?'右':'左'}を反対側に合わせました`);});
   $$('.optInh',el).forEach(c=>c.onchange=()=>{T.inherit=c.checked;$$('.optInh',el).forEach(x=>x.checked=T.inherit);toast(T.inherit?'体格を引き継ぎます':'見本の体格で呼び出します');});
   $('#optWLock',el).onchange=e=>{T.wlock=e.target.checked;toast(T.wlock?'肩幅・腰幅を固定しました':'肩幅・腰幅を変えられるようにしました');};
-  $('#optHeadBody',el).onclick=()=>{const k=P(),t=opTorso(k,bodyOf(T.cur)),h=opHeadYaw(k);if(!t||h==null)return toast('奥行きがないので、そろえられません');
+  $('#optHeadBody',el).onclick=()=>{const k=P(),t=opTorso(k,bodyOf(T.cur)),h=opHeadYaw(k);if(!t||h==null)return toast('奥行きがないので、そろえられません');mark();
     let dd=(t.th-h)*180/Math.PI;dd=((dd+540)%360)-180;opHeadTurn(k,dd);draw();drawPanel();toast('顔の向きを体にそろえました');};
-  $$('[data-oy]',el).forEach(b=>b.onclick=()=>{turn(P(),+b.dataset.oy,false);draw();drawPanel();});
+  $$('[data-oy]',el).forEach(b=>b.onclick=()=>{mark();turn(P(),+b.dataset.oy,false);draw();drawPanel();});
   /* ポーズの見本（65種類）から始める：今の人物の位置・大きさに合わせて置きかえる */
   let preGrp=PIC_GROUPS[0][0];
   const drawPre=()=>{const box=$('#optPre',el);box.innerHTML=picGroupTabs(preGrp,0)+`<div class="tgs">${picGroupKeys(preGrp,[]).map(k=>`<button type="button" class="tg" data-opre="${esc(k)}">${esc(picPoseName(k))}</button>`).join('')}</div><p class="hint" style="margin:6px 0 0">人物${T.cur+1}に入ります（位置は今の人物の首に合わせます）。</p>`;
     $$('[data-pgrp]',box).forEach(b=>b.onclick=()=>{preGrp=b.dataset.pgrp;drawPre();});
-    $$('[data-opre]',box).forEach(b=>b.onclick=()=>{const key=b.dataset.opre,old=P(),n=opDefault(T.W,T.H,picSkelOf(key));
+    $$('[data-opre]',box).forEach(b=>b.onclick=()=>{mark();const key=b.dataset.opre,old=P(),n=opDefault(T.W,T.H,picSkelOf(key));
       const box2=k=>{const q=k.filter(x=>!x.h);const ys=q.map(x=>x.y);return Math.max(1,Math.max(...ys)-Math.min(...ys));};
       const f=box2(old)/box2(n),c0=old[1],c1=n[1];for(const q of n){q.x=c0.x+(q.x-c1.x)*f;q.y=c0.y+(q.y-c1.y)*f;q.z=(q.z||0)*f;}
-      /* 体格を引き継ぐ（オフなら、肉付きもふつうに戻す） */
-      if(T.inherit)opInherit(old,n);else T.body[T.cur]=null;
+      /* 体格を引き継ぐ（オフなら、肉付き・頭の大きさもふつうに戻す） */
+      if(T.inherit)opInherit(old,n);else{T.body[T.cur]=null;T.face[T.cur]=null;}
       T.people[T.cur]=n;T.sel=null;
       /* タグ（プロンプト）も入れる。前に見本から入れたタグは入れかえる */
       const ti=$('#optTags',el),tg=picPoseTags(key),cur=splitTags(ti.value).filter(t=>!T.preTags.includes(t));ti.value=uniq([...cur,...tg]).join(', ');T.preTags=tg;
@@ -3334,7 +3408,7 @@ function openOpTrace(o){
   $('#optLock',el).onchange=e=>{T.lock=e.target.checked;toast(T.lock?'手足・胴の長さを固定しました':'長さを自由に変えられるようにしました');};
   /* OpenPose の部品として保存。点は 0〜1 の割合、画像は長い辺 1600px の JPEG（画像がなければ棒人形の絵）を p.img にしまう */
   const savePart=async asNew=>{const name=$('#optName',el).value.trim();if(!name){$('#optName',el).focus();return toast('名前を入れてください');}
-    const op={W:Math.round(T.W),H:Math.round(T.H),out:T.out,hasImg:!!T.img,body:T.people.map((_,i)=>T.body[i]?bodyOf(i):null),people:T.people.map(k=>k.map(q=>({x:+(q.x/T.W).toFixed(5),y:+(q.y/T.H).toFixed(5),z:+((q.z||0)/T.W).toFixed(5),h:q.h?1:0,...(q.auto?{a:1}:{}),...(q.man?{m:1}:{})}))),autoHide:T.autoHide};
+    const op={W:Math.round(T.W),H:Math.round(T.H),out:T.out,hasImg:!!T.img,body:T.people.map((_,i)=>T.body[i]?bodyOf(i):null),people:T.people.map(k=>k.map(q=>({x:+(q.x/T.W).toFixed(5),y:+(q.y/T.H).toFixed(5),z:+((q.z||0)/T.W).toFixed(5),h:q.h?1:0,...(q.auto?{a:1}:{}),...(q.man?{m:1}:{})}))),autoHide:T.autoHide,face:T.people.map((_,i)=>T.face[i]||null)};
     const old=T.partId&&!asNew?byId('parts',T.partId):null;
     let img;if(T.img&&T.imgBlob)img=(old&&old.img===T.imgBlob)?T.imgBlob:await opShrink(T.imgBlob,1600);
     else img=await new Promise(r=>opRender(Object.assign({},T,{out:'img'})).toBlob(r,'image/png'));
@@ -3355,7 +3429,7 @@ function openOpTrace(o){
   $$('[data-ops]',el).forEach(b=>b.onclick=()=>{const p=byId('parts',b.dataset.ops);if(!p)return;$$('[data-ops]',el).forEach(x=>x.classList.toggle('on',x===b));
     const n=((p.op||{}).people||[]).length;
     $('#optPick',el).innerHTML=`<p class="hint" style="margin:6px 0 4px"><b>${esc(p.name||'名前なし')}</b>（人物 ${n} 人）を</p><div class="row" style="margin:0"><button type="button" class="btn sm" data-opk="rep">人物を置きかえて呼び出す</button><button type="button" class="btn ghost sm" data-opk="add">人物を足して呼び出す</button><button type="button" class="btn ghost sm" data-opk="open">この部品を開いて直す</button></div>`;
-    $$('[data-opk]',el).forEach(x=>x.onclick=()=>{const k=x.dataset.opk;
+    $$('[data-opk]',el).forEach(x=>x.onclick=()=>{const k=x.dataset.opk;if(k!=='open')mark();
       if(k==='open'){history.back();setTimeout(()=>openOpTrace({part:p,onDone:o.onDone}),60);return;}
       const L=takePeople(p);if(!L.length)return toast('人物が入っていません');
       /* 体格を引き継ぐ：呼び出した人物 j に、今の人物 j の長さを使う（足すときは今選んでいる人物の長さ）。肉付きも今のまま */
