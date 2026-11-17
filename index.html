@@ -75,6 +75,26 @@ nav#tabs button.on{color:var(--acc);font-weight:700}
 .optimgs img{width:100%;height:100%;object-fit:cover;display:block}
 .optimgs button{position:relative;font-size:22px}
 .optimgs button small{position:absolute;left:0;right:0;bottom:0;font-size:9px;line-height:1.5;background:rgba(0,0,0,.6);color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding:0 2px}
+.optsticky{position:sticky;top:0;z-index:3;background:var(--bg);padding:0 0 2px;margin:0 -2px}
+.optstage{max-height:50vh;max-height:50dvh}
+.optbar{display:flex;align-items:center;gap:4px;overflow-x:auto;margin:4px 0;padding-bottom:2px}
+.optbar .ico{flex:0 0 auto;width:36px;height:32px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:inherit;font-size:16px}
+.optbar .tgs{flex-wrap:nowrap;margin:0}
+.optbar .tg{flex:0 0 auto}
+.optsep{flex:0 0 1px;height:22px;background:var(--line);margin:0 4px}
+.opttabs{margin:0}
+.opttabs button{font-size:13px;padding-left:4px;padding-right:4px}
+.optpane{padding:8px 0 4px}
+.opthd{margin:0 0 6px}
+.switch.sm span{font-size:13px}
+.obody{border:1px solid var(--line);border-radius:10px;padding:6px 10px;margin:4px 0 6px}
+.obh{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:0 0 4px}
+.obsex{margin:0}
+.obsex button{padding:4px 14px}
+.obrow{display:flex;align-items:center;gap:8px;font-size:13px;margin:0 0 2px}
+.obrow span{flex:0 0 2.6em}
+.obrow input{flex:1;min-width:0}
+.obrow b{flex:0 0 2.6em;text-align:right;font-weight:600;font-size:12px}
 .optrot{border:1px solid var(--line);border-radius:10px;padding:8px 10px;margin:8px 0}
 .optrot label{display:flex;align-items:center;gap:8px;font-size:13px;margin:0 0 6px}
 .optrot label span{flex:0 0 7.5em}
@@ -496,7 +516,7 @@ const FMT={
 
 /* ========== データベース（IndexedDB） ========== */
 let db=null;
-const APP_VER='v59';/* sw.js の VERSION と同じにする */
+const APP_VER='v64';/* sw.js の VERSION と同じにする */
 const STORES=['parts','scenes','works','images','meta','fonts','stamps'];
 function openDB(){return new Promise((res,rej)=>{const r=indexedDB.open('manga4koma',3);r.onupgradeneeded=()=>{const d=r.result;for(const s of STORES)if(!d.objectStoreNames.contains(s))d.createObjectStore(s,{keyPath:'id'});};r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error);});}
 function tx(store,mode,fn){return new Promise((res,rej)=>{if(!db)return res(undefined);const t=db.transaction(store,mode);const req=fn(t.objectStore(store));let out;if(req)req.onsuccess=()=>{out=req.result;};t.oncomplete=()=>res(out);t.onerror=()=>rej(t.error);t.onabort=()=>rej(t.error);});}
@@ -802,12 +822,12 @@ function dupScan(sc){
   const addIds=(ids,rm,scope,pre)=>{for(const id of ids)if(id)for(const t of T_(id))if(!rm.has(norm(t)))src.push({t,label:pre+lab(id),scope});};
   const addT=(tags,label,rm,scope)=>{for(const t of tags)if(!rm.has(norm(t)))src.push({t,label,scope});};
   for(const l of sc.loras||[])addIds([l.id],new Set(),'g','');
-  const multi=(sc.chars||[]).length>1,PIC=picTags(sc);
+  const multi=(sc.chars||[]).length>1,PIC=picTags(sc),OPA=opAutoScene(sc);
   (sc.chars||[]).forEach((sl,i)=>{const rm=new Set(splitTags(sl.remove).map(norm)),scope=fmt==='group'?'s'+i:'g',pre=multi?`人物${i+1}の`:'';
-    addIds([sl.chara,...(sl.phys||[]),...A_(sl.outfit),...A_(sl.action),...(sl.act||[]),sl.face,...(sl.body||[]),...(sl.other||[])],rm,scope,pre);addT(splitTags(sl.add),pre+'足すタグ',rm,scope);addT(PIC.per[i]||[],pre+'向き・位置',rm,scope);});
+    addIds([sl.chara,...(sl.phys||[]),...A_(sl.outfit),...A_(sl.action),...(sl.act||[]),sl.face,...(sl.body||[]),...(sl.other||[])],rm,scope,pre);addT(splitTags(sl.add),pre+'足すタグ',rm,scope);addT(PIC.per[i]||[],pre+'向き・位置',rm,scope);addT(OPA.per[i]||[],pre+'OpenPose（自動）',rm,scope);});
   const srm=new Set(splitTags(sc.remove).map(norm));
   addIds([...(sc.inter||[]),sc.bg,...(sc.angle||[]),sc.camera,sc.light,...(sc.fx||[]),...(sc.np||[]),...(sc.other||[]),sc.openpose,sc.style],srm,'g','');
-  addT(splitTags(sc.add),'足すタグ（人物以外）',srm,'g');addT(PIC.scene,'向き・位置',srm,'g');
+  addT(splitTags(sc.add),'足すタグ（人物以外）',srm,'g');addT(PIC.scene,'向き・位置',srm,'g');addT(OPA.scene,'OpenPose（自動）',srm,'g');
   const nsrc=[];const negOf=(id,suf)=>{const p=P_(id);if(p)for(const t of splitTags(p.neg))nsrc.push({t,label:lab(id)+suf});};
   if(sc.style)negOf(sc.style,'のネガティブ');for(const id of sc.np||[])negOf(id,'のネガティブ');for(const t of splitTags(sc.neg))nsrc.push({t,label:'ネガティブに足すタグ'});
   const wt=t=>{const w=parseTag(t).w;return w!=null?`（${w}）`:'';};
@@ -846,8 +866,9 @@ function buildPrompt0(sc,D){
   const slots=(sc.chars||[]).map(sl=>slotInfo(sl));
   const srm=splitTags(sc.remove);
   /* ピクトグラムで決めた向き・位置のタグ */
-  const PIC=picTags(sc);slots.forEach((s,i)=>s.pic=uniq(PIC.per[i]||[],[...s.rm,...s.feat,...s.phys,...s.out,...s.pose,...s.act,...s.face,...s.body,...s.other,...s.add]));const picS=uniq(PIC.scene,srm);
-  const inter=uniq((sc.inter||[]).flatMap(T_),srm),bg=uniq(T_(sc.bg),srm),ang=uniq((sc.angle||[]).flatMap(T_),srm),cam=uniq(T_(sc.camera),srm),lit=uniq(T_(sc.light),srm),fx=uniq((sc.fx||[]).flatMap(T_),srm),npP=uniq((sc.np||[]).flatMap(T_),srm),add=uniq(splitTags(sc.add),srm),oth=uniq((sc.other||[]).flatMap(T_),srm),opT=uniq(T_(sc.openpose),srm),style=uniq(T_(sc.style),srm);
+  const OPA=opAutoScene(sc);
+  const PIC=picTags(sc);slots.forEach((s,i)=>s.pic=uniq(PIC.per[i]||[],[...s.rm,...s.feat,...s.phys,...s.out,...s.pose,...s.act,...s.face,...s.body,...s.other,...s.add]));slots.forEach((s,i)=>s.opa=uniq(OPA.per[i]||[],[...s.rm,...s.feat,...s.phys,...s.out,...s.pose,...s.act,...s.face,...s.body,...s.other,...s.add,...s.pic]));const picS=uniq(PIC.scene,srm);
+  const inter=uniq((sc.inter||[]).flatMap(T_),srm),bg=uniq(T_(sc.bg),srm),ang=uniq((sc.angle||[]).flatMap(T_),srm),cam=uniq(T_(sc.camera),srm),lit=uniq(T_(sc.light),srm),fx=uniq((sc.fx||[]).flatMap(T_),srm),npP=uniq((sc.np||[]).flatMap(T_),srm),add=uniq(splitTags(sc.add),srm),oth=uniq((sc.other||[]).flatMap(T_),srm),opT=uniq([...T_(sc.openpose),...OPA.scene],srm),style=uniq(T_(sc.style),srm);
   const loras=[],trig=[];
   for(const l of sc.loras||[]){
     const p=P_(l.id);if(!p)continue;
@@ -861,7 +882,7 @@ function buildPrompt0(sc,D){
      人物が2人以上のときだけ、人物のタグに番号を付けて、人物ごとに重みを付けられるようにする */
   const multi=slots.length>1;
   const I=(arr,cat,si)=>arr.map(t=>({t,cat,si:multi?si:null,p:si}));
-  const slotItems=(s,i)=>[...I(s.feat,'chara',i),...I(s.phys,'phys',i),...I(s.out,'outfit',i),...I(s.pose,'action',i),...I(s.act,'act',i),...I(s.face,'face',i),...I(s.body,'body',i),...I(s.other,'other',i),...I(s.add,'add',i),...I(s.pic,'pic',i)];
+  const slotItems=(s,i)=>[...I(s.feat,'chara',i),...I(s.phys,'phys',i),...I(s.out,'outfit',i),...I(s.pose,'action',i),...I(s.act,'act',i),...I(s.face,'face',i),...I(s.body,'body',i),...I(s.other,'other',i),...I(s.add,'add',i),...I(s.pic,'pic',i),...I(s.opa,'openpose',i)];
   const restItems=()=>[...I(inter,'inter'),...I(picS,'pic'),...I(bg,'bg'),...I(ang,'angle'),...I(opT,'openpose'),...I(add,'add'),...I(oth,'other'),...I(cam,'camera'),...I(lit,'light'),...I(fx,'fx'),...I(npP,'np'),...I(style,'style')];
   /* uniq と同じ決まりで、同じタグを1つにする（重複の欄で「残す」にしたものは残す） */
   const uniqI=arr=>{const seen=new Set();return arr.filter(x=>{const k=norm(x.t);if(seen.has(k)&&!(KEEP&&KEEP.has(k)))return false;seen.add(k);return true;});};
@@ -888,7 +909,7 @@ function buildPrompt0(sc,D){
   if(fmt==='prose'){
     /* 文章の形では重みを使わない（PixAI の DiT ガイドで、(tag:1.2) は効かないとされているため） */
     const B=a=>a.map(baseOf);
-    for(const s of slots)for(const k of['feat','phys','out','pose','act','face','body','other','add','pic'])s[k]=B(s[k]);
+    for(const s of slots)for(const k of['feat','phys','out','pose','act','face','body','other','add','pic','opa'])s[k]=B(s[k]);
     trig.splice(0,trig.length,...B(trig));
     for(const a of[inter,bg,ang,cam,lit,fx,npP,add,oth,opT,style])a.splice(0,a.length,...B(a));
     /* 文章（Tsubaki 系） */
@@ -897,7 +918,7 @@ function buildPrompt0(sc,D){
     const head=s=>TX_(s.sl.chara)||`${art(s.subj)} ${s.subj}${s.feat.length?' with '+s.feat.join(', '):''}`;
     const details=s=>{const d=[];const ph=(s.sl.phys||[]).map(id=>TX_(id)||uniq(T_(id),s.rm).map(baseOf).join(', ')).filter(Boolean).join(', ');if(ph)d.push(ph);const oTx=A_(s.sl.outfit).map(TX_).filter(Boolean);const o=oTx.length?oTx.join(', '):s.out.join(', ');if(o)d.push(/^wear/i.test(o)?o:'wearing '+o);
       const pTx=A_(s.sl.action).map(TX_).filter(Boolean);const pz=pTx.length?pTx.join(', '):s.pose.join(', ');if(pz)d.push(pz);const ac=(s.sl.act||[]).map(id=>TX_(id)||uniq(T_(id),s.rm).join(', ')).filter(Boolean).join(', ');if(ac)d.push(ac);const fc=TX_(s.sl.face)||s.face.join(', ');if(fc)d.push(fc);
-      const bd=(s.sl.body||[]).map(id=>TX_(id)||uniq(T_(id),s.rm).join(', ')).filter(Boolean).join(', ');if(bd)d.push(bd);if(s.other.length)d.push(s.other.join(', '));if(s.add.length)d.push(s.add.join(', '));if(s.pic.length)d.push(s.pic.join(', '));return d;};
+      const bd=(s.sl.body||[]).map(id=>TX_(id)||uniq(T_(id),s.rm).join(', ')).filter(Boolean).join(', ');if(bd)d.push(bd);if(s.other.length)d.push(s.other.join(', '));if(s.add.length)d.push(s.add.join(', '));if(s.pic.length)d.push(s.pic.join(', '));if(s.opa.length)d.push(s.opa.join(', '));return d;};
     if(slots.length===1){const s=slots[0];S2.push(sent([head(s),...details(s)].join(', ')));}
     else if(slots.length>1){
       S2.push(sent(`${NUMW[slots.length]||slots.length} characters: `+slots.map(s=>`${art(s.subj)} ${s.subj}`).join(' and ')));
@@ -1404,7 +1425,7 @@ function vScene(c){
     const imgs=sc.images;S.scenes=S.scenes.filter(x=>x.id!==sc.id);await dbDel('scenes',sc.id);markDeleted(sc.id);for(const id of imgs)await deleteImageIfUnused(id);goBack();};
 }
 /* 画像ごとに、そのときのプロンプトの設定を記録する */
-const SNAP_KEYS=['chars','inter','angle','fx','np','other','openpose','bg','camera','light','style','loras','add','remove','neg','weights','dups','pic'];
+const SNAP_KEYS=['chars','inter','angle','fx','np','other','openpose','opAuto','bg','camera','light','style','loras','add','remove','neg','weights','dups','pic'];
 const snapDef=k=>(k==='chars'||k==='inter'||k==='angle'||k==='fx'||k==='np'||k==='other'||k==='loras')?[]:(k==='weights'||k==='dups')?{}:k==='pic'?null:'';
 const snapVal=(o,k)=>JSON.parse(JSON.stringify(o[k]??snapDef(k)));
 function recordSnap(sc,id){sc.imgMeta=sc.imgMeta||{};const snap={};for(const k of SNAP_KEYS)snap[k]=snapVal(sc,k);const p=buildPrompt(sc);sc.imgMeta[id]={snap,pos:p.pos,neg:p.neg,loras:p.loras,fmt:p.fmt,at:Date.now()};}
@@ -2860,16 +2881,96 @@ function opDefault(W,H,P){const t={title:'pose',chars:[{pic:Object.assign(picNew
   return opFromKps(picOpKps(t,{i:0,P:P||picSkelOf('stand')},true),W,H)[0];}
 /* 肉付け：棒人形に、だいたいの体を重ねる（見るためだけ。保存する画像には入らない）。
    太さは肩幅（なければ腰幅・胴の長さ）をもとに決める。数字を変えると太さが変わる */
-const OP_FLESH=[[2,3,.44],[3,4,.36],[5,6,.44],[6,7,.36],[8,9,.6],[9,10,.44],[11,12,.6],[12,13,.44],[1,0,.34]];
-function opFleshSVG(k){const v=i=>k[i]&&!k[i].h,D=(a,b)=>Math.hypot(k[a].x-k[b].x,k[a].y-k[b].y);
-  let u=v(2)&&v(5)?D(2,5):v(8)&&v(11)?D(8,11)*1.35:v(1)&&(v(8)||v(11))?D(1,v(8)?8:11)*.55:0;if(!u)return'';u=Math.max(u,1);
-  let h=`<g opacity=".62" fill="#ffd2b0" stroke="#ffd2b0" stroke-linecap="round" stroke-linejoin="round">`;
-  const tor=[2,5,11,8].filter(v);if(tor.length>=3)h+=`<polygon points="${tor.map(i=>k[i].x+','+k[i].y).join(' ')}" stroke-width="${u*.4}"/>`;
-  else if(v(1)&&(v(8)||v(11))){const b=v(8)?8:11;h+=`<line x1="${k[1].x}" y1="${k[1].y}" x2="${k[b].x}" y2="${k[b].y}" stroke-width="${u*.8}"/>`;}
-  for(const[a,b,w]of OP_FLESH)if(v(a)&&v(b))h+=`<line x1="${k[a].x}" y1="${k[a].y}" x2="${k[b].x}" y2="${k[b].y}" stroke-width="${u*w}"/>`;
-  if(v(0)){const r=Math.max(u*.45,v(1)?D(0,1)*.62:0);let cx=k[0].x,cy=k[0].y;if(v(14)&&v(15)){cx=(k[14].x+k[15].x+k[0].x)/3;cy=(k[14].y+k[15].y+k[0].y)/3-r*.15;}h+=`<circle cx="${cx}" cy="${cy}" r="${r}" stroke-width="0"/>`;}
-  else if(v(16)||v(17)){const e=v(16)?16:17,r=u*.38;h+=`<circle cx="${k[e].x}" cy="${k[e].y-r*.2}" r="${r}" stroke-width="0"/>`;}
+/* 肉付けの体つき：人物ごとに {sex:'f'（女性）|'m'（男性）, all（全体）, arm（腕）, leg（脚）, torso（胴）, chest（胸・女性）, head（頭）}。1＝ふつう */
+const OP_BODY0={sex:'f',all:1,arm:1,leg:1,torso:1,chest:1,head:1};
+/* 太さの目安（肩幅を1として）。dS・dW・dH は胸・腰のくびれ・お尻の前後の厚み。数字を変えると、ふつうの太さが変わる。
+   col は体の前の面、colB は後ろの面の色（向きを変えたとき、どちらが前かわかるように） */
+const OP_FLESH={
+  f:{arm:[.40,.32],leg:[.64,.44],neck:.30,shOut:.06,waist:.60,hip:1.3,chest:.25,head:.47,dS:.40,dW:.34,dH:.46,col:'#ffcdb2',colB:'#9c6f60'},
+  m:{arm:[.52,.42],leg:[.62,.46],neck:.42,shOut:.14,waist:.88,hip:1.0,chest:0,head:.44,dS:.48,dW:.42,dH:.42,col:'#e8b48f',colB:'#7d5a43'}};
+/* 胴の形（奥行きも入れて、向きに合わせて幅を出す）。肩・腰の点は、隠していても形に使う。
+   th：体の向き（0＝こちら向き、＋は画像の右を向く）。W：本当の肩幅。cz：胴の奥行きの真ん中 */
+function opTorso(k,b,shrink){b=Object.assign({},OP_BODY0,b||{});const F=OP_FLESH[b.sex==='m'?'m':'f'],wt=b.torso*b.all*(shrink||1);
+  const S1=k[2],S2=k[5],H1=k[8],H2=k[11];if(!S1||!S2||!H1||!H2)return null;
+  const z=q=>q.z||0,N={x:(S1.x+S2.x)/2,y:(S1.y+S2.y)/2,z:(z(S1)+z(S2))/2},Hm={x:(H1.x+H2.x)/2,y:(H1.y+H2.y)/2,z:(z(H1)+z(H2))/2};
+  const tl=Math.hypot(Hm.x-N.x,Hm.y-N.y)||1,d={x:(Hm.x-N.x)/tl,y:(Hm.y-N.y)/tl},n={x:d.y,y:-d.x};
+  /* 肩の傾き（上げ下げ）でも細くならないよう、肩幅は縦の差も入れて測り、向きは胴に直角な向きの成分で決める */
+  const sx=S2.x-S1.x,sy=S2.y-S1.y,sz=z(S2)-z(S1),ln=sx*n.x+sy*n.y,hasZ=[S1,S2,H1,H2].some(q=>Math.abs(z(q))>1e-6);
+  let W,th;
+  if(hasZ){W=Math.max(Math.hypot(sx,sy,sz),tl*.5);th=Math.atan2(-sz,ln);}
+  else{W=Math.max(Math.hypot(sx,sy),tl*.55);th=Math.acos(Math.min(1,Math.hypot(sx,sy)/W));const nose=k[0]&&!k[0].h,dir=nose?(Math.sign(k[0].x-N.x)||1):1;th*=dir;if(ln<0)th=dir*Math.PI-th;}
+  const c=Math.cos(th),s=Math.sin(th),HW=Math.hypot(H2.x-H1.x,H2.y-H1.y,z(H2)-z(H1))||W*.7;
+  /* 高さごとの [位置（首0〜腰1）, 横の半分, 前後の半分] */
+  const LV=[[-.02,W/2*(1+F.shOut*2)*wt,W*F.dS/2*wt],[.3,W/2*(1+F.waist)/2*wt,W*(F.dS+F.dW)/4*wt],[.6,W/2*F.waist*wt,W*F.dW/2*wt],[1,Math.max(HW/2,W*.3)*F.hip*wt,W*F.dH/2*wt]];
+  const ga=1+(b.arm*b.all-1)*.12,gl=1+(b.leg*b.all-1)*.15;LV[0][1]*=ga;LV[0][2]*=1+(ga-1)*.5;LV[3][1]*=gl;LV[3][2]*=gl;LV[2][1]*=1+(gl-1)*.4;
+  const rows=LV.map(([t,A,B])=>{const P={x:N.x+d.x*tl*t,y:N.y+d.y*tl*t},hw=Math.sqrt((A*c)**2+(B*s)**2);
+    /* 前の面と後ろの面の境目（見えている側の、横のいちばん外の所） */
+    const m=Math.max(-hw,Math.min(hw,-(Math.sign(s)||1)*A*c));return{P,hw,m};});
+  return{rows,n,d,N,Hm,tl,W,th,c,s,cz:(N.z+Hm.z)/2,hasZ};}
+const opPolyIn=(q,poly)=>{let o=false;for(let i=0,j=poly.length-1;i<poly.length;j=i++){const a=poly[i],b2=poly[j];if((a.y>q.y)!==(b2.y>q.y)&&q.x<(b2.x-a.x)*(q.y-a.y)/(b2.y-a.y)+a.x)o=!o;}return o;};
+function opFaceVis(k){const e1=k[16],e2=k[17];if(!e1||!e2||![0,14,15,16,17].some(i=>Math.abs(k[i].z||0)>1e-6))return;
+  const mz=((e1.z||0)+(e2.z||0))/2,half=(Math.hypot(e1.x-e2.x,(e1.z||0)-(e2.z||0))/2)||Math.hypot(k[2].x-k[5].x,(k[2].z||0)-(k[5].z||0))*.25||1;
+  for(const i of[0,14,15]){const q=k[i];if(!q.man)q.h=(q.z||0)-mz<-half*.1;}for(const i of[16,17]){const q=k[i];if(!q.man)q.h=(q.z||0)-mz<-half*.6;}}
+/* 頭（首から上：鼻・目・耳）だけを、首の上で縦の軸のまわりに回す（＋は画像の右を向く方） */
+function opHeadTurn(k,deg){const e1=k[16],e2=k[17],c=e1&&e2?{x:(e1.x+e2.x)/2,z:((e1.z||0)+(e2.z||0))/2}:{x:k[1].x,z:k[1].z||0};
+  const a=deg*Math.PI/180,co=Math.cos(a),si=Math.sin(a);for(const i of[0,14,15,16,17]){const q=k[i],dx=q.x-c.x,dz=(q.z||0)-c.z;q.x=c.x+dx*co+dz*si;q.z=c.z-dx*si+dz*co;}opFaceVis(k);}
+/* 体の後ろに隠れる点を、自動で隠す（q.auto で印。自分で隠した・戻した点 q.man は変えない）。奥行きがないときは何もしない */
+const OP_AUTOHIDE=[2,3,4,5,6,7,9,10,12,13];
+function opAutoHide(k,b,on){
+  if(!on){for(const q of k)if(q.auto){q.h=false;delete q.auto;}return;}
+  const T=opTorso(k,b,.9);if(!T||!T.hasZ)return;
+  const poly=[...T.rows.map(r=>({x:r.P.x+T.n.x*r.hw,y:r.P.y+T.n.y*r.hw})),...T.rows.slice().reverse().map(r=>({x:r.P.x-T.n.x*r.hw,y:r.P.y-T.n.y*r.hw}))];
+  for(const i of OP_AUTOHIDE){const q=k[i];if(!q||q.man)continue;const occ=(q.z||0)<T.cz-T.W*.05&&opPolyIn(q,poly);
+    if(occ&&!q.h){q.h=true;q.auto=true;}else if(!occ&&q.h&&q.auto){q.h=false;delete q.auto;}}}
+/* 球（関節・頭）の前の面の形（向き th）。後ろの面の色の円の上に重ねる */
+function opSphFront(cx,cy,r,th){const c=Math.cos(th),s=Math.sin(th),fs=Math.sign(s)||1,rx=Math.max(.1,r*Math.abs(c)),T0=`${cx.toFixed(1)},${(cy-r).toFixed(1)}`,B0=`${cx.toFixed(1)},${(cy+r).toFixed(1)}`;
+  const s1=fs>0?1:0,s2=c>=0?(fs>0?1:0):(fs>0?0:1);return `M${T0} A${r.toFixed(1)} ${r.toFixed(1)} 0 0 ${s1} ${B0} A${rx.toFixed(1)} ${r.toFixed(1)} 0 0 ${s2} ${T0} Z`;}
+function opFleshSVG(k,b){b=Object.assign({},OP_BODY0,b||{});const F=OP_FLESH[b.sex==='m'?'m':'f'],A=b.all,wa=b.arm*A,wl=b.leg*A,wt=b.torso*A,wc=b.chest*A;
+  const v=i=>k[i]&&!k[i].h,D=(a,c)=>Math.hypot(k[a].x-k[c].x,k[a].y-k[c].y);
+  const TO=opTorso(k,b);
+  /* 太さのもと：本当の肩幅（横向きでも細くならない） */
+  let u=TO?TO.W:v(2)&&v(5)?D(2,5):v(8)&&v(11)?D(8,11)*1.35:v(1)&&(v(8)||v(11))?D(1,v(8)?8:11)*.55:0;if(!u)return'';u=Math.max(u,1);
+  const th=TO?TO.th:(v(0)?0:Math.PI),c=Math.cos(th),s=Math.sin(th);
+  const P=(x,y)=>`${x.toFixed(1)},${y.toFixed(1)}`;
+  /* 関節の太さ（直径）。となり合う所の太さの間をとって、なめらかにつなぐ。胴が太いと、腕・脚の付け根も少し太くなる */
+  const ex=1+(wt-1)*.3,wU=u*F.arm[0]*wa,wF=u*F.arm[1]*wa,wT=u*F.leg[0]*wl,wS=u*F.leg[1]*wl,wN=u*F.neck*wt;
+  const J={2:(wU*.75+u*F.arm[0]*.25)*1.05*ex,5:(wU*.75+u*F.arm[0]*.25)*1.05*ex,3:(wU+wF)/2,6:(wU+wF)/2,4:wF*.85,7:wF*.85,
+    8:(wT*.75+u*F.leg[0]*.25)*ex,11:(wT*.75+u*F.leg[0]*.25)*ex,9:(wT+wS)/2,12:(wT+wS)/2,10:wS*.85,13:wS*.85,1:wN,0:wN*.9};
+  const items=[];/* {z, h}：奥（z が小さい）から描く */
+  const zz=i=>k[i].z||0;
+  /* 手足（円柱）：後ろの面の色で全体、前の面の色で向いている側 */
+  for(const[a,e]of[[2,3],[3,4],[5,6],[6,7],[8,9],[9,10],[11,12],[12,13],[1,0]]){if(!v(a)||!v(e))continue;
+    const Q=k[a],R=k[e],L=Math.hypot(R.x-Q.x,R.y-Q.y)||1,nx=-(R.y-Q.y)/L,ny=(R.x-Q.x)/L,ra=J[a]/2,rb=J[e]/2;
+    const band=(f1,f2)=>[P(Q.x+nx*f1*ra,Q.y+ny*f1*ra),P(Q.x+nx*f2*ra,Q.y+ny*f2*ra),P(R.x+nx*f2*rb,R.y+ny*f2*rb),P(R.x+nx*f1*rb,R.y+ny*f1*rb)].join(' ');
+    let h=`<polygon points="${band(-1,1)}" fill="${F.colB}"/>`;
+    const fn=s*nx;let fr=null;if(Math.abs(fn)<.15)fr=c>0?[-1,1]:null;else{const md=Math.max(-1,Math.min(1,-(Math.sign(fn))*c));fr=fn>0?[md,1]:[-1,md];}
+    if(fr&&fr[1]-fr[0]>.02)h+=`<polygon points="${band(fr[0],fr[1])}"/>`;
+    items.push({z:(zz(a)+zz(e))/2,h});}
+  /* 関節（球） */
+  for(const i of[2,3,4,5,6,7,8,9,10,11,12,13]){if(!v(i))continue;const r=J[i]/2;items.push({z:zz(i)+.001,h:`<circle cx="${k[i].x}" cy="${k[i].y}" r="${r.toFixed(1)}" fill="${F.colB}"/><path d="${opSphFront(k[i].x,k[i].y,r,th)}"/>`});}
+  if(TO){
+    /* 胴：前の面（col）と後ろの面（colB） */
+    const R=TO.rows,n=TO.n,pt=(r,o)=>P(r.P.x+n.x*o,r.P.y+n.y*o),fs=Math.sign(TO.s)||1,sw=u*.2*wt;
+    const full=[...R.map(r=>pt(r,r.hw)),...R.slice().reverse().map(r=>pt(r,-r.hw))];
+    const fr=fs>0?[...R.map(r=>pt(r,r.hw)),...R.slice().reverse().map(r=>pt(r,r.m))]:[...R.map(r=>pt(r,r.m)),...R.slice().reverse().map(r=>pt(r,-r.hw))];
+    let h=`<polygon points="${full.join(' ')}" fill="${F.colB}" stroke="${F.colB}" stroke-width="${sw}"/>`;
+    if(Math.abs(TO.s)>.02||TO.c>0)h+=`<polygon points="${fr.join(' ')}" stroke="${F.col}" stroke-width="${sw}"/>`;
+    if(b.sex!=='m'&&wc>0){const r0=R[1],r=u*F.chest*wc;for(const j of[-1,1]){const l=j*u*.2,f=u*F.dS/2*.8,z2=-l*TO.s+f*TO.c;if(z2<-u*.05)continue;const o=l*TO.c+f*TO.s;
+      h+=`<circle cx="${(r0.P.x+n.x*o).toFixed(1)}" cy="${(r0.P.y+n.y*o-u*.05).toFixed(1)}" r="${r.toFixed(1)}"/>`;}}
+    items.push({z:TO.cz,h});
+  }else{const tor=[2,5,11,8].filter(v);if(tor.length>=3)items.push({z:0,h:`<polygon points="${tor.map(i=>k[i].x+','+k[i].y).join(' ')}" stroke="${F.col}" stroke-width="${u*.4*wt}"/>`});}
+  items.sort((a,b2)=>a.z-b2.z);
+  let h=`<g opacity=".66" fill="${F.col}" stroke-linecap="round" stroke-linejoin="round">`+items.map(x=>x.h).join('');
+  /* 頭：顔の側（col）と後ろ頭（colB）。向きは、鼻と耳から（なければ体の向き） */
+  let hc=null,r=0;
+  if(v(0)){r=Math.max(u*F.head,v(1)?D(0,1)*.62:0)*b.head;hc={x:k[0].x,y:k[0].y};if(v(14)&&v(15))hc={x:(k[14].x+k[15].x+k[0].x)/3,y:(k[14].y+k[15].y+k[0].y)/3-r*.15};}
+  else if(v(16)||v(17)){const e=v(16)?16:17;r=u*.4*b.head;hc={x:k[e].x,y:k[e].y-r*.2};}
+  else if(k[0]&&TO){r=u*F.head*b.head;hc={x:k[0].x,y:k[0].y};}
+  if(hc){const ht=opHeadYaw(k);h+=`<circle cx="${hc.x}" cy="${hc.y}" r="${r}" fill="${F.colB}"/><path d="${opSphFront(hc.x,hc.y,r,ht==null?th:ht)}"/>`;}
   return h+'</g>';}
+/* 顔の向き（0＝こちら、＋は画像の右）。鼻と両耳の奥行きから。わからなければ null */
+function opHeadYaw(k){const e1=k[16],e2=k[17],n=k[0];if(!e1||!e2||!n)return null;const mx=(e1.x+e2.x)/2,mz=((e1.z||0)+(e2.z||0))/2,fx=n.x-mx,fz=(n.z||0)-mz;
+  if(Math.abs(fx)+Math.abs(fz)<1e-6||(![e1,e2,n].some(q=>Math.abs(q.z||0)>1e-6)))return null;return Math.atan2(fx,fz);}
 /* OpenPose の点のつながり（親）。首（1）がもと。長さを固定して動かすときに使う */
 const OP_PAR=[1,null,1,2,3,1,5,6,1,8,9,1,11,12,0,0,14,15];
 function opSub(J){const out=[J];for(let k=0;k<out.length;k++)OP_PAR.forEach((p,i)=>{if(p===out[k])out.push(i);});return out;}
@@ -2878,66 +2979,91 @@ function opShrink(blob,max){return new Promise(res=>{const u=URL.createObjectURL
   const c=document.createElement('canvas');c.width=Math.round(im.naturalWidth*s);c.height=Math.round(im.naturalHeight*s);const g=c.getContext('2d');g.fillStyle='#fff';g.fillRect(0,0,c.width,c.height);g.drawImage(im,0,0,c.width,c.height);URL.revokeObjectURL(u);c.toBlob(b=>res(b||blob),'image/jpeg',.88);};im.onerror=()=>{URL.revokeObjectURL(u);res(blob);};im.src=u;});}
 function openOpTrace(o){
   o=o||{};$$('#opt').forEach(x=>x.remove());/* 前に開いたものが残っていれば消す */
-  const T=OPT={img:null,imgBlob:null,W:OP_GEN[0],H:OP_GEN[1],people:[],cur:0,sel:null,mode:'pt',op:.6,out:'gen',vb:null,drag:null,src:o,lock:true,partId:null,lastTap:null,saved:false};
+  const T=OPT={img:null,imgBlob:null,W:OP_GEN[0],H:OP_GEN[1],people:[],cur:0,sel:null,mode:'pt',op:.6,out:'gen',vb:null,drag:null,src:o,lock:true,partId:null,lastTap:null,saved:false,body:[],autoHide:true,faceOne:false};
   /* 部品（OpenPose）から開くときは、その点と大きさで始める（点は 0〜1 の割合でしまってある） */
   const fromPart=p=>{const d=p.op||{};T.W=d.W||OP_GEN[0];T.H=d.H||OP_GEN[1];T.out=d.out||'gen';T.partId=p.id;
-    T.people=(d.people||[]).map(k=>k.map(q=>({x:q.x*T.W,y:q.y*T.H,z:(q.z||0)*T.W,h:!!q.h})));if(!T.people.length)T.people=[opDefault(T.W,T.H)];};
+    T.autoHide=d.autoHide!==false;
+    T.people=(d.people||[]).map(k=>k.map(q=>Object.assign({x:q.x*T.W,y:q.y*T.H,z:(q.z||0)*T.W,h:!!q.h},q.a?{auto:true}:{},q.m?{man:true}:{})));if(!T.people.length)T.people=[opDefault(T.W,T.H)];T.body=JSON.parse(JSON.stringify(d.body||[]));};
   const init=()=>{if(o.part)fromPart(o.part);else T.people=o.kps?opFromKps(o.kps,T.W,T.H):[opDefault(T.W,T.H,o.P)];T.cur=0;T.sel=null;T.vb={x:0,y:0,w:T.W,h:T.H};};
   init();
   const saved=S.parts.filter(p=>p.type==='openpose'&&p.id!==T.partId).sort((a,b)=>(b.updated||0)-(a.updated||0));
   const el=document.createElement('div');el.id='opt';el.className='opt';
   const imgs=(o.sc&&o.sc.images)||[];
+  /* 画面：上に絵（下へ動かしても上に残る）と、拡大・人物のボタン。その下のタブで、画像・自動・点・向き・保存 を切りかえる（1画面で操作できるように） */
+  T.tab=o.part?'pt':'img';
   el.innerHTML=`<div class="optin">
-    <div class="opthd"><b id="optTtl">${o.part?`🦴 OpenPose「${esc(o.part.name||'名前なし')}」を直す`:'🖼 画像に合わせて OpenPose を作る'}</b><button type="button" class="btn ghost sm" id="optX">閉じる</button></div>
-    ${saved.length?`<details class="nh" style="margin:0 0 8px"><summary>📂 保存した OpenPose を呼び出す（${saved.length}）</summary><div class="nhb"><div class="optimgs">${saved.map(p=>`<button type="button" data-ops="${p.id}" title="${esc(p.name||'')}">${p.img?`<img src="${partImgUrl(p)}" alt="">`:'🦴'}<small>${esc(p.name||'名前なし')}</small></button>`).join('')}</div>
-      <div id="optPick"><p class="hint" style="margin:4px 0 0">押して選ぶと、その形を今の画面に呼び出せます（今作っているものの元にできます）。</p></div></div></details>`:''}
-    <div class="row" style="margin:0 0 6px"><label class="btn sm">画像を選ぶ<input type="file" accept="image/*" hidden id="optFile"></label>${pasteBtn('optFile')}<span class="hint" id="optImgN" style="align-self:center">画像なし（黒地）</span></div>${pasteBox('optFile')}
-    <div class="row" style="margin:0 0 4px;align-items:center"><button type="button" class="btn sm" id="optAuto" disabled>🤖 全員を自動で合わせる</button><button type="button" class="btn ghost sm" id="optAutoOne" disabled>👤 選んでいる人物だけ</button><button type="button" class="btn ghost sm" id="optAutoBox" disabled>🔲 囲んで合わせる</button></div>
-    <p class="hint" id="optAutoMsg" style="margin:0 0 6px">画像を選ぶと使えます。</p>
-    ${imgs.length?`<div class="optimgs">${imgs.map(id=>`<button type="button" data-oi="${id}"><img data-img="${id}" alt=""></button>`).join('')}</div><p class="hint" style="margin:0 0 6px">このシーンの画像から選ぶこともできます。</p>`:''}
-    <div class="picstage optstage" id="optStage"><svg id="optSvg" xmlns="http://www.w3.org/2000/svg"></svg></div>
-    <div class="row optzoom"><button type="button" class="btn ghost sm" data-oz="1.5">＋ 拡大</button><button type="button" class="btn ghost sm" data-oz="0.67">－ 縮小</button><button type="button" class="btn ghost sm" data-oz="0">全体</button>
-      <label class="optop">画像の濃さ<input type="range" id="optOp" min="0" max="1" step="0.05" value="${T.op}"></label></div>
-    <p class="hint" style="margin:0 0 8px">点を指で動かして、画像の関節に合わせます。点を<b>ダブルタップ</b>すると「隠す（見えていない）」になり、もう一度ダブルタップで戻ります。点のない所をなぞると画面が動きます（拡大したとき）。右・左は<b>人物から見た向き</b>です。</p>
-    <label class="switch" style="margin:0 0 6px"><input type="checkbox" id="optFlesh"><span>🧍 肉付けを見る<span class="hint">棒人形に、だいたいの体（胴・手足・頭）を重ねて出します。体つきの目安を見るためのもので、保存する OpenPose の画像には入りません。</span></span></label>
-    <label class="switch" style="margin:0 0 8px"><input type="checkbox" id="optLock" checked><span>手足・胴の長さを固定する<span class="hint">オンのときは、点を動かすと、長さを変えずに関節を軸に回ります（その先の手足も一緒に回ります。首を動かすと人物ごと動きます）。長さを画像に合わせたいときはオフにします。</span></span></label>
-    <div class="tgs" id="optPeople"></div>
-    <div class="ptabs" id="optMode" style="margin-top:8px"><button data-om="pt">点を動かす</button><button data-om="all">人物ごと動かす</button></div>
-    <div class="optrot"><label><span>体の向き（回す）</span><input type="range" id="optYaw" min="-180" max="180" step="1" value="0" aria-label="体の向き"></label>
-      <label><span>傾き</span><input type="range" id="optRoll" min="-90" max="90" step="1" value="0" aria-label="傾き"></label>
-      <div class="row" style="margin:0"><button type="button" class="btn ghost sm" data-oy="-45">◀ 45°</button><button type="button" class="btn ghost sm" data-oy="45">45° ▶</button><button type="button" class="btn ghost sm" data-oy="180">後ろ向きに</button></div>
-      <span class="hint">選んでいる人物を、縦の軸のまわりに回します（バーは動かしている間だけ回り、離すと 0 に戻ります）。鼻・目は、向こうを向くと自動で隠れます。奥行きは、自動で合わせた点・見本のポーズにはありますが、手で置いた点は平らなので、回すと細くなります。</span></div>
-    <details class="nh" style="margin:6px 0"><summary>🧍 ポーズの見本から始める</summary><div class="nhb" id="optPre"></div></details>
-    <div class="row" style="margin:6px 0"><button type="button" class="btn ghost sm" data-os="1.1">人物を大きく</button><button type="button" class="btn ghost sm" data-os="0.91">人物を小さく</button><button type="button" class="btn ghost sm" id="optSwap">左右の点を入れかえる</button></div>
-    <div id="optSel"></div>
-    <div class="f" style="margin:10px 0 6px"><span>保存する大きさ</span><div class="tgs" id="optOut"></div></div>
-    <div id="optChk"></div>
-    <details class="nh optips"><summary>うまく読み込ませるコツ</summary><div class="nhb"><ul>
-      <li>PixAI では、ControlNet の <b>OpenPose（ポーズ）</b>にこの画像を入れます。すでに棒人形の画像なので、写真から骨を読み取る「前処理」は<b>使わない</b>設定にします（前処理をかけると、棒人形を読み直して崩れることがあります）。</li>
-      <li><b>生成する画像と同じ縦横比</b>で作ります。800×912 で作るなら、ここも「800×912」で保存します。比率が違うと、引きのばされたり切られたりして位置がずれます。</li>
-      <li><b>見えていない関節は「隠す」</b>にします。見えない所に点を置くと、そこに手足が描かれます（後ろの腕・重なった脚など）。</li>
-      <li>右・左は<b>人物から見た向き</b>です。正面向きなら、右肩は画像の左側。入れかわると、体の向きが逆に読まれます。</li>
-      <li>指・表情は入りません（体の18点だけ）。手の形・表情は、プロンプトで指定します。</li>
-      <li>人物は<b>大きめ</b>に。小さい人物・大きく重なった人物は、読み違えやすくなります。</li>
-      <li>効きすぎて絵が硬くなるときは、ControlNet の強さを下げます（0.6〜0.8 くらいから）。プロンプトのポーズのタグと合わせると安定します。</li>
-      <li>保存した画像は黒地のまま使います（白地・半透明にしない）。</li>
-      <li>「🤖 自動で合わせる」は、写真や、人の体の形がはっきりした絵が得意です。デフォルメの強い絵・ちびキャラ・大きく重なった人物は、見つけられなかったり、ずれたりします。そのときは、ずれた点だけ指で直してください。</li>
-      <li>人物が2人以上・小さい人物がいるときは、全員で見つからない人物があります。その人物を選んで（いなければ「＋ 人物を足す」）、「🔲 囲んで合わせる」でその人物を指で囲むと、その所だけを大きくして調べるので、見つけやすくなります。</li></ul>
-      <p class="hint" style="margin:8px 0 0">自動で合わせる AI のデータ（約${POSE_AI.mb}MB）は、この端末にしまってあります。<button type="button" class="linkb" id="optAiDel">AI のデータを消す</button></p></div></details>
-    <div class="optpart"><b>🦴 OpenPose の部品として保存</b>
-      <label class="f" style="margin:6px 0"><span>名前</span><input id="optName" value="${esc(o.part?o.part.name:(o.title&&o.title!=='pose'&&o.title!=='trace'?o.title:''))}" placeholder="例：向かい合って腕組み"></label>
-      <label class="f" style="margin:0 0 6px"><span>タグ（なくてもよい・メモ用）</span><input id="optTags" value="${esc(o.part?o.part.tags||'':'')}" placeholder="crossed arms, facing another"></label>
-      <span class="hint">点と、下に敷いた画像を一緒にしまいます。部品の「OpenPose」から開くと、画像と点がそのまま出ます。</span>
-      <div class="row" style="margin:8px 0 0"><button type="button" class="btn" id="optPart">${o.part?'部品を上書き保存':'部品として保存'}</button>${o.part?'<button type="button" class="btn ghost" id="optPartNew">別の部品として保存</button><button type="button" class="btn danger" id="optPartDel">この部品を削除</button>':''}</div></div>
-    <div class="row" style="margin-top:12px"><button type="button" class="btn" id="optSave">OpenPose 画像（PNG）を保存</button><button type="button" class="btn ghost" id="optX2">閉じる</button></div>
+    <div class="opthd"><b id="optTtl">${o.part?`🦴 OpenPose「${esc(o.part.name||'名前なし')}」を直す`:'🦴 OpenPose を作る'}</b><div class="row" style="margin:0;flex-wrap:nowrap"><button type="button" class="btn sm" id="optQuick">${o.part?'上書き保存':'部品に保存'}</button><button type="button" class="btn ghost sm" id="optX">閉じる</button></div></div>
+    <div class="optsticky">
+      <div class="picstage optstage" id="optStage"><svg id="optSvg" xmlns="http://www.w3.org/2000/svg"></svg></div>
+      <div class="optbar"><button type="button" class="ico" data-oz="1.5" title="拡大" aria-label="拡大">＋</button><button type="button" class="ico" data-oz="0.67" title="縮小" aria-label="縮小">－</button><button type="button" class="ico" data-oz="0" title="全体" aria-label="全体を見る">⤢</button><span class="optsep"></span><div class="tgs" id="optPeople"></div></div>
+      <div class="ptabs opttabs" id="optTabs">${[['img','🖼 画像'],['auto','🤖 自動'],['pt','✋ 点'],['rot','🔄 向き'],['save','💾 保存']].map(([k,l])=>`<button type="button" data-ot="${k}">${l}</button>`).join('')}</div>
+    </div>
+    <div class="optpane" data-pane="img">
+      <div class="row" style="margin:0 0 6px"><label class="btn sm">画像を選ぶ<input type="file" accept="image/*" hidden id="optFile"></label>${pasteBtn('optFile')}<span class="hint" id="optImgN" style="align-self:center">画像なし（黒地）</span></div>${pasteBox('optFile')}
+      ${imgs.length?`<div class="optimgs">${imgs.map(id=>`<button type="button" data-oi="${id}"><img data-img="${id}" alt=""></button>`).join('')}</div><p class="hint" style="margin:0 0 6px">このシーンの画像から選ぶこともできます。</p>`:''}
+      <label class="optop">画像の濃さ<input type="range" id="optOp" min="0" max="1" step="0.05" value="${T.op}"></label>
+      ${saved.length?`<div class="f" style="margin:10px 0 0"><span>📂 保存した OpenPose を呼び出す</span><div class="optimgs">${saved.map(p=>`<button type="button" data-ops="${p.id}" title="${esc(p.name||'')}">${p.img?`<img src="${partImgUrl(p)}" alt="">`:'🦴'}<small>${esc(p.name||'名前なし')}</small></button>`).join('')}</div>
+        <div id="optPick"><p class="hint" style="margin:4px 0 0">押して選ぶと、その形を今の画面に呼び出せます（今作っているものの元にできます）。</p></div></div>`:''}
+    </div>
+    <div class="optpane" data-pane="auto">
+      <div class="row" style="margin:0 0 4px;align-items:center"><button type="button" class="btn sm" id="optAuto" disabled>🤖 全員を自動で合わせる</button><button type="button" class="btn ghost sm" id="optAutoOne" disabled>👤 選んでいる人物だけ</button><button type="button" class="btn ghost sm" id="optAutoBox" disabled>🔲 囲んで合わせる</button></div>
+      <p class="hint" id="optAutoMsg" style="margin:0 0 6px">画像を選ぶと使えます。</p>
+    </div>
+    <div class="optpane" data-pane="pt">
+      <div id="optSel"></div>
+      <div class="ptabs" id="optMode" style="margin:6px 0 0"><button data-om="pt">点を動かす</button><button data-om="all">人物ごと動かす</button></div>
+      <div class="row" style="margin:6px 0"><button type="button" class="btn ghost sm" data-os="1.1">大きく</button><button type="button" class="btn ghost sm" data-os="0.91">小さく</button><button type="button" class="btn ghost sm" id="optSwap">左右の点を入れかえ</button></div>
+      <label class="switch" style="margin:0 0 4px"><input type="checkbox" id="optLock" checked><span>手足・胴の長さを固定する<span class="hint">オンのときは、長さを変えずに関節を軸に回ります（首を動かすと人物ごと動きます）。</span></span></label>
+      <label class="switch" style="margin:0 0 4px"><input type="checkbox" id="optFlesh"><span>🧍 肉付けを見る<span class="hint">だいたいの体を重ねて出します（保存する画像には入りません）。男女と肉の厚みを、人物ごとに決められます。</span></span></label>
+      <label class="switch sm" style="margin:2px 0 4px"><input type="checkbox" id="optFaceOne"><span>顔の点を1つずつ動かす<span class="hint">オフのときは、鼻・目・耳のどれを動かしても、頭ごと動きます（顔の向きは「🔄 向き」の「顔の向き」で変えます）。</span></span></label>
+      <div id="optBody"></div>
+      <label class="switch sm" style="margin:2px 0 4px"><input type="checkbox" id="optAutoHide" ${T.autoHide?'checked':''}><span>体の後ろの点を自動で隠す<span class="hint">横向き・後ろ向きで、胴の後ろに入った肩・腕・脚の点を隠します（自分でダブルタップした点はそのまま）。</span></span></label>
+      <p class="hint" style="margin:4px 0 0">点を指で動かして、画像の関節に合わせます。点を<b>ダブルタップ</b>すると「隠す」、もう一度で戻ります。点のない所をなぞると画面が動きます（拡大したとき）。右・左は<b>人物から見た向き</b>です。</p>
+    </div>
+    <div class="optpane" data-pane="rot">
+      <div class="optrot"><label><span>体の向き（回す）</span><input type="range" id="optYaw" min="-180" max="180" step="1" value="0" aria-label="体の向き"></label>
+        <label><span>傾き</span><input type="range" id="optRoll" min="-90" max="90" step="1" value="0" aria-label="傾き"></label>
+        <div class="row" style="margin:0"><button type="button" class="btn ghost sm" data-oy="-45">◀ 45°</button><button type="button" class="btn ghost sm" data-oy="45">45° ▶</button><button type="button" class="btn ghost sm" data-oy="180">後ろ向きに</button></div>
+        <span class="hint">選んでいる人物を回します（バーは動かしている間だけ回り、離すと 0 に戻ります）。手で置いた点は奥行きがないので、回すと細くなります。</span></div>
+      <div class="optrot"><label><span>顔の向き（首から上）</span><input type="range" id="optHead" min="-120" max="120" step="1" value="0" aria-label="顔の向き"></label>
+        <div class="row" style="margin:0"><button type="button" class="btn ghost sm" data-oh="-30">◀ 30°</button><button type="button" class="btn ghost sm" data-oh="30">30° ▶</button><button type="button" class="btn ghost sm" id="optHeadBody">体の向きにそろえる</button></div>
+        <span class="hint">頭（鼻・目・耳）だけを回します。見えなくなる目・耳は自動で隠します。</span></div>
+      <details class="nh" style="margin:6px 0"><summary>🧍 ポーズの見本から始める</summary><div class="nhb" id="optPre"></div></details>
+    </div>
+    <div class="optpane" data-pane="save">
+      <div id="optChk"></div>
+      <div class="f" style="margin:6px 0"><span>保存する大きさ</span><div class="tgs" id="optOut"></div></div>
+      <div class="optpart"><b>🦴 OpenPose の部品として保存</b>
+        <label class="f" style="margin:6px 0"><span>名前</span><input id="optName" value="${esc(o.part?o.part.name:(o.title&&o.title!=='pose'&&o.title!=='trace'?o.title:''))}" placeholder="例：向かい合って腕組み"></label>
+        <label class="f" style="margin:0 0 6px"><span>タグ（シーンでプロンプトに入る・なくてもよい）</span><input id="optTags" value="${esc(o.part?o.part.tags||'':'')}" placeholder="crossed arms"></label>
+        <div id="optAutoT"></div>
+        <div class="row" style="margin:8px 0 0"><button type="button" class="btn" id="optPart">${o.part?'部品を上書き保存':'部品として保存'}</button>${o.part?'<button type="button" class="btn ghost" id="optPartNew">別の部品として保存</button><button type="button" class="btn danger" id="optPartDel">この部品を削除</button>':''}</div></div>
+      <div class="row" style="margin:8px 0 0"><button type="button" class="btn ghost" id="optSave">OpenPose 画像（PNG）を保存</button><button type="button" class="btn ghost" id="optX2">閉じる</button></div>
+      <details class="nh optips"><summary>うまく読み込ませるコツ</summary><div class="nhb"><ul>
+        <li>PixAI では、ControlNet の <b>OpenPose（ポーズ）</b>にこの画像を入れます。すでに棒人形の画像なので、写真から骨を読み取る「前処理」は<b>使わない</b>設定にします。</li>
+        <li><b>生成する画像と同じ縦横比</b>で作ります。800×912 で作るなら、ここも「800×912」で保存します。</li>
+        <li><b>見えていない関節は「隠す」</b>にします。見えない所に点を置くと、そこに手足が描かれます。</li>
+        <li>右・左は<b>人物から見た向き</b>です。正面向きなら、右肩は画像の左側です。</li>
+        <li>指・表情は入りません（体の18点だけ）。手の形・表情は、プロンプトで指定します。</li>
+        <li>人物は<b>大きめ</b>に。小さい人物・大きく重なった人物は、読み違えやすくなります。</li>
+        <li>効きすぎるときは、ControlNet の強さを下げます（0.6〜0.8 くらいから）。</li>
+        <li>保存した画像は黒地のまま使います。</li>
+        <li>「🤖 自動」は、写真や体の形がはっきりした絵が得意です。人物が2人以上・小さいときは「囲んで合わせる」で1人ずつ合わせると正確になります。</li></ul>
+        <p class="hint" style="margin:8px 0 0">自動で合わせる AI のデータ（約${POSE_AI.mb}MB）は、この端末にしまってあります。<button type="button" class="linkb" id="optAiDel">AI のデータを消す</button></p></div></details>
+    </div>
   </div>`;
   document.body.appendChild(el);hydrate(el);history.pushState({opt:1},'');
+  const setTab=t=>{T.tab=t;$$('[data-pane]',el).forEach(x=>x.hidden=x.dataset.pane!==t);$$('#optTabs [data-ot]',el).forEach(x=>x.classList.toggle('on',x.dataset.ot===t));};
+  $$('#optTabs [data-ot]',el).forEach(x=>x.onclick=()=>setTab(x.dataset.ot));setTab(T.tab);
   const svg=$('#optSvg',el),st=$('#optStage',el);
   const P=()=>T.people[T.cur];
-  const R=()=>T.vb.w/Math.max(1,st.clientWidth)*13;/* 点の半径（画面で約13px） */
+  /* 人物の体つき。決めていなければ、シーンの人物の呼び方（boy・man なら男性）から決める */
+  const bodyOf=i=>{if(T.body[i])return Object.assign({},OP_BODY0,T.body[i]);const sl=o.sc&&o.sc.chars&&o.sc.chars[i],c=sl&&P_(sl.chara);
+    return Object.assign({},OP_BODY0,{sex:sl&&subjKind((sl.subj||'').trim()||(c&&c.subject)||'girl')==='boy'?'m':'f'});};
+  const R=()=>T.vb.w/Math.max(1,st.clientWidth)*9;/* 点の半径（画面で約9px） */
   const sw=()=>Math.max(3,Math.min(T.W,T.H)/512*4);
-  const draw=()=>{const v=T.vb;svg.setAttribute('viewBox',`${v.x} ${v.y} ${v.w} ${v.h}`);
-    st.style.aspectRatio=`${T.W} / ${T.H}`;st.style.width=`min(100%, calc(62dvh * ${(T.W/T.H).toFixed(4)}))`;
+  const draw=()=>{T.people.forEach((k,i)=>opAutoHide(k,bodyOf(i),T.autoHide));const v=T.vb;svg.setAttribute('viewBox',`${v.x} ${v.y} ${v.w} ${v.h}`);
+    st.style.aspectRatio=`${T.W} / ${T.H}`;st.style.width=`min(100%, calc(50dvh * ${(T.W/T.H).toFixed(4)}))`;
     let h=`<rect x="0" y="0" width="${T.W}" height="${T.H}" fill="#000"/>`;
     if(T.img)h+=`<image href="${T.img.url}" x="0" y="0" width="${T.W}" height="${T.H}" opacity="${T.op}" preserveAspectRatio="none"/>`;
     /* 800×912 で切り取る所を薄く */
@@ -2945,12 +3071,14 @@ function openOpTrace(o){
     const r=R(),w=sw();
     if(T.box)h+=`<rect x="${T.box.x}" y="${T.box.y}" width="${T.box.w}" height="${T.box.h}" fill="rgba(255,255,255,.12)" stroke="#fff" stroke-width="${r*.25}" stroke-dasharray="${r} ${r*.6}"/>`;
     if(T.mode==='box')h+=`<rect x="${T.vb.x}" y="${T.vb.y}" width="${T.vb.w}" height="${T.vb.h}" fill="none" stroke="#f59e0b" stroke-width="${r*.5}"/>`;
-    T.people.forEach((kp,pi)=>{const on=pi===T.cur;let g=`<g opacity="${on?1:.45}">`;if(T.flesh)g+=opFleshSVG(kp);
+    T.people.forEach((kp,pi)=>{const on=pi===T.cur;let g=`<g opacity="${on?1:.45}">`;if(T.flesh)g+=opFleshSVG(kp,bodyOf(pi));
       OP_LIMB.forEach(([a,b],i)=>{const A=kp[a],B=kp[b];if(A.h||B.h)return;g+=`<line x1="${A.x}" y1="${A.y}" x2="${B.x}" y2="${B.y}" stroke="rgb(${OP_COL[i]})" stroke-width="${w}" stroke-opacity=".75" stroke-linecap="round"/>`;});
       kp.forEach((q,i)=>{const c=`rgb(${OP_COL[i]})`;
-        if(q.h){if(on)g+=`<circle cx="${q.x}" cy="${q.y}" r="${r*.7}" fill="none" stroke="#9aa1ad" stroke-width="${r*.18}" stroke-dasharray="${r*.35} ${r*.25}"/>`;return;}
-        g+=on?`<circle cx="${q.x}" cy="${q.y}" r="${T.sel===i?r*1.25:r}" fill="${c}" stroke="${T.sel===i?'#fff':'#111'}" stroke-width="${r*.22}"/>`:`<circle cx="${q.x}" cy="${q.y}" r="${r*.55}" fill="${c}"/>`;});
-      if(on&&T.sel!=null){const q=kp[T.sel];g+=`<text x="${q.x+r*1.5}" y="${q.y-r*1.2}" fill="#fff" stroke="#000" stroke-width="${r*.25}" paint-order="stroke" font-size="${r*1.6}" font-weight="700">${OP_JA[T.sel]}${q.h?'（隠す）':''}</text>`;}
+        /* 顔の点（鼻・目・耳）は、1つずつ動かすのでなければ小さく */
+        const rp=!T.faceOne&&(i===0||i>=14)?r*.5:r;
+        if(q.h){if(on)g+=`<circle cx="${q.x}" cy="${q.y}" r="${rp*.7}" fill="none" stroke="#9aa1ad" stroke-width="${rp*.18}" stroke-dasharray="${rp*.35} ${rp*.25}"/>`;return;}
+        g+=on?`<circle cx="${q.x}" cy="${q.y}" r="${T.sel===i?rp*1.25:rp}" fill="${c}" stroke="${T.sel===i?'#fff':'#111'}" stroke-width="${rp*.22}"/>`:`<circle cx="${q.x}" cy="${q.y}" r="${r*.55}" fill="${c}"/>`;});
+      if(on&&T.sel!=null){const q=kp[T.sel],rl=r/.7;g+=`<text x="${q.x+rl*1.5}" y="${q.y-rl*1.2}" fill="#fff" stroke="#000" stroke-width="${rl*.25}" paint-order="stroke" font-size="${rl*1.6}" font-weight="700">${OP_JA[T.sel]}${q.h?(q.auto?'（自動で隠す）':'（隠す）'):''}</text>`;}
       h+=g+'</g>';});
     svg.innerHTML=h;};
   const drawPanel=()=>{
@@ -2958,12 +3086,24 @@ function openOpTrace(o){
     $$('#optMode button',el).forEach(b=>b.classList.toggle('on',b.dataset.om===T.mode));
     const q=T.sel!=null?P()[T.sel]:null;
     $('#optSel',el).innerHTML=q?`<div class="optsel"><b>${OP_JA[T.sel]}</b>（人物${T.cur+1}）<button type="button" class="btn ghost sm" id="optHide">${q.h?'見えるに戻す':'隠す（見えていない）'}</button></div>`:'<p class="hint" style="margin:0">点を押すと、その点を「隠す」にできます（見えていない関節）。</p>';
+    /* 肉付けの体つき（選んでいる人物） */
+    const bb=$('#optBody',el);if(bb){if(!T.flesh)bb.innerHTML='';else{const B=bodyOf(T.cur);
+      const sl=(key,lab)=>`<label class="obrow"><span>${lab}</span><input type="range" min="0.5" max="1.8" step="0.05" value="${B[key]}" data-ob="${key}" aria-label="${lab}"><b>${(+B[key]).toFixed(2)}</b></label>`;
+      bb.innerHTML=`<div class="obody"><div class="obh"><b>人物${T.cur+1}の体つき</b><span class="ptabs obsex"><button type="button" data-osx="f" class="${B.sex!=='m'?'on':''}">女性</button><button type="button" data-osx="m" class="${B.sex==='m'?'on':''}">男性</button></span></div>
+        ${sl('all','全体')}${sl('arm','腕')}${sl('leg','脚')}${sl('torso','胴')}${B.sex!=='m'?sl('chest','胸'):''}${sl('head','頭')}
+        <div class="row" style="margin:4px 0 0"><button type="button" class="btn ghost sm" id="obReset">ふつうに戻す</button><span class="hint" style="align-self:center;margin:0">1.00 がふつう。「全体」は腕・脚・胴・胸にかかります。</span></div></div>`;
+      $$('[data-osx]',bb).forEach(x=>x.onclick=()=>{T.body[T.cur]=Object.assign(bodyOf(T.cur),{sex:x.dataset.osx});draw();drawPanel();});
+      $$('[data-ob]',bb).forEach(x=>{x.oninput=()=>{T.body[T.cur]=Object.assign(bodyOf(T.cur),{[x.dataset.ob]:+x.value});x.nextElementSibling.textContent=(+x.value).toFixed(2);draw();};});
+      $('#obReset',bb).onclick=()=>{T.body[T.cur]=Object.assign({},OP_BODY0,{sex:bodyOf(T.cur).sex});draw();drawPanel();};}}
     $('#optOut',el).innerHTML=[['gen','800×912（PixAI の生成サイズ。はみ出しは切る）'],['img','画像と同じ比率']].map(([k,l])=>`<button type="button" class="tg ${T.out===k?'on':''}" data-oo="${k}">${l}</button>`).join('');
-    $('#optChk',el).innerHTML=`<div class="optchk"><b>チェック</b>${opChecks(T).map(c=>`<div class="oc ${c.lv}">${c.lv==='warn'?'⚠':c.lv==='ok'?'✓':'ℹ'} ${c.t}</div>`).join('')}</div>`;
-    const hb=$('#optHide',el);if(hb)hb.onclick=()=>{q.h=!q.h;draw();drawPanel();};
+    const CK=opChecks(T),nW=CK.filter(c=>c.lv==='warn').length;
+    $('#optChk',el).innerHTML=`<div class="optchk"><b>チェック</b>${CK.map(c=>`<div class="oc ${c.lv}">${c.lv==='warn'?'⚠':c.lv==='ok'?'✓':'ℹ'} ${c.t}</div>`).join('')}</div>`;
+    const tb=$('#optTabs [data-ot="save"]',el);if(tb)tb.textContent='💾 保存'+(nW?` ⚠${nW}`:'');
+    const AT=opAutoTags(T);$('#optAutoT',el).innerHTML=`<p class="hint" style="margin:0">シーンで使うと、立ち位置・向き・距離から次のタグも自動で入ります：<br>${opAutoText(AT)}</p>`;
+    const hb=$('#optHide',el);if(hb)hb.onclick=()=>{q.h=!q.h;q.man=true;delete q.auto;draw();drawPanel();};
     $$('[data-op]',el).forEach(b=>b.onclick=()=>{const v=b.dataset.op;
       if(v==='add'){const n=opDefault(T.W,T.H);const dx=T.W*.18*(T.people.length%2?1:-1);n.forEach(q=>q.x+=dx);T.people.push(n);T.cur=T.people.length-1;}
-      else if(v==='del'){if(!confirm(`人物${T.cur+1}を消しますか？`))return;T.people.splice(T.cur,1);T.cur=0;}
+      else if(v==='del'){if(!confirm(`人物${T.cur+1}を消しますか？`))return;T.people.splice(T.cur,1);T.body.splice(T.cur,1);T.cur=0;}
       else T.cur=+v;T.sel=null;draw();drawPanel();});
     $$('[data-oo]',el).forEach(b=>b.onclick=()=>{T.out=b.dataset.oo;draw();drawPanel();});};
   const fit=()=>{T.vb={x:0,y:0,w:T.W,h:T.H};};
@@ -2979,20 +3119,25 @@ function openOpTrace(o){
   st.addEventListener('pointerdown',e=>{
     /* 囲んで合わせる：なぞった四角を出す */
     if(T.mode==='box'){const q=toImg(e);T.drag={k:'box',x0:q.x,y0:q.y};T.box={x:q.x,y:q.y,w:0,h:0};st.setPointerCapture(e.pointerId);draw();return;}
-    const q=toImg(e),rr=R()*1.9;let best=null,bd=rr,bp=T.cur;
+    const q=toImg(e),rr=R()*2.75;let best=null,bd=rr,bp=T.cur;
     T.people.forEach((kp,pi)=>kp.forEach((p2,i)=>{if(p2.h&&pi!==T.cur)return;const d=Math.hypot(p2.x-q.x,p2.y-q.y)*(pi===T.cur?1:1.4);if(d<bd){bd=d;best=i;bp=pi;}}));
     if(best!=null){
       /* ダブルタップ：その点を隠す・戻す */
       const now=Date.now(),lt=T.lastTap;
-      if(lt&&lt.i===best&&lt.p===bp&&now-lt.t<400){const p2=T.people[bp][best];p2.h=!p2.h;T.cur=bp;T.sel=best;T.lastTap=null;T.drag=null;draw();drawPanel();toast(`${OP_JA[best]}を${p2.h?'隠しました':'見えるに戻しました'}`);return;}
+      if(lt&&lt.i===best&&lt.p===bp&&now-lt.t<400){const p2=T.people[bp][best];p2.h=!p2.h;p2.man=true;delete p2.auto;T.cur=bp;T.sel=best;T.lastTap=null;T.drag=null;draw();drawPanel();toast(`${OP_JA[best]}を${p2.h?'隠しました':'見えるに戻しました'}`);return;}
       T.lastTap={i:best,p:bp,t:now};
-      if(bp!==T.cur){T.cur=bp;}T.sel=best;T.drag={k:T.mode==='all'||(T.lock&&best===1)?'all':'pt',x:q.x,y:q.y};}
+      if(bp!==T.cur){T.cur=bp;}T.sel=best;T.drag={k:T.mode==='all'||(T.lock&&best===1)?'all':(!T.faceOne&&[0,14,15,16,17].includes(best))?'head':'pt',x:q.x,y:q.y};}
     else T.drag={k:'pan',cx:e.clientX,cy:e.clientY,vb:Object.assign({},T.vb)};
     st.setPointerCapture(e.pointerId);draw();drawPanel();});
   st.addEventListener('pointermove',e=>{const d=T.drag;if(!d)return;
     if(d.k==='box'){const q=toImg(e),x=Math.max(0,Math.min(q.x,d.x0)),y=Math.max(0,Math.min(q.y,d.y0));T.box={x,y,w:Math.min(T.W,Math.max(q.x,d.x0))-x,h:Math.min(T.H,Math.max(q.y,d.y0))-y};draw();return;}
     if(d.k==='pan'){const r=svg.getBoundingClientRect(),v=d.vb;const nx=v.x-(e.clientX-d.cx)/r.width*v.w,ny=v.y-(e.clientY-d.cy)/r.height*v.h;T.vb.x=Math.min(Math.max(0,nx),T.W-v.w);T.vb.y=Math.min(Math.max(0,ny),T.H-v.h);draw();return;}
     const q=toImg(e);
+    if(d.k==='head'){/* 頭ごと：長さを固定なら首を軸に回し、そうでなければ平行に動かす */
+      const k=P(),C=k[1],F5=[0,14,15,16,17];
+      if(T.lock){const a=Math.atan2(q.y-C.y,q.x-C.x)-Math.atan2(d.y-C.y,d.x-C.x),co=Math.cos(a),si=Math.sin(a);for(const i of F5){const p2=k[i],rx=p2.x-C.x,ry=p2.y-C.y;p2.x=C.x+rx*co-ry*si;p2.y=C.y+rx*si+ry*co;}}
+      else for(const i of F5){k[i].x+=q.x-d.x;k[i].y+=q.y-d.y;}
+      d.x=q.x;d.y=q.y;draw();return;}
     if(d.k==='pt'&&T.lock){/* 長さを固定：親の関節を軸に、その点から先をまとめて回す */
       const k=P(),J=T.sel,A=k[OP_PAR[J]],B=k[J];const a=Math.atan2(q.y-A.y,q.x-A.x)-Math.atan2(B.y-A.y,B.x-A.x),c=Math.cos(a),s=Math.sin(a);
       for(const i of opSub(J)){const p2=k[i],rx=p2.x-A.x,ry=p2.y-A.y;p2.x=A.x+rx*c-ry*s;p2.y=A.y+rx*s+ry*c;}draw();return;}
@@ -3006,7 +3151,7 @@ function openOpTrace(o){
       for(const kp of T.people)for(const q of kp){q.x=q.x/oW*T.W;q.y=q.y/oH*T.H;q.z=(q.z||0)*T.H/oH;}
       /* 比率が変わったので、人物の形がくずれないよう、縦に合わせて横を直す */
       const sx=T.W/oW,sy=T.H/oH;if(Math.abs(sx/sy-1)>.01)for(const kp of T.people){const c=kp[1];for(const q of kp)q.x=c.x+(q.x-c.x)*sy/sx;}
-      fit();$('#optImgN',el).textContent=`${name||'画像'}（${T.W}×${T.H}）`;aiBtns().forEach(b=>b.disabled=false);amsg.textContent='「全員を自動で合わせる」で、画像の人物の関節を見つけます。人物が多い・小さいときは、「囲んで合わせる」で1人ずつ合わせると正確になります。';draw();drawPanel();};im.onerror=()=>toast('画像を読み込めませんでした');im.src=u;};
+      fit();$('#optImgN',el).textContent=`${name||'画像'}（${T.W}×${T.H}）`;aiBtns().forEach(b=>b.disabled=false);amsg.textContent='「全員を自動で合わせる」で、画像の人物の関節を見つけます。人物が多い・小さいときは、「囲んで合わせる」で1人ずつ合わせると正確になります。';if(T.tab==='img')setTab('auto');draw();drawPanel();};im.onerror=()=>toast('画像を読み込めませんでした');im.src=u;};
   /* 自動で合わせる */
   const amsg=$('#optAutoMsg',el),abtn=$('#optAuto',el);
   poseAIHas().then(h=>{if(!T.img)amsg.textContent=h?'画像を選ぶと使えます（AI のデータは入っています）。':`画像を選ぶと使えます（はじめての1回だけ、AI のデータ 約${POSE_AI.mb}MB を読み込みます）。`;});
@@ -3024,7 +3169,7 @@ function openOpTrace(o){
       const hidN=k=>k.filter(q=>q.h).length;
       if(kind==='all'){
         if(!L.length){amsg.textContent='人物を見つけられませんでした。「囲んで合わせる」で1人ずつ試すか、手で合わせてください。';toast('人物を見つけられませんでした');}
-        else{T.people=L;T.cur=0;T.sel=null;const hid=L.reduce((a,k)=>a+hidN(k),0);
+        else{T.people=L;T.body=[];T.cur=0;T.sel=null;const hid=L.reduce((a,k)=>a+hidN(k),0);
           amsg.textContent=`人物を ${L.length} 人見つけました（左から 人物1・人物2…）。${hid?`見つけられなかった点（${hid}個）は「隠す」にしてあります。`:''}ずれている人物は、その人物を選んで「選んでいる人物だけ」か「囲んで合わせる」で合わせ直せます。`;toast(`人物を ${L.length} 人見つけました`);}
       }else{
         if(!L.length){amsg.textContent='その所に人物を見つけられませんでした。人物の全身が入るように、少し大きく囲んでみてください。';toast('人物を見つけられませんでした');}
@@ -3043,16 +3188,21 @@ function openOpTrace(o){
   $('#optFile',el).onchange=e=>{const f=e.target.files[0];e.target.value='';if(f)setImg(f,f.name);};
   $$('[data-oi]',el).forEach(b=>b.onclick=async()=>{const r=await dbGet('images',b.dataset.oi);if(r&&r.blob)setImg(r.blob,r.name||'シーンの画像');});
   /* 長さの固定 */
-  $('#optFlesh',el).onchange=e=>{T.flesh=e.target.checked;draw();};
+  $('#optFlesh',el).onchange=e=>{T.flesh=e.target.checked;draw();drawPanel();};
+  $('#optFaceOne',el).onchange=e=>{T.faceOne=e.target.checked;draw();};
+  $('#optAutoHide',el).onchange=e=>{T.autoHide=e.target.checked;if(!T.autoHide)T.people.forEach((k,i)=>opAutoHide(k,bodyOf(i),false));draw();drawPanel();toast(T.autoHide?'体の後ろの点を自動で隠します':'自動で隠すのをやめました');};
   /* 体の向き・傾き。バーを動かしている間は、動かしはじめの形から回す */
   const turn=(k,deg,roll)=>{const c=k[1],a=deg*Math.PI/180,co=Math.cos(a),si=Math.sin(a);const cz=c.z||0;
-    for(const q of k){const dx=q.x-c.x,dz=(q.z||0)-cz,dy=q.y-c.y;if(roll){q.x=c.x+dx*co-dy*si;q.y=c.y+dx*si+dy*co;}else{q.x=c.x+dx*co-dz*si;q.z=cz+dx*si+dz*co;}}
-    if(!roll){/* 向こうを向いた顔の点は隠す（耳は横を向いたときも見える） */const sh=Math.hypot(k[2].x-k[5].x,(k[2].z||0)-(k[5].z||0))||1;
-      if(k.some(q=>Math.abs(q.z||0)>1e-6)){for(const i of[0,14,15])k[i].h=(k[i].z||0)<cz-sh*.05;for(const i of[16,17])k[i].h=(k[i].z||0)<cz-sh*.35;}}};
+    for(const q of k){const dx=q.x-c.x,dz=(q.z||0)-cz,dy=q.y-c.y;if(roll){q.x=c.x+dx*co-dy*si;q.y=c.y+dx*si+dy*co;}else{/* ＋は画像の右を向く方へ回す */q.x=c.x+dx*co+dz*si;q.z=cz-dx*si+dz*co;}}
+    if(!roll)opFaceVis(k);};
   const rotIn=(id,roll)=>{const r=$(id,el);r.oninput=()=>{if(!T.rb||T.rb.pi!==T.cur)T.rb={pi:T.cur,pts:JSON.parse(JSON.stringify(P()))};
       const k=JSON.parse(JSON.stringify(T.rb.pts));turn(k,+r.value,roll);T.people[T.cur]=k;draw();};
     r.onchange=()=>{T.rb=null;r.value=0;drawPanel();};};
   rotIn('#optYaw',false);rotIn('#optRoll',true);
+  {const r=$('#optHead',el);r.oninput=()=>{if(!T.rb||T.rb.pi!==T.cur)T.rb={pi:T.cur,pts:JSON.parse(JSON.stringify(P()))};const k=JSON.parse(JSON.stringify(T.rb.pts));opHeadTurn(k,+r.value);T.people[T.cur]=k;draw();};r.onchange=()=>{T.rb=null;r.value=0;drawPanel();};}
+  $$('[data-oh]',el).forEach(b=>b.onclick=()=>{opHeadTurn(P(),+b.dataset.oh);draw();drawPanel();});
+  $('#optHeadBody',el).onclick=()=>{const k=P(),t=opTorso(k,bodyOf(T.cur)),h=opHeadYaw(k);if(!t||h==null)return toast('奥行きがないので、そろえられません');
+    let dd=(t.th-h)*180/Math.PI;dd=((dd+540)%360)-180;opHeadTurn(k,dd);draw();drawPanel();toast('顔の向きを体にそろえました');};
   $$('[data-oy]',el).forEach(b=>b.onclick=()=>{turn(P(),+b.dataset.oy,false);draw();drawPanel();});
   /* ポーズの見本（65種類）から始める：今の人物の位置・大きさに合わせて置きかえる */
   let preGrp=PIC_GROUPS[0][0];
@@ -3066,15 +3216,16 @@ function openOpTrace(o){
   $('#optLock',el).onchange=e=>{T.lock=e.target.checked;toast(T.lock?'手足・胴の長さを固定しました':'長さを自由に変えられるようにしました');};
   /* OpenPose の部品として保存。点は 0〜1 の割合、画像は長い辺 1600px の JPEG（画像がなければ棒人形の絵）を p.img にしまう */
   const savePart=async asNew=>{const name=$('#optName',el).value.trim();if(!name){$('#optName',el).focus();return toast('名前を入れてください');}
-    const op={W:Math.round(T.W),H:Math.round(T.H),out:T.out,hasImg:!!T.img,people:T.people.map(k=>k.map(q=>({x:+(q.x/T.W).toFixed(5),y:+(q.y/T.H).toFixed(5),z:+((q.z||0)/T.W).toFixed(5),h:q.h?1:0})))};
+    const op={W:Math.round(T.W),H:Math.round(T.H),out:T.out,hasImg:!!T.img,body:T.people.map((_,i)=>T.body[i]?bodyOf(i):null),people:T.people.map(k=>k.map(q=>({x:+(q.x/T.W).toFixed(5),y:+(q.y/T.H).toFixed(5),z:+((q.z||0)/T.W).toFixed(5),h:q.h?1:0,...(q.auto?{a:1}:{}),...(q.man?{m:1}:{})}))),autoHide:T.autoHide};
     const old=T.partId&&!asNew?byId('parts',T.partId):null;
     let img;if(T.img&&T.imgBlob)img=(old&&old.img===T.imgBlob)?T.imgBlob:await opShrink(T.imgBlob,1600);
     else img=await new Promise(r=>opRender(Object.assign({},T,{out:'img'})).toBlob(r,'image/png'));
     let p=old;if(p){p.name=name;p.tags=$('#optTags',el).value.trim();p.op=op;p.img=img;}
     else{p={id:uid(),type:'openpose',name,tags:$('#optTags',el).value.trim(),subject:'',weight:'',loraName:'',neg:'',memo:'',text:'',op,img,created:Date.now()};S.parts.push(p);}
     await saveNow('parts',p);T.partId=p.id;T.saved=true;if(T.img)T.imgBlob=img;
-    $('#optTtl',el).textContent=`🦴 OpenPose「${name}」を直す`;$('#optPart',el).textContent='部品を上書き保存';toast(old?'上書き保存しました':'OpenPose の部品として保存しました');};
+    $('#optTtl',el).textContent=`🦴 OpenPose「${name}」を直す`;$('#optPart',el).textContent='部品を上書き保存';$('#optQuick',el).textContent='上書き保存';toast(old?'上書き保存しました':'OpenPose の部品として保存しました');};
   $('#optPart',el).onclick=()=>savePart(false);
+  $('#optQuick',el).onclick=()=>{if(!$('#optName',el).value.trim()){setTab('save');$('#optName',el).focus();return toast('名前を入れて、保存を押してください');}savePart(false);};
   const pn=$('#optPartNew',el);if(pn)pn.onclick=()=>savePart(true);
   const pdl=$('#optPartDel',el);if(pdl)pdl.onclick=async()=>{const p=byId('parts',T.partId);if(!p||!confirm(`OpenPose「${p.name||'名前なし'}」を削除しますか？（しまった画像も消えます）`))return;
     S.parts=S.parts.filter(x=>x.id!==p.id);await dbDel('parts',p.id);markDeleted(p.id);T.saved=true;T.partId=null;toast('削除しました');history.back();};
@@ -3089,7 +3240,7 @@ function openOpTrace(o){
     $$('[data-opk]',el).forEach(x=>x.onclick=()=>{const k=x.dataset.opk;
       if(k==='open'){history.back();setTimeout(()=>openOpTrace({part:p,onDone:o.onDone}),60);return;}
       const L=takePeople(p);if(!L.length)return toast('人物が入っていません');
-      if(k==='rep'){T.people=L;T.cur=0;}else{T.people.push(...L);T.cur=T.people.length-L.length;}T.sel=null;draw();drawPanel();
+      if(k==='rep'){T.people=L;T.body=JSON.parse(JSON.stringify((p.op&&p.op.body)||[]));T.cur=0;}else{const pb=(p.op&&p.op.body)||[];T.body.length=T.people.length;L.forEach((_,j)=>T.body.push(pb[j]?JSON.parse(JSON.stringify(pb[j])):null));T.people.push(...L);T.cur=T.people.length-L.length;}T.sel=null;draw();drawPanel();
       toast(`「${p.name||'名前なし'}」を呼び出しました${T.img?'。画像に合わせて、人物ごと動かしたり大きさを変えたりしてください':''}`);});});
   /* 部品から開いたときは、しまった画像を敷く */
   if(o.part&&o.part.img&&o.part.op&&o.part.op.hasImg)setImg(o.part.img,'保存した画像');
@@ -3180,10 +3331,74 @@ function picSaveOpenPose(sc,ov){const cv=picOpenPose(sc,ov);cv.toBlob(b=>{if(!b)
 /* ===== シーンの OpenPose の欄（立ち位置・ポーズ） =====
    保存した OpenPose の部品を1つ選ぶ（sc.openpose）。部品のタグはプロンプトに入る。
    「開いて直す」で画像に合わせる画面を開く。「このシーン用に作る」はシーンの画像を下に敷いて作り、保存したら選ぶ */
+/* ===== OpenPose からタグを作る =====
+   D={W,H,out,people:[[{x,y,z,h}]]}（画素）。per[人物の番号]：その人物のタグ（向き・ポーズ）、scene：構図・人物どうしの距離と向き合い方。
+   向きは、肩の奥行き（z）があればそれで、なければ鼻・目の見え方で決める。数字を変えると、決まり方が変わる */
+function opAutoTags(D){
+  const per=(D.people||[]).map(()=>[]),scene=[];if(!per.length)return{per,scene};
+  const cr=D.out==='gen'?opCrop(D.W,D.H):{x:0,y:0,w:D.W,h:D.H};
+  const vis=q=>q&&!q.h,inF=q=>vis(q)&&q.x>=cr.x&&q.x<=cr.x+cr.w&&q.y>=cr.y&&q.y<=cr.y+cr.h;
+  const mid=(a,b)=>({x:(a.x+b.x)/2,y:(a.y+b.y)/2});
+  const I=D.people.map((k,i)=>{
+    const hip=vis(k[8])&&vis(k[11])?mid(k[8],k[11]):vis(k[8])?k[8]:vis(k[11])?k[11]:null;
+    const torso=hip&&vis(k[1])?Math.hypot(hip.x-k[1].x,hip.y-k[1].y):0,sh=vis(k[2])&&vis(k[5])?Math.hypot(k[2].x-k[5].x,k[2].y-k[5].y):0;
+    const u=torso||sh*1.6||cr.h*.2;
+    const nose=vis(k[0]),eR=vis(k[14]),eL=vis(k[15]),hasZ=k.some(q=>Math.abs(q.z||0)>1e-6);
+    let yaw;
+    if(hasZ&&vis(k[2])&&vis(k[5])){yaw=Math.atan2(-((k[5].z||0)-(k[2].z||0)),k[5].x-k[2].x)*180/Math.PI;if(!nose&&!eR&&!eL&&Math.abs(yaw)<90)yaw=(yaw>=0?180:-180)-yaw;}
+    else if(nose&&eR&&eL)yaw=sh&&torso&&sh<torso*.4?(k[0].x>=k[1].x?45:-45):0;
+    else if(!nose&&!eR&&!eL)yaw=180;
+    else if(eR!==eL)yaw=eR?90:-90;
+    else yaw=0;
+    const cx=vis(k[1])?k[1].x:k.filter(vis).reduce((a,q,_,A)=>a+q.x/A.length,0);
+    const headY=[0,14,15,16,17,1].map(j=>k[j]).find(vis);
+    /* ポーズ */
+    const P=[];const lying=hip&&vis(k[1])&&Math.abs(hip.y-k[1].y)<Math.abs(hip.x-k[1].x)*.7;
+    const leg=(h,kn,an)=>{if(!vis(k[h])||!vis(k[kn]))return null;const th=Math.hypot(k[kn].x-k[h].x,k[kn].y-k[h].y)||1;return{v:(k[kn].y-k[h].y)/th,sh:vis(k[an])?k[an].y-k[kn].y:null,th};};
+    const Lg=[leg(8,9,10),leg(11,12,13)].filter(Boolean);
+    if(lying)P.push('lying');
+    else if(Lg.length){const v=Lg.reduce((a,g)=>a+g.v,0)/Lg.length;
+      if(Lg.some(g=>g.v>.7&&g.sh!=null&&Math.abs(g.sh)<g.th*.35))P.push('kneeling');
+      else if(v<.45)P.push('sitting');
+      else if(Lg.every(g=>g.v>.7&&(g.sh==null||g.sh>g.th*.5)))P.push('standing');}
+    const top=nose?k[0].y:vis(k[1])?k[1].y-u*.35:null;
+    if(top!=null&&!lying){const up=[4,7].filter(j=>vis(k[j])&&k[j].y<top).length;if(up===2)P.push('arms up');else if(up===1)P.push('arm up');}
+    const fr={ank:inF(k[10])||inF(k[13]),kn:inF(k[9])||inF(k[12]),hp:inF(k[8])||inF(k[11]),head:[0,14,15,16,17].some(j=>inF(k[j]))};
+    const q=k.filter(inF);const hb=q.length?(Math.max(...q.map(a=>a.y))-Math.min(...q.map(a=>a.y)))/cr.h:0;
+    return{i,yaw,u,cx,headY:headY?headY.y:0,P,fr,hb,stand:P.includes('standing')};});
+  for(const x of I){const t=per[x.i],a=Math.abs(x.yaw);
+    if(a<22.5)t.push('facing viewer');else if(a<67.5)t.push('three-quarter view');else if(a<112.5)t.push('from side, profile');else if(a<157.5)t.push('from behind');else t.push('from behind, facing away');
+    t.push(...x.P);}
+  /* 構図：いちばん大きい人物で決める */
+  const M=I.slice().sort((a,b)=>b.u-a.u)[0],f=M.fr;
+  if(!f.head&&(f.hp||f.kn))scene.push('head out of frame');
+  if(f.ank)scene.push(M.hb<.45?'full body, wide shot':'full body');else if(f.kn)scene.push('cowboy shot');else if(f.hp)scene.push('upper body');else scene.push('portrait, close-up');
+  /* 2人ずつ：距離・向き合い方・背の差 */
+  const toward=(x,o)=>o.cx>x.cx?(x.yaw>=22.5&&x.yaw<=157.5):(x.yaw<=-22.5&&x.yaw>=-157.5);
+  for(let a=0;a<I.length;a++)for(let b=a+1;b<I.length;b++){let A=I[a],B=I[b];if(A.cx>B.cx)[A,B]=[B,A];
+    const d=Math.abs(A.cx-B.cx)/((A.u+B.u)/2),r=A.u/B.u,tA=toward(A,B),tB=toward(B,A);
+    const awA=A.yaw<=-22.5&&A.yaw>=-157.5,awB=B.yaw>=22.5&&B.yaw<=157.5;
+    if(tA&&tB){if(d<.9)scene.push('face-to-face, close together');else if(d<2.6)scene.push('facing another, eye contact');else scene.push('facing another, distance between characters');per[A.i].push('looking at another');per[B.i].push('looking at another');}
+    else if(awA&&awB)scene.push(d<.9?'back-to-back':'facing away from each other');
+    else if(d<.9)scene.push('close together, shoulder-to-shoulder');
+    else if(d<1.6)scene.push('side-by-side');
+    else if(d<3)scene.push('side-by-side, standing apart');
+    else scene.push('standing apart, wide shot');
+    if(A.stand&&B.stand&&Math.abs(A.headY-B.headY)>(A.u+B.u)/2*.25&&r<1.25&&r>.8)scene.push('height difference');
+    if(r>1.35||r<1/1.35){scene.push('depth of field');per[(r>1?A:B).i].push('in foreground');per[(r>1?B:A).i].push('in background');}}
+  return{per:per.map(x=>splitTags(x.join(', '))),scene:splitTags(scene.join(', '))};}
+const opAutoTextCache={};
+function opAutoPart(p){if(!p||!p.op)return{per:[],scene:[]};const key=p.id+':'+(p.updated||0);if(opAutoTextCache[key])return opAutoTextCache[key];
+  const d=p.op,W=d.W||800,H=d.H||912;return opAutoTextCache[key]=opAutoTags({W,H,out:d.out||'gen',people:(d.people||[]).map(k=>k.map(q=>({x:q.x*W,y:q.y*H,z:(q.z||0)*W,h:!!q.h})))});}
+/* シーンで使う自動のタグ（オフ・OpenPose なしなら空） */
+const opAutoScene=sc=>sc&&sc.opAuto!==false&&sc.openpose?opAutoPart(P_(sc.openpose)):{per:[],scene:[]};
+const opAutoText=A=>[...A.per.map((t,i)=>t.length?`人物${i+1}：<code>${esc(t.join(', '))}</code>`:''),A.scene.length?`全体：<code>${esc(A.scene.join(', '))}</code>`:''].filter(Boolean).join('<br>')||'（なし）';
 function opSecHTML(sc){const p=byId('parts',sc.openpose);
   return `<div class="sec" id="opSec"><h2>🦴 OpenPose <small>立ち位置・ポーズ</small></h2>
     ${partSel('OpenPose','openpose',sc.openpose,'data-scf="openpose"')}
     ${p?`<div class="opsc"><img data-opthumb="${p.id}" alt="OpenPose の見本"><div class="row" style="margin:0;flex-direction:column;align-items:flex-start"><button type="button" class="btn sm" id="opScEdit">開いて直す</button><button type="button" class="btn ghost sm" id="opScPng">PNG を保存</button></div></div>`:''}
+    ${p?(()=>{const A=opAutoPart(p),n=A.per.length,m=(sc.chars||[]).length;return `<label class="switch" style="margin:8px 0 4px"><input type="checkbox" id="opScAuto" ${sc.opAuto!==false?'checked':''}><span>立ち位置・向き・距離からタグを作る</span></label>
+      ${sc.opAuto!==false?`<p class="hint" style="margin:0 0 4px">${opAutoText(A)}</p>${n>m?`<p class="hint" style="margin:0 0 4px;color:var(--warn)">OpenPose の人物が ${n} 人、シーンの人物が ${m} 人です。人物${m+1}より後のタグは入りません（「＋ 人物を足す」で入ります）。</p>`:''}<p class="hint" style="margin:0 0 4px">OpenPose の人物1・人物2…が、シーンの人物1・人物2…に入ります。</p>`:''}`;})():''}
     <div class="row" style="margin:6px 0 0"><button type="button" class="btn ghost sm" id="opScNew">＋ このシーン用に新しく作る</button></div>
     <span class="hint">人物の立ち位置・向き・ポーズは、OpenPose で決めます。部品の「タグ」に書いたもの（例：facing each other）は、このシーンのプロンプトに入ります。PixAI では、保存した PNG を ControlNet の OpenPose に入れます。</span>
   </div>`;}
@@ -3193,6 +3408,7 @@ function opSecWire(sc){
   const ed=$('#opScEdit');if(ed)ed.onclick=()=>openOpTrace({part:p,sc,onDone:pid=>{if(!pid||!byId('parts',pid)){sc.openpose='';saveNow('scenes',sc);}render(true);}});
   const pg=$('#opScPng');if(pg)pg.onclick=()=>{const d=p.op||{},W=d.W||800,H=d.H||912;const T={W,H,out:d.out||'gen',people:(d.people||[]).map(k=>k.map(q=>({x:q.x*W,y:q.y*H,h:!!q.h})))};
     opRender(T).toBlob(b=>{if(b)downloadBlob(b,`openpose_${String(p.name||'pose').replace(/[\\/:*?"<>|\s]+/g,'_')}_${ymdhm()}.png`);toast('OpenPose の画像を保存しました');},'image/png');};
+  const oa=$('#opScAuto');if(oa)oa.onchange=()=>{sc.opAuto=oa.checked;saveNow('scenes',sc);render(true);};
   const nw=$('#opScNew');if(nw)nw.onclick=()=>openOpTrace({sc,title:sc.title||'',onDone:pid=>{if(pid&&byId('parts',pid)){sc.openpose=pid;saveNow('scenes',sc);}render(true);}});
 }
 /* OpenPose の見本の絵（下に敷いた画像を薄く出し、棒人形を重ねる）。部品の一覧・シーンで使う */
