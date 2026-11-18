@@ -103,6 +103,9 @@ nav#tabs button.on{color:var(--acc);font-weight:700}
 .opcus input{min-height:48px;font-size:16px;width:100%;box-sizing:border-box}
 .opcus>b{align-self:center;padding-top:16px}
 .oplab2{font-size:12px;color:var(--sub);font-weight:700;margin:10px 0 4px}
+.opdep{display:flex;gap:10px;align-items:flex-start}
+.optstage{position:relative}.optstage .opl{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;display:block}.optstage .opl[hidden]{display:none}.optstage #optSvg{position:relative}
+.opdep img{width:120px;flex:0 0 120px;border-radius:8px;background:#000;display:block;min-height:60px}
 @keyframes opUp{from{transform:translateY(28px);opacity:0}to{transform:none;opacity:1}}
 @keyframes opFade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
 @media (prefers-reduced-motion:reduce){.opt,.optpane:not([hidden]){animation:none}.opnav button{transition:none}}
@@ -112,7 +115,7 @@ nav#tabs button.on{color:var(--acc);font-weight:700}
 .obsex{margin:0}
 .obsex button{padding:4px 14px}
 .obrow{display:flex;align-items:center;gap:8px;font-size:13px;margin:0 0 2px}
-.obrow span{flex:0 0 4.4em}
+.obrow span{flex:0 0 5.6em}
 .obrow input{flex:1;min-width:0}
 .obrow b{flex:0 0 2.6em;text-align:right;font-weight:600;font-size:12px}
 /* 顔の向きのパッド・左右対称のボタン（指で押しやすい大きさ） */
@@ -526,7 +529,7 @@ const FMT={
 
 /* ========== データベース（IndexedDB） ========== */
 let db=null;
-const APP_VER='v76';/* sw.js の VERSION と同じにする */
+const APP_VER='v82';/* sw.js の VERSION と同じにする */
 const STORES=['parts','scenes','works','images','meta','fonts','stamps'];
 function openDB(){return new Promise((res,rej)=>{const r=indexedDB.open('manga4koma',3);r.onupgradeneeded=()=>{const d=r.result;for(const s of STORES)if(!d.objectStoreNames.contains(s))d.createObjectStore(s,{keyPath:'id'});};r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error);});}
 function tx(store,mode,fn){return new Promise((res,rej)=>{if(!db)return res(undefined);const t=db.transaction(store,mode);const req=fn(t.objectStore(store));let out;if(req)req.onsuccess=()=>{out=req.result;};t.oncomplete=()=>res(out);t.onerror=()=>rej(t.error);t.onabort=()=>rej(t.error);});}
@@ -2922,34 +2925,47 @@ function opFromKps(k,W,H){/* 別の大きさ（cw×ch）の点を、画像（W×
   return k.people.map(kp=>{const nk=kp[1]||[k.cw/2,k.ch*.3];return kp.map((q,i)=>{const r=q||[nk[0]+(i===0?0:(i%2?-1:1)*k.cw*.02),nk[1]-k.ch*.05,1];return{x:r[0]*s+ox,y:r[1]*s+oy,z:(r[3]||0)*s,h:!q||!!r[2]};});});}
 function opDefault(W,H,P){const t={title:'pose',chars:[{pic:Object.assign(picNew({chars:[0]},0),{on:true,gaze:true,yaw:0})}],pic:{pitch:0,ar:'800x912'}};
   return opFromKps(picOpKps(t,{i:0,P:P||picSkelOf('stand')},true),W,H)[0];}
-/* 肉付け：棒人形に、だいたいの体を重ねる（見るためだけ。保存する画像には入らない）。
-   太さは肩幅（なければ腰幅・胴の長さ）をもとに決める。数字を変えると太さが変わる */
+/* 肉付け：棒人形に、マネキンのような体を重ねる（見るためだけ。保存する画像には入らない）。
+   太さは胴の長さ U（肩の真ん中〜腰の真ん中）をもとに決める。肩幅・腰幅・手足の長さを変えても、手足の太さは変わらず、形がくずれない */
 /* 肉付けの体つき：人物ごとに {sex:'f'（女性）|'m'（男性）, all（全体）, arm（腕）, leg（脚）, torso（胴）, chest（胸・女性）, head（頭）}。1＝ふつう */
-const OP_BODY0={sex:'f',all:1,arm:1,leg:1,torso:1,chest:1,head:1};
-/* 太さの目安（肩幅を1として）。dS・dW・dH は胸・腰のくびれ・お尻の前後の厚み。数字を変えると、ふつうの太さが変わる。
-   col は体の前の面、colB は後ろの面の色（向きを変えたとき、どちらが前かわかるように） */
+const OP_BODY0={sex:'f',all:1,arm:1,leg:1,torso:1,chest:1,chestH:1,chestF:1,head:1};/* chestH：胸の高さ（大きいほど上）、chestF：胸の前への突き出し */
+/* 体の形の目安（U を1とした半径）。数字を変えると、ふつうの体つきが変わる。
+   arm：[肩, 上の腕の中ほど, ひじ, 下の腕のふくらみ, 手首]、leg：[脚の付け根, 太ももの中ほど, ひざ, ふくらはぎ, 足首]
+   tor：胴の輪切り [位置（肩0〜腰1）, 横はばのもと（'sh'＝肩幅の半分・'hip'＝腰のはば・数字＝U の何倍）, 倍率, 前後の厚み]
+   女性：細い腕と脚、くびれ、広い腰、胸・お尻のまるみ。男性：太い腕、広い肩と胸、細い腰（逆三角形）
+   col：明るい所、colB：中くらい、dk：かげ、rim：ふちの線 */
 const OP_FLESH={
-  f:{arm:[.40,.32],leg:[.64,.44],neck:.30,shOut:.06,waist:.60,hip:1.3,chest:.25,head:.47,dS:.40,dW:.34,dH:.46,col:'#ffcdb2',colB:'#9c6f60'},
-  m:{arm:[.52,.42],leg:[.62,.46],neck:.42,shOut:.14,waist:.88,hip:1.0,chest:0,head:.44,dS:.48,dW:.42,dH:.42,col:'#e8b48f',colB:'#7d5a43'}};
-/* 胴の形（奥行きも入れて、向きに合わせて幅を出す）。肩・腰の点は、隠していても形に使う。
-   th：体の向き（0＝こちら向き、＋は画像の右を向く）。W：本当の肩幅。cz：胴の奥行きの真ん中 */
+  f:{arm:[.1,.09,.062,.074,.045],leg:[.2,.158,.09,.102,.05],neck:.075,head:.27,hipMin:.36,chest:.14,butt:.155,
+    tor:[[-.09,.2,0,.13],[-.02,'sh',.62,.17],[.06,'sh',.84,.22],[.18,'sh',.8,.27],[.4,.3,0,.24],[.62,.24,0,.2],[.84,'hip',.94,.24],[1,'hip',1.05,.25],[1.12,'cr',1,.17]],
+    col:'#f0f0f0',colB:'#d2d3d8',mid:'#b4b5bb',dk:'#8d8e95',rim:'#5f6067'},
+  m:{arm:[.135,.115,.08,.094,.058],leg:[.19,.152,.096,.11,.058],neck:.1,head:.25,hipMin:.3,chest:0,butt:.13,
+    tor:[[-.09,.26,0,.16],[-.02,'sh',.7,.2],[.06,'sh',.97,.26],[.2,'sh',1,.31],[.42,.36,0,.28],[.66,.32,0,.24],[.86,'hip',.93,.23],[1,'hip',.96,.24],[1.12,'cr',1,.16]],
+    col:'#ebebeb',colB:'#cbccd2',mid:'#aeafb5',dk:'#84858c',rim:'#5a5b62'}};
+/* 胴の形：輪切り（だ円）を肩から腰へ重ね、今見ている向きでの左右のはば hw を出す。肩・腰の点は、隠していても形に使う。
+   rows：{P（画面の位置）, C（立体の位置）, R（人物の右）, Fw（正面）, a（横の半分）, b（前後の半分）, hw}。tl：胴の長さ U。W：肩幅。cz：胴の奥行きの真ん中 */
 function opTorso(k,b,shrink){b=Object.assign({},OP_BODY0,b||{});const F=OP_FLESH[b.sex==='m'?'m':'f'],wt=b.torso*b.all*(shrink||1);
   const S1=k[2],S2=k[5],H1=k[8],H2=k[11];if(!S1||!S2||!H1||!H2)return null;
-  const z=q=>q.z||0,N={x:(S1.x+S2.x)/2,y:(S1.y+S2.y)/2,z:(z(S1)+z(S2))/2},Hm={x:(H1.x+H2.x)/2,y:(H1.y+H2.y)/2,z:(z(H1)+z(H2))/2};
-  const tl=Math.hypot(Hm.x-N.x,Hm.y-N.y)||1,d={x:(Hm.x-N.x)/tl,y:(Hm.y-N.y)/tl},n={x:d.y,y:-d.x};
-  /* 肩の傾き（上げ下げ）でも細くならないよう、肩幅は縦の差も入れて測り、向きは胴に直角な向きの成分で決める */
-  const sx=S2.x-S1.x,sy=S2.y-S1.y,sz=z(S2)-z(S1),ln=sx*n.x+sy*n.y,hasZ=[S1,S2,H1,H2].some(q=>Math.abs(z(q))>1e-6);
-  let W,th;
-  if(hasZ){W=Math.max(Math.hypot(sx,sy,sz),tl*.5);th=Math.atan2(-sz,ln);}
-  else{W=Math.max(Math.hypot(sx,sy),tl*.55);th=Math.acos(Math.min(1,Math.hypot(sx,sy)/W));const nose=k[0]&&!k[0].h,dir=nose?(Math.sign(k[0].x-N.x)||1):1;th*=dir;if(ln<0)th=dir*Math.PI-th;}
-  const c=Math.cos(th),s=Math.sin(th),HW=Math.hypot(H2.x-H1.x,H2.y-H1.y,z(H2)-z(H1))||W*.7;
-  /* 高さごとの [位置（首0〜腰1）, 横の半分, 前後の半分] */
-  const LV=[[-.02,W/2*(1+F.shOut*2)*wt,W*F.dS/2*wt],[.3,W/2*(1+F.waist)/2*wt,W*(F.dS+F.dW)/4*wt],[.6,W/2*F.waist*wt,W*F.dW/2*wt],[1,Math.max(HW/2,W*.3)*F.hip*wt,W*F.dH/2*wt]];
-  const ga=1+(b.arm*b.all-1)*.12,gl=1+(b.leg*b.all-1)*.15;LV[0][1]*=ga;LV[0][2]*=1+(ga-1)*.5;LV[3][1]*=gl;LV[3][2]*=gl;LV[2][1]*=1+(gl-1)*.4;
-  const rows=LV.map(([t,A,B])=>{const P={x:N.x+d.x*tl*t,y:N.y+d.y*tl*t},hw=Math.sqrt((A*c)**2+(B*s)**2);
-    /* 前の面と後ろの面の境目（見えている側の、横のいちばん外の所） */
-    const m=Math.max(-hw,Math.min(hw,-(Math.sign(s)||1)*A*c));return{P,hw,m};});
-  return{rows,n,d,N,Hm,tl,W,th,c,s,cz:(N.z+Hm.z)/2,hasZ};}
+  const N=vMid(S1,S2),Hm=vMid(H1,H2),sp=vSub(Hm,N),U=Math.max(1,vLen(sp)),up=vMul(sp,-1/U),hasZ=[S1,S2,H1,H2].some(q=>Math.abs(q.z||0)>1e-6);
+  const orth=v=>vSub(v,vMul(up,vDot(v,up))),rS=vSub(S1,S2),rH=vSub(H1,H2);
+  let RS=vNorm(orth(rS)),RH=vNorm(orth(rH));if(vLen(RS)<.5)RS=RH;if(vLen(RH)<.5)RH=RS;if(vLen(RS)<.5)RS=RH=vNorm(vCross(up,V3(0,0,1)));if(vLen(RS)<.5)RS=RH=V3(-1,0,0);
+  const shH=Math.max(vLen(rS)/2,U*.2),hpH=Math.max(vLen(rH)/2,U*.12);
+  /* 画面の上での胴の向き d と、それに直角な向き n（真上・真下から見て胴が短く見えるときは、肩の線の向きを使う） */
+  const t2=Math.hypot(sp.x,sp.y);let d,n;
+  if(t2>U*.25){d={x:sp.x/t2,y:sp.y/t2};n={x:d.y,y:-d.x};}else{const l=Math.hypot(RS.x,RS.y)||1;n={x:-RS.x/l,y:-RS.y/l};d={x:-n.y,y:n.x};}
+  /* 横はばは、腕・脚の付け根の位置と太さに合わせる（肩幅・腰幅・太さを大きく・小さくしても、肩が横に飛び出したり、腰が段になったりしない）。
+     胴の太さ（wt）は、前後の厚みとくびれには強く、肩・腰のはばには少しだけ効かせる */
+  const ws=1+(wt-1)*.35,rDl=F.arm[0]*U*b.arm*b.all,rTh=F.leg[0]*U*b.leg*b.all;
+  const hipA=Math.min(Math.max(hpH+rTh*.92,F.hipMin*U),hpH+rTh*1.12);
+  const A0=F.tor.map(([t,base,f,bb])=>{const num=typeof base==='number';let a;
+    if(base==='sh')a=Math.min(shH*f*ws,shH+rDl*.5);else if(base==='hip')a=Math.min(hipA*f*ws,hpH+rTh*1.2);else if(base==='cr')a=Math.max(U*.08,hpH-rTh*.55);else a=base*U*(t<0?Math.sqrt(wt):1+(wt-1)*.6);
+    return{t,num,a,b:bb*U*wt};});
+  /* くびれ（数字の段）は、胸・腰よりも細く（肩幅・腰幅を小さくしても、くびれが外にはみ出さない） */
+  const top=Math.max(...A0.filter(r=>!r.num&&r.t>=0&&r.t<.5).map(r=>r.a)),bot=Math.max(...A0.filter(r=>!r.num&&r.t>.5).map(r=>r.a));
+  for(const r of A0)if(r.num&&r.t>=0)r.a=Math.max(U*.12,Math.min(r.a,.93*Math.min(top,bot)));
+  const rows=A0.map(r=>{const w=Math.max(0,Math.min(1,r.t)),R=vNorm(vAdd(vMul(RS,1-w),vMul(RH,w))),Fw=vNorm(vCross(R,up)),C=vAdd(N,vMul(sp,r.t));
+    const Rn=R.x*n.x+R.y*n.y,Fn=Fw.x*n.x+Fw.y*n.y;return{P:{x:C.x,y:C.y},C,R,Fw,a:r.a,b:r.b,Rn,Fn,hw:Math.hypot(r.a*Rn,r.b*Fn),t:r.t};});
+  const th=Math.atan2(rows[2].Fw.x,rows[2].Fw.z||0),c=Math.cos(th),s=Math.sin(th);
+  return{rows,n,d,N,Hm,up,tl:U,W:shH*2,th,c,s,cz:rows.reduce((a,r)=>a+(r.C.z||0),0)/rows.length,hasZ};}
 const opPolyIn=(q,poly)=>{let o=false;for(let i=0,j=poly.length-1;i<poly.length;j=i++){const a=poly[i],b2=poly[j];if((a.y>q.y)!==(b2.y>q.y)&&q.x<(b2.x-a.x)*(q.y-a.y)/(b2.y-a.y)+a.x)o=!o;}return o;};
 function opFaceVis(k){const e1=k[16],e2=k[17];if(!e1||!e2||![0,14,15,16,17].some(i=>Math.abs(k[i].z||0)>1e-6))return;
   const mz=((e1.z||0)+(e2.z||0))/2,half=(Math.hypot(e1.x-e2.x,(e1.z||0)-(e2.z||0))/2)||Math.hypot(k[2].x-k[5].x,(k[2].z||0)-(k[5].z||0))*.25||1;
@@ -2973,23 +2989,65 @@ function opInherit(old,n){if(!old||!n)return n;const src=n.map(q=>({x:q.x,y:q.y,
   return n;}
 /* 体の後ろに隠れる点を、自動で隠す（q.auto で印。自分で隠した・戻した点 q.man は変えない）。奥行きがないときは何もしない */
 const OP_AUTOHIDE=[2,3,4,5,6,7,9,10,12,13];
-/* 胸（女性）の2つの丸：{x,y,z,r,vis}。厚くする（chest を大きくする）ほど、丸が大きくなり、中心も前（体の正面の向き）へ出る。
-   前へ出る量は r×0.8。少し下がる。横・ななめから見ると、前に飛び出して見える */
-function opChest(k,b,TO,u){b=Object.assign({},OP_BODY0,b||{});if(b.sex==='m'||!TO)return[];const F=OP_FLESH.f,wc=b.chest*b.all;if(!(wc>0))return[];
-  const r0=TO.rows[1],r=u*F.chest*wc,n=TO.n,f=u*F.dS/2*.75+r*.8,rz=TO.N.z+(TO.Hm.z-TO.N.z)*.3,out=[];
-  for(const j of[-1,1]){const l=j*u*.2,z2=-l*TO.s+f*TO.c,o=l*TO.c+f*TO.s;
-    out.push({x:r0.P.x+n.x*o,y:r0.P.y+n.y*o-u*.05+Math.max(0,wc-1)*u*.08,z:rz+z2,r,vis:z2>=-u*.05});}
+/* 胴の輪切りのうち、位置 t にいちばん近い段 */
+const opRow=(TO,t)=>TO.rows.reduce((a,r)=>Math.abs(r.t-t)<Math.abs(a.t-t)?r:a);
+/* 胸（女性）の2つの丸：{x,y,z,r}。chest を大きくするほど、丸が大きく、前へ出る。横・ななめから見ると、前に飛び出して見える */
+function opChest(k,b,TO){b=Object.assign({},OP_BODY0,b||{});const F=OP_FLESH[b.sex==='m'?'m':'f'];if(!TO||!F.chest)return[];const wc=b.chest*b.all;if(!(wc>0))return[];
+  return opBreastE(k,b,TO,null).map(e=>({x:e.main.x,y:e.main.y,z:e.main.z||0,r:e.r}));}
+/* 胸の形（女性）：しずく形。上は鎖骨の下からなだらかに下り、下の半分に重さが集まって丸くふくらみ、少し外を向く。
+   大きいほど下へ下がる（重さ）。g：下（重力）の向き（なければ体の下）。1つの胸を3つのだ円体で作る：
+   ①上のなだらかな所 ②いちばんふくらむ所 ③下の重み（下のしわの上にのる所）。
+   返す値：人物の右・左ごとに {r, main（②の中心）, E:[だ円体]} */
+function opBreastE(k,b,TO,g){b=Object.assign({},OP_BODY0,b||{});const F=OP_FLESH[b.sex==='m'?'m':'f'];if(!TO||!F.chest)return[];const wc=b.chest*b.all;if(!(wc>0))return[];
+  const R1=opRow(TO,.2),R2=opRow(TO,.42),U=TO.tl,r=U*F.chest*Math.sqrt(wc)*Math.sqrt(b.torso),up=TO.up,out=[];
+  /* 高さ：胴の上から約 0.35 の所がふつう。chestH を 1 より大きくすると上へ、小さくすると下へ */
+  const hg=b.chestH==null?1:b.chestH,pj=Math.max(.3,b.chestF==null?1:b.chestF),w2=Math.max(-.6,Math.min(1.6,.7-(hg-1)*1.15)),w1=1-w2;
+  const B0=vAdd(vMul(R1.C,w1),vMul(R2.C,w2)),Rr=vNorm(vAdd(vMul(R1.R,w1),vMul(R2.R,w2))),Fw=vNorm(vAdd(vMul(R1.Fw,w1),vMul(R2.Fw,w2))),bb=Math.max(R1.b*w1+R2.b*w2,U*.12),aa=Math.max(R1.a*w1+R2.a*w2,U*.15);
+  const sag=r*(.16+.24*Math.max(0,wc-1)+.06*Math.max(0,1-wc));
+  for(const j of[-1,1]){const f=vNorm(vAdd(vMul(Fw,.96),vMul(Rr,j*.26))),uf=vNorm(vSub(up,vMul(f,vDot(up,f)))),sd=vCross(uf,f);
+    let gp=g?vSub(g,vMul(f,vDot(g,f))):vMul(uf,-1);gp=vLen(gp)>.2?vNorm(gp):vMul(uf,-1);
+    const base=vAdd(B0,vMul(Rr,j*aa*.4)),ax=[sd,uf,f];
+    /* しずく形・釣り鐘形：胸の壁の上（細い）から、前ななめ下（太い）へ、だ円体を少しずつ太くしながら並べて1つの形にする。
+       上はなだらかな坂、下は重さで丸くふくらむ（横から見るとしずく、正面から見ると釣り鐘）。
+       突き出し pj が大きいほど、下のふくらみが前へ出る。いちばん前に出るのは乳首の所 */
+    const P0=vAdd(vAdd(base,vMul(uf,r*1.0)),vMul(f,bb*.3));
+    const P2=vAdd(vAdd(vAdd(base,vMul(f,bb*.5+r*.42*pj)),vMul(gp,sag*.75)),vMul(uf,-r*.12));
+    const P1=vAdd(vAdd(base,vMul(f,bb*.48+r*.3*pj)),vMul(uf,r*.38));
+    const E=[],n=12;let main=P2,rB=r;
+    for(let i=0;i<=n;i++){const s=i/n,a=(1-s)*(1-s),bq=2*(1-s)*s,c=s*s,p=vAdd(vAdd(vMul(P0,a),vMul(P1,bq)),vMul(P2,c));
+      const rr=r*(.36+.62*Math.pow(s,.75));E.push({c:p,ax,r:[rr*1.02,rr*.96,rr*.86*Math.pow(pj,.25)]});if(i===n){main=p;rB=rr;}}
+    /* 乳首の所：下のふくらみの前の、真ん中より少し上。まわりより少しだけ前へ出る */
+    const dB=rB*.86*Math.pow(pj,.25),nip=vAdd(vAdd(main,vMul(f,dB*.8)),vMul(uf,r*.06)),nd=r*(.18+.07*pj);
+    E.push({c:nip,ax,r:[r*.28,r*.28,nd]});
+    out.push({r,main,nip:vAdd(nip,vMul(f,nd)),E});}
   return out;}
-/* 肉付けの形（隠れるかを調べる用）：手足は円柱（太さ r）、胴は多角形、頭は丸。opFleshSVG と同じ太さの決め方 */
-function opFleshShapes(k,b,hd){b=Object.assign({},OP_BODY0,b||{});const F=OP_FLESH[b.sex==='m'?'m':'f'],A=b.all,wa=b.arm*A,wl=b.leg*A,wt=b.torso*A;
-  const D=(a,c)=>Math.hypot(k[a].x-k[c].x,k[a].y-k[c].y),TO=opTorso(k,b);
-  const u=Math.max(1,TO?TO.W:Math.hypot(k[2].x-k[5].x,k[2].y-k[5].y)||D(8,11)*1.35||1);
-  const ex=1+(wt-1)*.3,wU=u*F.arm[0]*wa,wF=u*F.arm[1]*wa,wT=u*F.leg[0]*wl,wS=u*F.leg[1]*wl,wN=u*F.neck*wt;
-  const J={2:(wU*.75+u*F.arm[0]*.25)*1.05*ex,5:(wU*.75+u*F.arm[0]*.25)*1.05*ex,3:(wU+wF)/2,6:(wU+wF)/2,4:wF*.85,7:wF*.85,
-    8:(wT*.75+u*F.leg[0]*.25)*ex,11:(wT*.75+u*F.leg[0]*.25)*ex,9:(wT+wS)/2,12:(wT+wS)/2,10:wS*.85,13:wS*.85,1:wN,0:wN*.9};
-  const caps=[[2,3],[3,4],[5,6],[6,7],[8,9],[9,10],[11,12],[12,13],[1,0]].map(([a,e])=>({a,e,ra:J[a]/2,rb:J[e]/2}));
-  const HB=opHeadOf(k,b,u,F,hd)||{x:k[0].x,y:k[0].y,z:k[0].z||0,r:u*F.head};
-  return{u,TO,caps,head:{c:{x:HB.x,y:HB.y,z:HB.z},r:HB.r},chest:opChest(k,b,TO,u)};}
+/* お尻の形：上は腰からなだらかにつながり、下の半分に重さが集まって丸くふくらみ、下は太ももとの間にしわができる。
+   左右の間には少しすき間（割れ目）を残す。男性は平たく小さめ。1つを3つのだ円体で作る：①上 ②いちばんふくらむ所 ③下の重み */
+function opButtE(k,b,TO){b=Object.assign({},OP_BODY0,b||{});const F=OP_FLESH[b.sex==='m'?'m':'f'];if(!TO)return[];
+  const rh=opRow(TO,1),rl=opRow(TO,.84),U=TO.tl,r=U*F.butt*Math.sqrt(b.torso*b.all*b.leg),fz=b.sex==='m'?.78:1,dn=vMul(TO.up,-1),bk=vMul(rh.Fw,-1),R=rh.R,ax=[R,TO.up,rh.Fw],out=[];
+  for(const j of[-1,1]){const lat=vMul(R,j*rh.a*.44);
+    const top=vAdd(vAdd(vAdd(vMul(rl.C,.45),vMul(rh.C,.55)),lat),vMul(bk,rh.b*.55));
+    const main=vAdd(vAdd(vAdd(rh.C,lat),vMul(bk,rh.b*.46+r*.16*fz)),vMul(dn,r*.15));
+    const low=vAdd(vAdd(vAdd(rh.C,vMul(R,j*rh.a*.42)),vMul(bk,rh.b*.42+r*.2*fz)),vMul(dn,r*.6));
+    out.push({r,main,E:[{c:top,ax,r:[r*1.15,r*1.05,r*.55*fz]},{c:main,ax,r:[r*.94,r*.98,r*.7*fz]},{c:low,ax,r:[r*.86,r*.62,r*.66*fz]}]});}
+  return out;}
+/* お尻の2つの丸（後ろへ出る）。女性は大きめ */
+function opButt(k,b,TO){b=Object.assign({},OP_BODY0,b||{});const F=OP_FLESH[b.sex==='m'?'m':'f'];if(!TO)return[];
+  return opButtE(k,b,TO).map(e=>({x:e.main.x,y:e.main.y,z:e.main.z||0,r:e.r}));}
+/* 胴の長さ U（太さのもと）。胴が作れないときは、ほかの長さから */
+function opUnit(k,TO){if(TO)return TO.tl;const D=(a,c)=>k[a]&&k[c]?Math.hypot(k[a].x-k[c].x,k[a].y-k[c].y,(k[a].z||0)-(k[c].z||0)):0;return Math.max(1,D(1,8)||D(1,11)||D(2,5)*1.3||D(8,11)*2.2);}
+/* 手足の太さ（半径）の変わり方：[位置 0〜1, 半径] の列。上の腕 ua・下の腕 fa・太もも th・すね sn・首 nk・手 hd・足 ft */
+function opLimbProf(F,b,U){const wa=b.arm*b.all*U,wl=b.leg*b.all*U,A=F.arm,L=F.leg,wn=F.neck*U*Math.sqrt(b.torso*b.all);
+  return{ua:[[0,A[0]*wa],[.35,A[1]*wa*1.04],[1,A[2]*wa]],fa:[[0,A[2]*wa],[.22,A[3]*wa],[1,A[4]*wa]],
+    th:[[0,L[0]*wl],[.4,L[1]*wl],[1,L[2]*wl]],sn:[[0,L[2]*wl],[.28,L[3]*wl],[1,L[4]*wl]],nk:[[0,wn],[1,wn*.9]],
+    hd:[[0,A[4]*wa],[.55,A[4]*wa*1.12],[1,A[4]*wa*.7]],ft:[[0,L[4]*wl],[.4,L[4]*wl*.95],[1,L[4]*wl*.62]]};}
+const opProfAt=(P,t)=>{for(let i=1;i<P.length;i++)if(t<=P[i][0]){const[a,ra]=P[i-1],[c,rc]=P[i],u=(t-a)/((c-a)||1);return ra+(rc-ra)*u;}return P[P.length-1][1];};
+const OP_SEGP={'2-3':'ua','3-4':'fa','5-6':'ua','6-7':'fa','8-9':'th','9-10':'sn','11-12':'th','12-13':'sn','1-0':'nk'};
+/* 肉付けの形（隠れるかを調べる用）：手足は円柱（両はしの太さ ra・rb）、胴は輪切りの列、頭・胸・お尻は丸。opFleshSVG と同じ太さの決め方 */
+function opFleshShapes(k,b,hd){b=Object.assign({},OP_BODY0,b||{});const F=OP_FLESH[b.sex==='m'?'m':'f'],TO=opTorso(k,b),U=opUnit(k,TO),PR=opLimbProf(F,b,U);
+  const caps=Object.entries(OP_SEGP).map(([key,p])=>{const[a,e]=key.split('-').map(Number),P=PR[p];return{a,e,ra:Math.max(P[0][1],P[1][1]),rb:P[P.length-1][1]};});
+  const HB=opHeadOf(k,b,U,F,hd)||{x:k[0].x,y:k[0].y,z:k[0].z||0,r:U*F.head};
+  return{u:U,TO,caps,head:{c:{x:HB.x,y:HB.y,z:HB.z},r:HB.r},chest:[...opChest(k,b,TO),...opButt(k,b,TO)]};}
 function opAutoHide(k,b,on,flesh,hd){
   if(!on){for(const q of k)if(q.auto){q.h=false;delete q.auto;}return;}
   const T=opTorso(k,b,flesh?1:.9);if(!T)return;
@@ -3011,9 +3069,6 @@ function opAutoHide(k,b,on,flesh,hd){
   for(const i of list){const q=k[i];if(!q||q.man)continue;
     const occ=(T.hasZ&&!FACE.includes(i)&&(q.z||0)<T.cz-T.W*.05&&opPolyIn(q,poly))||(T.hasZ&&FACE.includes(i)&&flesh&&(q.z||0)<T.cz-T.W*.3&&opPolyIn(q,poly))||behindFlesh(i,q);
     if(occ&&!q.h){q.h=true;q.auto=true;}else if(!occ&&q.h&&q.auto){q.h=false;delete q.auto;}}}
-/* 球（関節・頭）の前の面の形（向き th）。後ろの面の色の円の上に重ねる */
-function opSphFront(cx,cy,r,th){const c=Math.cos(th),s=Math.sin(th),fs=Math.sign(s)||1,rx=Math.max(.1,r*Math.abs(c)),T0=`${cx.toFixed(1)},${(cy-r).toFixed(1)}`,B0=`${cx.toFixed(1)},${(cy+r).toFixed(1)}`;
-  const s1=fs>0?1:0,s2=c>=0?(fs>0?1:0):(fs>0?0:1);return `M${T0} A${r.toFixed(1)} ${r.toFixed(1)} 0 0 ${s1} ${B0} A${rx.toFixed(1)} ${r.toFixed(1)} 0 0 ${s2} ${T0} Z`;}
 /* 頭の球（半径 r）の中心。鼻が球の表面に来るように、鼻から顔の向きと反対へ r だけ下がった所（奥行きがないときは耳の真ん中） */
 function opHeadBall(k,r){const e1=k[16],e2=k[17],n=k[0];if(!n)return null;
   const em=e1&&e2?{x:(e1.x+e2.x)/2,y:(e1.y+e2.y)/2,z:((e1.z||0)+(e2.z||0))/2}:{x:n.x,y:n.y,z:n.z||0};
@@ -3024,46 +3079,132 @@ function opHeadBall(k,r){const e1=k[16],e2=k[17],n=k[0];if(!n)return null;
 function opHeadOf(k,b,u,F,hd){const D=(a,c)=>Math.hypot(k[a].x-k[c].x,k[a].y-k[c].y);if(!k[0])return null;
   const r=(hd&&hd.r>0?hd.r:Math.max(u*F.head,k[1]?D(0,1)*.62:0))*b.head;
   if(hd&&hd.c)return{x:hd.c.x,y:hd.c.y,z:hd.c.z||0,r};return opHeadBall(k,r);}
-function opFleshSVG(k,b,hd){b=Object.assign({},OP_BODY0,b||{});const F=OP_FLESH[b.sex==='m'?'m':'f'],A=b.all,wa=b.arm*A,wl=b.leg*A,wt=b.torso*A,wc=b.chest*A;
-  const v=i=>k[i]&&!k[i].h,D=(a,c)=>Math.hypot(k[a].x-k[c].x,k[a].y-k[c].y);
-  const TO=opTorso(k,b);
-  /* 太さのもと：本当の肩幅（横向きでも細くならない） */
-  let u=TO?TO.W:v(2)&&v(5)?D(2,5):v(8)&&v(11)?D(8,11)*1.35:v(1)&&(v(8)||v(11))?D(1,v(8)?8:11)*.55:0;if(!u)return'';u=Math.max(u,1);
-  const th=TO?TO.th:(v(0)?0:Math.PI),c=Math.cos(th),s=Math.sin(th);
-  const P=(x,y)=>`${x.toFixed(1)},${y.toFixed(1)}`;
-  /* 関節の太さ（直径）。となり合う所の太さの間をとって、なめらかにつなぐ。胴が太いと、腕・脚の付け根も少し太くなる */
-  const ex=1+(wt-1)*.3,wU=u*F.arm[0]*wa,wF=u*F.arm[1]*wa,wT=u*F.leg[0]*wl,wS=u*F.leg[1]*wl,wN=u*F.neck*wt;
-  const J={2:(wU*.75+u*F.arm[0]*.25)*1.05*ex,5:(wU*.75+u*F.arm[0]*.25)*1.05*ex,3:(wU+wF)/2,6:(wU+wF)/2,4:wF*.85,7:wF*.85,
-    8:(wT*.75+u*F.leg[0]*.25)*ex,11:(wT*.75+u*F.leg[0]*.25)*ex,9:(wT+wS)/2,12:(wT+wS)/2,10:wS*.85,13:wS*.85,1:wN,0:wN*.9};
-  const items=[];/* {z, h}：奥（z が小さい）から描く */
-  const zz=i=>k[i].z||0,HB=opHeadOf(k,b,u,F,hd);
-  /* 手足（円柱）：後ろの面の色で全体、前の面の色で向いている側 */
-  for(const[a,e]of[[2,3],[3,4],[5,6],[6,7],[8,9],[9,10],[11,12],[12,13],[1,0]]){if(!v(a)||!v(e))continue;
-    const Q=k[a],R=e===0&&HB?HB:k[e],L=Math.hypot(R.x-Q.x,R.y-Q.y)||1,nx=-(R.y-Q.y)/L,ny=(R.x-Q.x)/L,ra=J[a]/2,rb=J[e]/2;/* 首は頭の球の中心へ */
-    const band=(f1,f2)=>[P(Q.x+nx*f1*ra,Q.y+ny*f1*ra),P(Q.x+nx*f2*ra,Q.y+ny*f2*ra),P(R.x+nx*f2*rb,R.y+ny*f2*rb),P(R.x+nx*f1*rb,R.y+ny*f1*rb)].join(' ');
-    let h=`<polygon points="${band(-1,1)}" fill="${F.colB}"/>`;
-    const fn=s*nx;let fr=null;if(Math.abs(fn)<.15)fr=c>0?[-1,1]:null;else{const md=Math.max(-1,Math.min(1,-(Math.sign(fn))*c));fr=fn>0?[md,1]:[-1,md];}
-    if(fr&&fr[1]-fr[0]>.02)h+=`<polygon points="${band(fr[0],fr[1])}"/>`;
-    items.push({z:(zz(a)+zz(e))/2,h});}
-  /* 関節（球） */
-  for(const i of[2,3,4,5,6,7,8,9,10,11,12,13]){if(!v(i))continue;const r=J[i]/2;items.push({z:zz(i)+.001,h:`<circle cx="${k[i].x}" cy="${k[i].y}" r="${r.toFixed(1)}" fill="${F.colB}"/><path d="${opSphFront(k[i].x,k[i].y,r,th)}"/>`});}
-  if(TO){
-    /* 胴：前の面（col）と後ろの面（colB） */
-    const R=TO.rows,n=TO.n,pt=(r,o)=>P(r.P.x+n.x*o,r.P.y+n.y*o),fs=Math.sign(TO.s)||1,sw=u*.2*wt;
-    const full=[...R.map(r=>pt(r,r.hw)),...R.slice().reverse().map(r=>pt(r,-r.hw))];
-    const fr=fs>0?[...R.map(r=>pt(r,r.hw)),...R.slice().reverse().map(r=>pt(r,r.m))]:[...R.map(r=>pt(r,r.m)),...R.slice().reverse().map(r=>pt(r,-r.hw))];
-    let h=`<polygon points="${full.join(' ')}" fill="${F.colB}" stroke="${F.colB}" stroke-width="${sw}"/>`;
-    if(Math.abs(TO.s)>.02||TO.c>0)h+=`<polygon points="${fr.join(' ')}" stroke="${F.col}" stroke-width="${sw}"/>`;
-    if(b.sex!=='m'&&wc>0){for(const C of opChest(k,b,TO,u)){if(!C.vis)continue;
-      h+=`<circle cx="${C.x.toFixed(1)}" cy="${C.y.toFixed(1)}" r="${C.r.toFixed(1)}"/>`;}}
-    items.push({z:TO.cz,h});
-  }else{const tor=[2,5,11,8].filter(v);if(tor.length>=3)items.push({z:0,h:`<polygon points="${tor.map(i=>k[i].x+','+k[i].y).join(' ')}" stroke="${F.col}" stroke-width="${u*.4*wt}"/>`});}
-  items.sort((a,b2)=>a.z-b2.z);
-  let h=`<g opacity=".66" fill="${F.col}" stroke-linecap="round" stroke-linejoin="round">`+items.map(x=>x.h).join('');
-  /* 頭：顔の側（col）と後ろ頭（colB）。向きは、鼻と耳から（なければ体の向き） */
-  const hc=HB,r=HB?HB.r:0;
-  if(hc){const ht=opHeadYaw(k);h+=`<circle cx="${hc.x}" cy="${hc.y}" r="${r}" fill="${F.colB}"/><path d="${opSphFront(hc.x,hc.y,r,ht==null?th:ht)}"/>`;}
-  return h+'</g>';}
+/* ===== 髪・棒・Depth（深さ）画像 =====
+   髪と棒は、頭・体の向きに合わせた「丸（球）の集まり」で形を作る。肉付けの絵にも、Depth 画像にも同じ形を使う */
+const OP_HAIR=[['none','なし'],['short','ショート'],['bob','ボブ'],['long','ロング'],['pony','ポニーテール'],['twin','ツインテール']];
+const OP_STICK=[['','持たない'],['rh','右手'],['lh','左手'],['ra','右わき'],['la','左わき'],['cr','股']];
+/* 頭の向き：c（耳の真ん中）, fw（顔の向き）, up（頭の上）, rt（人物の右） */
+function opHeadFr(k,TO){const a=k[16],b2=k[17],n=k[0],c=a&&b2?vMid(a,b2):V3(n.x,n.y,n.z);let up=TO?TO.up:V3(0,-1,0);
+  let fw=vSub(n,c);fw=vNorm(vSub(fw,vMul(up,vDot(fw,up))));if(vLen(fw)<.5)fw=TO?opRow(TO,.18).Fw:V3(0,0,1);
+  up=vNorm(vSub(up,vMul(fw,vDot(up,fw))));return{c,fw,up,rt:vNorm(vCross(up,fw))};}
+/* 髪の形：球の列 {x,y,z,r}。hr={st:髪型, len:長さ（1＝ふつう）, vol:ボリューム}。HB：頭の球。下がる髪は、体の下の向きへたれる */
+function opHairSph(k,hr,HB,TO){if(!HB||!hr||!hr.st||hr.st==='none')return[];const H=opHeadFr(k,TO),h=HB.r,C=V3(HB.x,HB.y,HB.z),L=hr.len||1,V=hr.vol||1,out=[];
+  const D=TO?vMul(TO.up,-1):vMul(H.up,-1);
+  const P=(f,u,r)=>vAdd(C,vAdd(vAdd(vMul(H.fw,f*h),vMul(H.up,u*h)),vMul(H.rt,(r||0)*h)));
+  const sp=(p,r)=>out.push({x:p.x,y:p.y,z:p.z||0,r:r*h*V});
+  const line=(a,b,r0,r1,n,bend)=>{for(let i=0;i<=n;i++){const t=i/n,p=vAdd(vAdd(a,vMul(vSub(b,a),t)),bend?bend(t):V3(0,0,0));sp(p,r0+(r1-r0)*t);}};
+  /* 頭にかぶさる所（どの髪型も） */
+  sp(P(-.22,.16),1.02);sp(P(-.38,-.04),.96);/* 顔より少し後ろにして、顔の前には出さない */
+  const st=hr.st;
+  if(st==='short'){sp(P(-.42,-.36),.74);sp(P(-.05,-.2,.6),.5);sp(P(-.05,-.2,-.6),.5);}
+  else if(st==='bob'){for(const s of[-1,1])line(P(-.05,-.15,s*.62),vAdd(P(-.18,-.15,s*.66),vMul(D,h*.95*L)),.5,.38,8);line(P(-.45,-.2),vAdd(P(-.52,-.2),vMul(D,h*.9*L)),.74,.58,8);}
+  else if(st==='long'){const Ln=h*(2.3*L+.5);/* 後ろの髪は、すき間ができないように5本の列を重ねて1枚にする */for(const s of[-.68,-.34,0,.34,.68])line(P(-.45,-.1,s),vAdd(P(-.6,-.1,s*1.12),vMul(D,Ln)),.48,.4,22);
+    for(const s of[-1,1])line(P(-.05,-.2,s*.68),vAdd(P(-.15,-.2,s*.8),vMul(D,h*1.5*L)),.4,.24,10);}
+  else if(st==='pony'){const T0=P(-.88,.3);sp(T0,.42);line(T0,vAdd(T0,vMul(D,h*2.5*L)),.4,.14,18,t=>vMul(H.fw,-.42*h*Math.sin(Math.min(1,t*1.6)*Math.PI/2)));}
+  else if(st==='twin'){for(const s of[-1,1]){const T0=P(-.25,.2,s*.85);sp(T0,.36);line(T0,vAdd(T0,vMul(D,h*2.3*L)),.34,.12,16,t=>vMul(H.rt,s*.38*h*Math.sin(Math.min(1,t*1.8)*Math.PI/2)));}}
+  return out;}
+/* 棒：st={at:持つ所（rh 右手・lh 左手・ra 右わき・la 左わき・cr 股）, dir:持つ所での向き（k と同じ座標）, len:長さ・th:太さ（胴の長さを1として）,
+   grip:持つ所（0＝はし〜1＝反対のはし）, bend:曲がり（度。0＝まっすぐ、180＝半円）, bdir:曲がる向き（度。棒のまわりに回す）}。
+   曲げた棒は、持つ所を真ん中にした円の弧にする。{anc:持つ点, pts:棒の線の点の列, A,B:両はし, r:太さ（半径）} を返す */
+function opStickSeg(k,st,TO){if(!st||!st.at||!TO)return null;const U=TO.tl,dn=vMul(TO.up,-1);let A;
+  if(st.at==='rh'||st.at==='lh'){const w=k[st.at==='rh'?4:7],e=k[st.at==='rh'?3:6];if(!w||!e)return null;A=vAdd(w,vMul(vNorm(vSub(w,e)),U*.08));}
+  else if(st.at==='ra'||st.at==='la'){const s=k[st.at==='ra'?2:5],e=k[st.at==='ra'?3:6],inr=vAdd(s,vMul(vSub(e,s),.3)),cc=vAdd(TO.N,vMul(vSub(TO.Hm,TO.N),.22));A=vAdd(inr,vMul(vSub(cc,inr),.32));}
+  else A=vAdd(TO.Hm,vMul(dn,U*.13));
+  const d=vNorm(st.dir||V3(0,0,1)),L=(st.len||1.4)*U,g=st.grip==null?.4:st.grip,th=(st.bend||0)*Math.PI/180,pts=[];
+  /* 曲がる向き：棒に直角な向きを、棒のまわりに bdir 度回す */
+  let e1=vCross(d,TO.up);if(vLen(e1)<.3)e1=vCross(d,opRow(TO,.18).Fw);e1=vNorm(e1);const e2=vCross(d,e1),bd=(st.bdir||0)*Math.PI/180,p=vNorm(vAdd(vMul(e1,Math.cos(bd)),vMul(e2,Math.sin(bd))));
+  const n=Math.abs(th)<1e-3?1:Math.max(6,Math.ceil(Math.abs(th)/(Math.PI/24))),kk=th/L;
+  for(let i=0;i<=n;i++){const u=(i/n-g)*L;
+    pts.push(Math.abs(kk)<1e-9?vAdd(A,vMul(d,u)):vAdd(A,vAdd(vMul(d,Math.sin(kk*u)/kk),vMul(p,(1-Math.cos(kk*u))/kk))));}
+  return{anc:A,pts,A:pts[0],B:pts[pts.length-1],r:(st.th||.035)*U};}
+/* 持ち始めの向き（体の向き B から）。手：前ななめ上、わき：前ななめ下、股：前 */
+function opStickDir(at,B){const f=B.fw,u=B.up;return vNorm(at==='rh'||at==='lh'?vAdd(vMul(f,.55),vMul(u,.83)):at==='cr'?vAdd(vMul(f,.95),vMul(u,.1)):vAdd(vMul(f,.92),vMul(u,-.38)));}
+/* ===== 体の立体（Depth 画像と肉付けの絵で同じものを使う） =====
+   体・髪・棒を、球（S）とだ円体（E）の集まりにする。m は材質（b 肌・h 髪・s 棒）。
+   1つ1つの画素で「いちばん手前の面の奥行き」を求め（z バッファ）、Depth 画像はその奥行きを明るさに、肉付けの絵はその面に光を当てて描く */
+function opDepthPrims(it){const k=it.k,b=Object.assign({},OP_BODY0,it.b||{}),F=OP_FLESH[b.sex==='m'?'m':'f'],TO=opTorso(k,b),U=opUnit(k,TO),PR=opLimbProf(F,b,U);
+  const v=i=>k[i]&&!(k[i].h&&!k[i].auto),S=[],E=[],sp=(c,r,m)=>S.push({x:c.x,y:c.y,z:c.z||0,r,m:m||'b'});
+  const cap=(A,B,P,m)=>{const L=vLen(vSub(B,A)),rm=Math.max(.5,Math.min(...P.map(x=>x[1]))),n=Math.min(90,Math.max(2,Math.ceil(L/(rm*.3))));for(let i=0;i<=n;i++){const t=i/n;sp(vAdd(A,vMul(vSub(B,A),t)),opProfAt(P,t),m);}};
+  const dn=TO?vMul(TO.up,-1):V3(0,1,0),fw=TO?opRow(TO,.18).Fw:V3(0,0,1);
+  for(const[s,e,w]of[[2,3,4],[5,6,7]]){if(!v(s))continue;const r0=PR.ua[0][1],As=vAdd(k[s],vMul(dn,r0*.55));sp(vAdd(k[s],vMul(dn,r0*.5)),r0*.95);
+    if(v(e)){cap(As,k[e],PR.ua);if(v(w)){cap(k[e],k[w],PR.fa);cap(k[w],vAdd(k[w],vMul(vNorm(vSub(k[w],k[e])),U*.17)),PR.hd);}}}
+  for(const[h,kn,an]of[[8,9,10],[11,12,13]]){if(!v(h)||!v(kn))continue;cap(k[h],k[kn],PR.th);
+    if(v(an)){cap(k[kn],k[an],PR.sn);
+      /* ひざのお皿（すねの前へ少し出る） */
+      if(TO){const sh=vNorm(vSub(k[an],k[kn])),lf=vNorm(vSub(opRow(TO,1).Fw,vMul(sh,vDot(opRow(TO,1).Fw,sh))));if(vLen(lf)>.3)sp(vAdd(vAdd(k[kn],vMul(lf,PR.th[2][1]*.32)),vMul(sh,PR.th[2][1]*.15)),PR.th[2][1]*.62);
+        const fw2=opRow(TO,1).Fw;let fd=vSub(fw2,vMul(sh,vDot(fw2,sh)));if(vLen(fd)<.3)fd=vSub(dn,vMul(sh,vDot(dn,sh)));
+        if(vLen(fd)>.2)cap(k[an],vAdd(k[an],vAdd(vMul(vNorm(fd),U*.24),vMul(sh,U*.03))),PR.ft);}}}
+  const HB=opHeadOf(k,b,U,F,it.hd);
+  if(v(1)&&HB)cap(k[1],HB,PR.nk);
+  if(TO){const R=TO.rows;/* 胴：輪切りの間をこまかく分けて、うすいだ円体を重ねる */
+    for(let j=0;j<R.length-1;j++){const r1=R[j],r2=R[j+1],n=Math.max(1,Math.ceil((r2.t-r1.t)/.02));
+      for(let i=0;i<n;i++){const t=i/n,C=vAdd(r1.C,vMul(vSub(r2.C,r1.C),t)),Rx=vNorm(vAdd(vMul(r1.R,1-t),vMul(r2.R,t))),Fz=vNorm(vAdd(vMul(r1.Fw,1-t),vMul(r2.Fw,t)));
+        E.push({c:C,ax:[Rx,TO.up,Fz],r:[r1.a+(r2.a-r1.a)*t,U*.09,r1.b+(r2.b-r1.b)*t],m:'b'});}}
+    /* 胸・お尻：重さのある形（それぞれ3つのだ円体）。胸は下（重力）の向きへ下がる */
+    for(const s of[...opBreastE(k,b,TO,it.g||null),...opButtE(k,b,TO)])for(const e of s.E)E.push(Object.assign({m:'b'},e));
+    /* 肩甲骨（背中のふくらみ）と、おなかの少しのふくらみ */
+    const r1=opRow(TO,.2),r4=opRow(TO,.62);
+    for(const j of[-1,1])E.push({c:vAdd(vAdd(r1.C,vMul(r1.R,j*r1.a*.45)),vMul(r1.Fw,-r1.b*.66)),ax:[r1.R,TO.up,r1.Fw],r:[r1.a*.36,U*.13,r1.b*.36],m:'b'});
+    E.push({c:vAdd(vAdd(r4.C,vMul(r4.Fw,r4.b*.62)),vMul(TO.up,-U*.1)),ax:[r4.R,TO.up,r4.Fw],r:[r4.a*.62,U*.16,r4.b*.42],m:'b'});}
+  if(HB){const H=opHeadFr(k,TO);E.push({c:V3(HB.x,HB.y,HB.z),ax:[H.rt,H.up,H.fw],r:[HB.r*.84,HB.r*1.06,HB.r*.96],m:'b'});
+    /* あご・鼻（顔の前の小さなふくらみ） */
+    E.push({c:vAdd(vAdd(V3(HB.x,HB.y,HB.z),vMul(H.fw,HB.r*.42)),vMul(H.up,-HB.r*.52)),ax:[H.rt,H.up,H.fw],r:[HB.r*.4,HB.r*.3,HB.r*.38],m:'b'});
+    sp(vAdd(vAdd(V3(HB.x,HB.y,HB.z),vMul(H.fw,HB.r*.86)),vMul(H.up,-HB.r*.14)),HB.r*.1);
+    for(const s of opHairSph(k,it.hair,HB,TO))sp(s,s.r,'h');}
+  const st=opStickSeg(k,it.stick,TO);if(st)for(let i=0;i<st.pts.length-1;i++)cap(st.pts[i],st.pts[i+1],[[0,st.r],[1,st.r]],'s');
+  const zs=k.filter(Boolean).map(q=>q.z||0);return{S,E,U,zc:TO?TO.cz:zs.reduce((a,c)=>a+c,0)/Math.max(1,zs.length)};}
+/* z バッファ：見る範囲 F（x,y,w,h）を W×H の画素にして、人物ごとの立体の、いちばん手前の奥行き Z・人物 ID・材質 MT を求める */
+const OP_MAT={b:0,h:1,s:2};
+function opZBuf(list,F,W,H){const sx=W/F.w,sy=H/F.h,N=W*H,Z=new Float32Array(N).fill(-Infinity),ID=new Int8Array(N).fill(-1),MT=new Int8Array(N),PP=[];
+  let cur=0,mt=0;const put=(i,z)=>{if(z>Z[i]){Z[i]=z;ID[i]=cur;MT[i]=mt;}};
+  for(let pi=0;pi<list.length;pi++){const it=list[pi],{S,E,U,zc}=opDepthPrims(it);cur=pi;PP.push({U:U*sx,zc:zc*sx});
+    for(const s of S){mt=OP_MAT[s.m]||0;const cx=(s.x-F.x)*sx,cy=(s.y-F.y)*sy,R=s.r*sx,cz=s.z*sx,x0=Math.max(0,Math.floor(cx-R)),x1=Math.min(W-1,Math.ceil(cx+R)),y0=Math.max(0,Math.floor(cy-R)),y1=Math.min(H-1,Math.ceil(cy+R)),R2=R*R;
+      for(let y=y0;y<=y1;y++){const dy=y+.5-cy;for(let x=x0;x<=x1;x++){const dx=x+.5-cx,d2=dx*dx+dy*dy;if(d2<R2)put(y*W+x,cz+Math.sqrt(R2-d2));}}}
+    for(const e of E){mt=OP_MAT[e.m]||0;const cx=(e.c.x-F.x)*sx,cy=(e.c.y-F.y)*sy,cz=(e.c.z||0)*sx,[a1,a2,a3]=e.ax,[r1,r2,r3]=e.r.map(r=>Math.max(.5,r*sx));
+      const ex=Math.sqrt((r1*a1.x)**2+(r2*a2.x)**2+(r3*a3.x)**2),ey=Math.sqrt((r1*a1.y)**2+(r2*a2.y)**2+(r3*a3.y)**2);
+      const dq=[(a1.z||0)/r1,(a2.z||0)/r2,(a3.z||0)/r3],A=dq[0]*dq[0]+dq[1]*dq[1]+dq[2]*dq[2],x0=Math.max(0,Math.floor(cx-ex)),x1=Math.min(W-1,Math.ceil(cx+ex)),y0=Math.max(0,Math.floor(cy-ey)),y1=Math.min(H-1,Math.ceil(cy+ey));
+      if(A<1e-12)continue;
+      for(let y=y0;y<=y1;y++){const py=y+.5-cy;for(let x=x0;x<=x1;x++){const px=x+.5-cx,pz=-cz;
+        const q0=(px*a1.x+py*a1.y+pz*(a1.z||0))/r1,q1=(px*a2.x+py*a2.y+pz*(a2.z||0))/r2,q2=(px*a3.x+py*a3.y+pz*(a3.z||0))/r3;
+        const B=2*(q0*dq[0]+q1*dq[1]+q2*dq[2]),C=q0*q0+q1*q1+q2*q2-1,dd=B*B-4*A*C;if(dd<0)continue;put(y*W+x,(-B+Math.sqrt(dd))/(2*A));}}}}
+  return{Z,ID,MT,PP,W,H,sx};}
+/* 立体の中だけをならす（同じ人物の画素だけで平均。r：半径、n：回数）。M：その画素に体があるか */
+function opZSmooth(zb,r,n){const{Z,ID,W,H}=zb,N=W*H,V=new Float32Array(N),M=new Float32Array(N);for(let i=0;i<N;i++)if(Z[i]>-Infinity){V[i]=Z[i];M[i]=1;}
+  const box=(src,hor)=>{const o=new Float32Array(N),len=hor?W:H,cnt=hor?H:W;for(let a=0;a<cnt;a++){let s=0;const ix=j=>hor?a*W+j:j*W+a;
+      for(let j=-r;j<=r;j++)s+=src[ix(Math.min(len-1,Math.max(0,j)))];for(let j=0;j<len;j++){o[ix(j)]=s/(2*r+1);s+=src[ix(Math.min(len-1,j+r+1))]-src[ix(Math.max(0,j-r))];}}return o;};
+  let VB=V,MB=M;for(let p=0;p<n;p++){VB=box(box(VB,true),false);MB=box(box(MB,true),false);}
+  const out=new Float32Array(N);for(let i=0;i<N;i++)out[i]=M[i]?VB[i]/Math.max(1e-6,MB[i]):-Infinity;return{S:out,M};}
+function opDepthCanvas(list,F,ow,oh){const q=2,W=Math.max(8,Math.ceil(ow/q)),H=Math.max(8,Math.ceil(oh/q)),zb=opZBuf(list,F,W,H),{ID,PP}=zb,{S:V,M}=opZSmooth(zb,2,2);
+  /* 明るさ＝人物ごとの明るさ（手前の人物ほど明るい）＋その人物の中の凹凸（体の真ん中より手前ほど明るく、ふちへ向かって暗く、まるみが出る）。
+     1人なら 180 前後、2人なら奥の人物 120・手前の人物 195 を中心にする。背景の黒とははっきり分ける */
+  const zcs=PP.map(p=>p.zc),zlo=Math.min(...zcs),zhi=Math.max(...zcs),base=PP.map(p=>PP.length<2||zhi-zlo<1e-6?180:120+75*(p.zc-zlo)/(zhi-zlo));
+  const sm=document.createElement('canvas');sm.width=W;sm.height=H;const g=sm.getContext('2d'),im=g.createImageData(W,H);
+  for(let i=0;i<W*H;i++){const o=i*4;if(M[i]){const p=Math.max(0,ID[i]),P=PP[p],c=Math.round(Math.max(35,Math.min(252,base[p]+95*(V[i]-P.zc)/Math.max(1,P.U))));im.data[o]=im.data[o+1]=im.data[o+2]=c;im.data[o+3]=255;}else{im.data[o+3]=255;}}
+  g.putImageData(im,0,0);
+  const cv=document.createElement('canvas');cv.width=ow;cv.height=oh;const c2=cv.getContext('2d');c2.fillStyle='#000';c2.fillRect(0,0,ow,oh);c2.imageSmoothingEnabled=true;c2.imageSmoothingQuality='high';c2.drawImage(sm,0,0,ow,oh);
+  return cv;}
+/* ===== 肉付けの絵（立体に光を当てる） =====
+   z バッファの面の向き（となりの画素との奥行きの差）から、左上手前からの光で明るさを決める（ふちほど暗く、まるみが出る）。
+   くぼみ（わきの下・胸の間・ひじの内側など）は少し暗く（まわりより奥にある所）。肌はマネキンのような明るい灰色、髪は濃い灰色、棒は木の色。
+   cv：描く canvas（W×H）。F：見ている範囲。alpha：人物ごとの濃さ（選んでいない人物はうすく） */
+const OP_SHADE={b:[[214,211,208],[206,206,210]],h:[70,70,78],s:[150,113,78]};
+function opShadeCanvas(cv,list,F,W,H,alpha){cv.width=W;cv.height=H;const g=cv.getContext('2d');if(!list.length){g.clearRect(0,0,W,H);return;}
+  /* 面の向きは、少し広くならした奥行きから出す（球・だ円体のつなぎ目やすじが出ないように） */
+  const zb=opZBuf(list,F,W,H),{ID,MT,PP}=zb,uPx=PP.reduce((a,p)=>a+p.U,0)/Math.max(1,PP.length),{S:Z,M}=opZSmooth(zb,Math.max(1,Math.round(uPx*.03)),2),N=W*H,im=g.createImageData(W,H),d=im.data;
+  /* まわりの平均の奥行き（くぼみを見つける） */
+  const wide=opZSmooth({Z,ID,W,H},Math.max(3,Math.round(Math.min(W,H)/60)),2).S;
+  const Lx=-.42,Ly=-.58,Lz=.7,ll=Math.hypot(Lx,Ly,Lz),lx=Lx/ll,ly=Ly/ll,lz=Lz/ll,hx=lx,hy=ly,hz=lz+1,hl=Math.hypot(hx,hy,hz);
+  const edge=1.6;/* 体のふち（となりに体がない所）では、面が横を向いているとして暗くする */
+  const zAt=(i,j,z0,p)=>{if(j<0||j>=N||!M[j]||ID[j]!==p)return z0-edge;const z=Z[j];return z<z0-edge*3?z0-edge:z>z0+edge*3?z0:z;};
+  for(let y=0;y<H;y++)for(let x=0;x<W;x++){const i=y*W+x,o=i*4;if(!M[i]){d[o+3]=0;continue;}
+    const p=ID[i],z0=Z[i],zl=x>0?zAt(i,i-1,z0,p):z0-edge,zr=x<W-1?zAt(i,i+1,z0,p):z0-edge,zu=y>0?zAt(i,i-W,z0,p):z0-edge,zd=y<H-1?zAt(i,i+W,z0,p):z0-edge;
+    let nx=-(zr-zl)/2,ny=-(zd-zu)/2,nz=1;const nl=Math.hypot(nx,ny,nz);nx/=nl;ny/=nl;nz/=nl;
+    const df=Math.max(0,nx*lx+ny*ly+nz*lz),sp=Math.pow(Math.max(0,(nx*hx+ny*hy+nz*hz)/hl),28),P=PP[p]||{U:50};
+    const ao=1-Math.min(.35,Math.max(0,(wide[i]-z0)/Math.max(1,P.U*.12))*.5);
+    const m=MT[i],c=m===1?OP_SHADE.h:m===2?OP_SHADE.s:OP_SHADE.b[list[p]&&list[p].b&&list[p].b.sex==='m'?1:0];
+    const sh=(.36+.68*df)*ao,s2=(m===1?.35:m===2?.2:.16)*sp*255;
+    d[o]=Math.min(255,c[0]*sh+s2);d[o+1]=Math.min(255,c[1]*sh+s2);d[o+2]=Math.min(255,c[2]*sh+s2);d[o+3]=Math.round(255*((alpha&&alpha[p])??1));}
+  g.putImageData(im,0,0);}
 /* 顔の向き（0＝こちら、＋は画像の右）。鼻と両耳の奥行きから。わからなければ null */
 function opHeadYaw(k){const e1=k[16],e2=k[17],n=k[0];if(!e1||!e2||!n)return null;const mx=(e1.x+e2.x)/2,mz=((e1.z||0)+(e2.z||0))/2,fx=n.x-mx,fz=(n.z||0)-mz;
   if(Math.abs(fx)+Math.abs(fz)<1e-6||(![e1,e2,n].some(q=>Math.abs(q.z||0)>1e-6)))return null;return Math.atan2(fx,fz);}
@@ -3114,7 +3255,7 @@ function openOpTrace(o){
   const FACE=[0,14,15,16,17],ALL=[...Array(18).keys()],LOWER=[8,9,10,11,12,13];
   const T=OPT={img:null,imgBlob:null,iw:0,ih:0,op:.6,out:'gen',people:[],sc:[],body:[],face:[],kv:[],cur:0,sel:null,vb:{x:0,y:0,w:S0,h:S0},
     cam:{yaw:0,pitch:0,c:V3(S0/2,S0/2,0),o:V3(0,0,0)},drag:null,src:o,inherit:true,preTags:[],undo:[],partId:null,lastTap:null,saved:false,
-    autoHide:true,faceLink:true,flesh:false,hl:null,step:o.part?'2':'1',warn:null,copyBody:true,cw:1024,ch:1024,imgOff:{x:0,y:0}};
+    autoHide:true,faceLink:true,flesh:false,hl:null,step:o.part?'2':'1',warn:null,copyBody:true,hair:[],stick:[],selStick:false,cw:1024,ch:1024,imgOff:{x:0,y:0}};
   const earMid=k=>{const a=k[16],b=k[17];if(a&&b)return vMid(a,b);const n=k[0];return V3(n.x,n.y,n.z);};
   /* 四角 B の中に、縦横比 r の四角を、切らずにいちばん大きく、真ん中に置く */
   const fitIn=(B,r)=>B.w/B.h<=r?{x:B.x,y:B.y+(B.h-B.w/r)/2,w:B.w,h:B.w/r}:{x:B.x+(B.w-B.h*r)/2,y:B.y,w:B.h*r,h:B.h};
@@ -3141,7 +3282,7 @@ function openOpTrace(o){
   /* ===== 始めの形 ===== */
   let dropped=0;
   if(o.part){const d=o.part.op||{};T.partId=o.part.id;T.autoHide=d.autoHide!==false;T.people=peopleOf(d);T.body=clone(d.body||[]);
-    if(d.w3){T.out=['img','cus'].includes(d.w3.out)?d.w3.out:'gen';if(d.w3.cw>0&&d.w3.ch>0){T.cw=d.w3.cw;T.ch=d.w3.ch;}if(d.w3.imgOff)T.imgOff=clone(d.w3.imgOff);if(T.out==='cus')T.vb=Object.assign({},SR());if(d.w3.cam)T.cam=Object.assign(T.cam,clone(d.w3.cam));T.sc=clone(d.w3.sc||[]);T.face=clone(d.face||[]);}
+    if(d.w3){T.hair=clone(d.w3.hair||[]);T.stick=clone(d.w3.stick||[]);T.out=['img','cus'].includes(d.w3.out)?d.w3.out:'gen';if(d.w3.cw>0&&d.w3.ch>0){T.cw=d.w3.cw;T.ch=d.w3.ch;}if(d.w3.imgOff)T.imgOff=clone(d.w3.imgOff);if(T.out==='cus')T.vb=Object.assign({},SR());if(d.w3.cam)T.cam=Object.assign(T.cam,clone(d.w3.cam));T.sc=clone(d.w3.sc||[]);T.face=clone(d.face||[]);}
     else{T.out=d.out==='img'&&d.hasImg?'img':'gen';const W=d.W||OP_GEN[0],H=d.H||OP_GEN[1],g=fitRect(W/H).w/W;T.face=(d.face||[]).map(f=>f&&f.r>0?{r:f.r*g,lock:true}:null);}}
   else if(o.kps){const f=fitRect(OP_GEN[0]/OP_GEN[1]);T.people=opFromKps(o.kps,f.w,f.h).map(k=>k.map(q=>({x:q.x+f.x,y:q.y+f.y,z:q.z||0,h:false})));}
   if(!T.people.length)T.people=[defPerson(o.P)];
@@ -3155,7 +3296,7 @@ function openOpTrace(o){
   el.innerHTML=`<div class="optin">
     <div class="optsticky">
       <div class="opthd"><b id="optTtl">${o.part?`🦴「${esc(o.part.name||'名前なし')}」を直す`:'🦴 OpenPose を作る'}</b><button type="button" class="btn ghost sm" id="optX">閉じる</button></div>
-      <div class="picstage optstage" id="optStage"><svg id="optSvg" xmlns="http://www.w3.org/2000/svg"></svg></div>
+      <div class="picstage optstage" id="optStage"><svg id="optSvgB" class="opl" xmlns="http://www.w3.org/2000/svg"></svg><canvas id="optCv" class="opl" hidden></canvas><svg id="optSvg" xmlns="http://www.w3.org/2000/svg"></svg></div>
       <div class="optbar"><button type="button" class="ico undo" id="optUndo" aria-label="直前の操作を戻す" disabled>↶</button><button type="button" class="ico" data-oz="1.5" aria-label="拡大">＋</button><button type="button" class="ico" data-oz="0.67" aria-label="縮小">－</button><button type="button" class="ico" data-oz="0" aria-label="全体を見る">⤢</button><button type="button" class="ico txt" id="optCam0" aria-label="正面から見る">正面</button><span class="optsep"></span><div class="tgs" id="optPeople"></div></div>
     </div>
     <div class="optpane" data-pane="1">
@@ -3172,6 +3313,7 @@ function openOpTrace(o){
         <div class="row" style="margin:6px 0 0"><button type="button" class="btn ghost sm" data-os="1.1">全体を大きく</button><button type="button" class="btn ghost sm" data-os="0.91">全体を小さく</button><button type="button" class="btn ghost sm" id="optLen0">ふつうに戻す</button></div>
         <p class="hint" style="margin:4px 0 0">1.00 がふつう。右と左は一緒に変わります。人物を<b>長押し</b>してそのままドラッグすると、人物ごと動きます。</p></div>
       <div class="opsec"><label class="switch"><input type="checkbox" id="optFlesh"><span>🧍 肉付けを見る<span class="hint">だいたいの体を重ねて出します（保存する画像には入りません）。男女と肉の厚みを、人物ごとに決められます。</span></span></label><div id="optBody"></div></div>
+      <div class="opsec"><h3 id="optHairH">髪・持ち物</h3><div id="optHair"></div></div>
       <div class="opface" id="optFaceBox"></div>
     </div>
     <div class="optpane" data-pane="2">
@@ -3196,7 +3338,8 @@ function openOpTrace(o){
         <label class="f" style="margin:0 0 6px"><span>タグ（シーンでプロンプトに入る・なくてもよい）</span><input id="optTags" type="text" inputmode="url" autocapitalize="off" autocomplete="off" spellcheck="false" enterkeyhint="done" value="${esc(o.part?o.part.tags||'':'')}" placeholder="crossed arms"></label>
         <div id="optAutoT"></div>
         <div class="row" style="margin:8px 0 0"><button type="button" class="btn" id="optPart">${o.part?'部品を上書き保存':'部品として保存'}</button>${o.part?'<button type="button" class="btn ghost" id="optPartNew">別の部品として保存</button><button type="button" class="btn danger" id="optPartDel">この部品を削除</button>':''}</div></div>
-      <div class="row" style="margin:8px 0 0"><button type="button" class="btn ghost" id="optSave">OpenPose 画像（PNG）を保存</button><button type="button" class="btn ghost" id="optX2">閉じる</button></div>
+      <div class="opsec"><h3>Depth（深さ）画像 <small>ControlNet の Depth 用</small></h3><div class="opdep"><img id="optDepImg" alt="Depth の見本"><div><p class="hint" style="margin:0 0 6px">近い所ほど白く、遠い所ほど暗く、背景は黒です。体・髪・棒の形と、2人の前後がそのまま出ます。OpenPose と一緒に使うと、ポーズと「どちらがどちらか」が伝わりやすくなります。</p><button type="button" class="btn ghost sm" id="optDepUp">見本を新しくする</button></div></div></div>
+      <div class="row" style="margin:8px 0 0"><button type="button" class="btn ghost" id="optSave">OpenPose 画像（PNG）を保存</button><button type="button" class="btn ghost" id="optSaveD">Depth 画像（PNG）を保存</button><button type="button" class="btn" id="optSave2">両方を保存</button><button type="button" class="btn ghost" id="optX2">閉じる</button></div>
       <details class="nh optips"><summary>うまく読み込ませるコツ</summary><div class="nhb"><ul>
         <li>PixAI では、ControlNet の <b>OpenPose（ポーズ）</b>にこの画像を入れます。すでに棒人形の画像なので、写真から骨を読み取る「前処理」は<b>使わない</b>設定にします。</li>
         <li><b>生成する画像と同じ縦横比</b>で作ります。800×912 で作るなら、ここも「800×912」で保存します。</li>
@@ -3210,15 +3353,15 @@ function openOpTrace(o){
   </div>
   <nav class="opnav" id="optNav">${[['1','画像・体型'],['2','ポーズ'],['3','2人目'],['4','前後・保存']].map(([k,l])=>`<button type="button" data-ost="${k}"><b>${k}</b>${l}</button>`).join('')}</nav>`;
   document.body.appendChild(el);hydrate(el);history.pushState({opt:1},'');
-  const svg=$('#optSvg',el),st=$('#optStage',el),optin=$('.optin',el);
+  const svg=$('#optSvg',el),svgB=$('#optSvgB',el),cvs=$('#optCv',el),st=$('#optStage',el),optin=$('.optin',el);let fastDraw=false;
   const P=()=>T.people[T.cur];
   const setStep=s=>{T.step=s;$$('[data-pane]',el).forEach(x=>x.hidden=x.dataset.pane!==s);$$('#optNav [data-ost]',el).forEach(x=>x.classList.toggle('on',x.dataset.ost===s));};
-  $$('#optNav [data-ost]',el).forEach(x=>x.onclick=()=>{setStep(x.dataset.ost);optin.scrollTop=0;draw();drawPanel();});
+  $$('#optNav [data-ost]',el).forEach(x=>x.onclick=()=>{setStep(x.dataset.ost);optin.scrollTop=0;draw();drawPanel();if(x.dataset.ost==='4')setTimeout(()=>depPrev(),30);});
   /* ===== 戻す（直前の操作を10回まで）。操作の前に mark() で今の形を覚える ===== */
-  const snapNow=()=>JSON.stringify({p:T.people,b:T.body,f:T.face,s:T.sc,c:T.cur,cam:T.cam,io:T.imgOff,fy:T.floorY});
+  const snapNow=()=>JSON.stringify({p:T.people,b:T.body,hr:T.hair,sk:T.stick,f:T.face,s:T.sc,c:T.cur,cam:T.cam,io:T.imgOff,fy:T.floorY});
   const mark=()=>{const v=snapNow();if(T.undo[T.undo.length-1]===v)return;T.undo.push(v);while(T.undo.length>10)T.undo.shift();drawUndo();};
   const drawUndo=()=>{const b=$('#optUndo',el);if(!b)return;b.disabled=!T.undo.length;b.innerHTML=`↶${T.undo.length?`<i>${T.undo.length}</i>`:''}`;};
-  const undo=()=>{if(!T.undo.length)return;const v=JSON.parse(T.undo.pop());T.people=v.p;T.body=v.b;T.face=v.f;T.sc=v.s||[];T.cam=v.cam||T.cam;if(v.io)T.imgOff=v.io;if(typeof v.fy==="number")T.floorY=v.fy;T.cur=Math.min(v.c,T.people.length-1);T.sel=null;draw();drawPanel();drawUndo();toast(`1つ戻しました（あと${T.undo.length}回）`);};
+  const undo=()=>{if(!T.undo.length)return;const v=JSON.parse(T.undo.pop());T.people=v.p;T.body=v.b;T.hair=v.hr||[];T.stick=v.sk||[];T.selStick=false;T.face=v.f;T.sc=v.s||[];T.cam=v.cam||T.cam;if(v.io)T.imgOff=v.io;if(typeof v.fy==="number")T.floorY=v.fy;T.cur=Math.min(v.c,T.people.length-1);T.sel=null;draw();drawPanel();drawUndo();toast(`1つ戻しました（あと${T.undo.length}回）`);};
   /* ===== カメラ（見る角度）：見える位置 = 回す(点 − c) + c + o。yaw は左右（＋で人物の正面が画像の右へ）、pitch は上下（－で上から見る） ===== */
   const camR=()=>{const a=T.cam.yaw*RAD,b=T.cam.pitch*RAD;return[Math.cos(a),Math.sin(a),Math.cos(b),Math.sin(b)];};
   const rotF=(v,M)=>{const[ca,sa,cb,sb]=M,z=v.z||0,x1=v.x*ca+z*sa,z1=-v.x*sa+z*ca;return V3(x1,v.y*cb-z1*sb,v.y*sb+z1*cb);};
@@ -3245,6 +3388,25 @@ function openOpTrace(o){
   /* 人物の体つき（肉付け）。決めていなければ、シーンの人物の呼び方（boy・man なら男性）から決める */
   const bodyOf=i=>{if(T.body[i])return Object.assign({},OP_BODY0,T.body[i]);const sl=o.sc&&o.sc.chars&&o.sc.chars[i],c=sl&&P_(sl.chara);
     return Object.assign({},OP_BODY0,{sex:sl&&subjKind((sl.subj||'').trim()||(c&&c.subject)||'girl')==='boy'?'m':'f'});};
+  /* 髪（決めていなければ、女性はロング・男性はショート）と棒（向き dir は立体の向き。画面の向きにするときは stickV） */
+  const hairOf=i=>T.hair[i]||{st:bodyOf(i).sex==='m'?'short':'long',len:1,vol:1};
+  const stickV=(i,M)=>{const st=T.stick[i];return st&&st.at?Object.assign({},st,{dir:rotF(st.dir,M||camR())}):null;};
+  const drawHair=()=>{const bx=$('#optHair',el);if(!bx)return;const hr=hairOf(T.cur),st=T.stick[T.cur]||{at:''};$('#optHairH',el).textContent=`髪・持ち物（人物${T.cur+1}）`;
+    const sl=(lab,key,v,mn,mx,stp,dg,attr)=>`<label class="obrow"><span>${lab}</span><input type="range" min="${mn}" max="${mx}" step="${stp}" value="${v}" ${attr}="${key}" aria-label="${lab}"><b>${(+v).toFixed(dg)}</b></label>`;
+    bx.innerHTML=`<div class="oplab2">髪型（肉付けの絵と Depth 画像に出ます）</div><div class="tgs">${OP_HAIR.map(([kk,l])=>`<button type="button" class="tg ${hr.st===kk?'on':''}" data-ohr="${kk}">${l}</button>`).join('')}</div>
+      ${hr.st!=='none'?sl('長さ','len',hr.len,.4,2,.05,2,'data-ohv')+sl('ボリューム','vol',hr.vol,.6,1.6,.05,2,'data-ohv'):''}
+      <div class="oplab2">棒（手に持つ・わきや股にはさむ）</div><div class="tgs">${OP_STICK.map(([kk,l])=>`<button type="button" class="tg ${(st.at||'')===kk?'on':''}" data-osk="${kk}">${l}</button>`).join('')}</div>
+      ${st.at?sl('長さ','len',st.len,.3,3,.05,2,'data-osv')+sl('太さ','th',st.th,.01,.15,.005,3,'data-osv')+sl('持つ所','grip',st.grip,0,1,.02,2,'data-osv')+sl('曲げる','bend',st.bend||0,-180,180,1,0,'data-osv')+sl('曲がる向き','bdir',st.bdir||0,-180,180,1,0,'data-osv')+'<p class="hint" style="margin:4px 0 0">画面の棒を押すと輪が出て、向きを回せます。「曲げる」は棒を弓なりに曲げます（持つ所を真ん中に、0＝まっすぐ・180＝半円。マイナスで反対へ）。「曲がる向き」で、曲がる方向を棒のまわりに回します。「持つ所」は、棒のどこを持つ（はさむ）か（0＝はし、0.5＝真ん中）。長さ・太さは、胴の長さを1とした大きさです。棒は OpenPose の画像には入らず、Depth 画像に入ります。</p>':''}`;
+    $$('[data-ohr]',bx).forEach(b=>b.onclick=()=>{mark();T.hair[T.cur]=Object.assign({},hairOf(T.cur),{st:b.dataset.ohr});if(!T.flesh&&b.dataset.ohr!=='none')toast('髪は「肉付けを見る」をオンにすると見えます（Depth 画像にはいつも入ります）');draw();drawPanel();});
+    $$('[data-ohv]',bx).forEach(x=>{x.onpointerdown=()=>mark();x.oninput=()=>{T.hair[T.cur]=Object.assign({},hairOf(T.cur),{[x.dataset.ohv]:+x.value});x.nextElementSibling.textContent=(+x.value).toFixed(2);drawSoon();};});
+    $$('[data-osk]',bx).forEach(b=>b.onclick=()=>{mark();const at=b.dataset.osk;
+      if(!at){T.stick[T.cur]=null;T.selStick=false;}else{const o2=T.stick[T.cur];T.stick[T.cur]={at,len:o2?o2.len:1.4,th:o2?o2.th:.035,bend:o2?o2.bend||0:0,bdir:o2?o2.bdir||0:0,grip:at==='rh'||at==='lh'?.2:at==='cr'?.4:.45,dir:opStickDir(at,frameOf(P()))};T.selStick=true;T.sel=null;}
+      draw();drawPanel();});
+    $$('[data-osv]',bx).forEach(x=>{x.onpointerdown=()=>mark();x.oninput=()=>{const s2=T.stick[T.cur];if(!s2)return;s2[x.dataset.osv]=+x.value;x.nextElementSibling.textContent=(+x.value).toFixed(x.dataset.osv==='th'?3:x.dataset.osv==='bend'||x.dataset.osv==='bdir'?0:2);drawSoon();};});};
+  /* Depth 画像：今見ている形（2人とも）から作る */
+  const depthList=()=>{const M=camR();T.kv=T.people.map((_,i)=>viewOf(i));return T.people.map((_,i)=>({k:T.kv[i],b:bodyOf(i),hd:headHd(i,T.kv[i]),hair:hairOf(i),stick:stickV(i,M),g:rotF(V3(0,1,0),M)}));};
+  const depthCv=()=>{const[ow,oh]=outWH();return opDepthCanvas(depthList(),frame(),ow,oh);};
+  const depPrev=()=>{const im=$('#optDepImg',el);if(!im)return;const[ow,oh]=outWH(),s=Math.min(1,300/Math.max(ow,oh));im.src=opDepthCanvas(depthList(),frame(),Math.round(ow*s),Math.round(oh*s)).toDataURL('image/png');};
   const scOf=i=>{if(!(T.sc[i]>0)){const k=T.people[i];T.sc[i]=Math.max(.05,vLen(vSub(vMid(k[8],k[11]),k[1]))/REF.tor);}return T.sc[i];};
   /* 今見ている形（画面の位置）。隠すかどうかもここで決める（顔の向き・体の後ろ） */
   const viewOf=i=>{const M=camR();const kv=T.people[i].map(q=>Object.assign(proj(q,M),{h:!!(q.man&&q.h)},q.man?{man:true}:{}));
@@ -3265,7 +3427,8 @@ function openOpTrace(o){
      肩：ひじ・手首／ひじ：手首／腰：ひざ・足首／ひざ：足首。首：体全体を回す。顔：頭を回す。手首・足首は先がないので回さない */
   const OP_KID={2:3,3:4,5:6,6:7,8:9,9:10,11:12,12:13};
   const OP_PART={2:'右腕（右肩から先）',3:'右の下の腕（右ひじから先）',5:'左腕（左肩から先）',6:'左の下の腕（左ひじから先）',8:'右脚（右腰から先）',9:'右のすね（右ひざから先）',11:'左脚（左腰から先）',12:'左のすね（左ひざから先）'};
-  const gizmo=()=>{if(T.sel==null||!P())return null;const i=T.cur,k=P(),J=T.sel,B=frameOf(k);
+  const gizmo=()=>{if(T.selStick&&P()){const st=T.stick[T.cur],k=P(),TO=opTorso(k,bodyOf(T.cur)),sg=opStickSeg(k,st,TO);if(!sg)return null;const B=frameOf(k);return{c:sg.anc,ids:[],ax:[B.rt,B.fw,B.up],nm:'棒',stick:true};}
+    if(T.sel==null||!P())return null;const i=T.cur,k=P(),J=T.sel,B=frameOf(k);
     if(FACE.includes(J)){if(!faceLocked(i))return null;const H=headFrame(k);return{c:H.c,ids:FACE,ax:[H.rt,H.fw,H.up],nm:'頭（首から上）'};}
     if(J===1)return{c:B.pel,ids:ALL,ax:[B.rt,B.fw,B.up],nm:'体全体（腰を中心に）'};
     const kid=OP_KID[J];if(kid==null)return null;
@@ -3299,7 +3462,7 @@ function openOpTrace(o){
     const u1=vNorm(vSub(k[J],k[OP_PAR[J]])),n=vCross(u1,cur),f0=Math.acos(Math.max(-1,Math.min(1,vDot(u1,cur)))),f1=opBend(DEF,J).flex*RAD;
     if(vLen(n)<1e-4||Math.abs(f1-f0)<1e-4)return false;opRotIds(k,ids,c,vNorm(n),f1-f0);return true;};
   /* ===== 描く ===== */
-  const draw=()=>{const v=T.vb,M=camR();svg.setAttribute('viewBox',`${v.x} ${v.y} ${v.w} ${v.h}`);
+  const draw=()=>{const v=T.vb,M=camR();svg.setAttribute('viewBox',`${v.x} ${v.y} ${v.w} ${v.h}`);svgB.setAttribute('viewBox',`${v.x} ${v.y} ${v.w} ${v.h}`);
     const KV=T.kv=T.people.map((_,i)=>viewOf(i)),r=R(),w=sw(),F=frame(),I=imgRect();
     const SB=SR();st.style.aspectRatio=`${SB.w} / ${SB.h}`;st.style.width=`min(100%, calc(50dvh * ${(SB.w/SB.h).toFixed(4)}))`;
     let h=`<rect x="${SB.x}" y="${SB.y}" width="${SB.w}" height="${SB.h}" fill="#0b0c0f"/>`;
@@ -3310,10 +3473,18 @@ function openOpTrace(o){
       h+=`<g stroke="#8fa3c8" stroke-opacity=".16" stroke-width="${px(1)}">${g.map(([a,b])=>{const A=proj(a,M),B=proj(b,M);return `<line x1="${A.x.toFixed(1)}" y1="${A.y.toFixed(1)}" x2="${B.x.toFixed(1)}" y2="${B.y.toFixed(1)}"/>`;}).join('')}</g>`;}}
     /* 保存する所の外を暗く、枠を赤い点線で */
     h+=`<path d="M${SB.x} ${SB.y}H${SB.x+SB.w}V${SB.y+SB.h}H${SB.x}Z M${F.x} ${F.y}V${F.y+F.h}H${F.x+F.w}V${F.y}Z" fill="rgba(0,0,0,.42)" fill-rule="evenodd"/><rect x="${F.x}" y="${F.y}" width="${F.w}" height="${F.h}" fill="none" stroke="#ff6b6b" stroke-width="${px(1.5)}" stroke-dasharray="${px(6)} ${px(4)}"/>`;
+    /* ここまでが後ろ（背景・地面・枠）。この上に肉付けの絵（canvas）、その上に棒人形・輪 */
+    svgB.innerHTML=h;h='';
     h+=`<defs><filter id="optHlF" x="-30%" y="-30%" width="160%" height="160%"><feComponentTransfer in="SourceAlpha" result="a"><feFuncA type="linear" slope="20"/></feComponentTransfer><feMorphology in="a" operator="dilate" radius="${r*.7}" result="d"/><feFlood flood-color="#fff" result="f"/><feComposite in="f" in2="d" operator="in" result="wd"/><feComposite in="wd" in2="a" operator="out"/></filter></defs>`;
     const op=pi=>pi===T.cur?1:.45,pz=pi=>{const k=KV[pi];return((k[8].z||0)+(k[11].z||0)+(k[1].z||0))/3;};
-    /* 肉付け（奥の人物から） */
-    if(T.flesh)KV.map((k,pi)=>pi).sort((a,b)=>pz(a)-pz(b)).forEach(pi=>{h+=`<g opacity="${op(pi)}">${opFleshSVG(KV[pi],bodyOf(pi),headHd(pi,KV[pi]))}</g>`;});
+    /* 肉付け：体・髪・棒の立体に光を当てた絵を、canvas に描く（選んでいない人物はうすく）。
+       肉付けを見ていないときは、棒だけを線で描く。選んでいる棒は白くふちどる */
+    if(T.flesh){const dpr=Math.min(1.25,window.devicePixelRatio||1),cw=Math.max(8,Math.round(st.clientWidth*(fastDraw?.55:dpr))),ch=Math.max(8,Math.round(cw*v.h/v.w));
+      opShadeCanvas(cvs,KV.map((kv,pi)=>({k:kv,b:bodyOf(pi),hd:headHd(pi,kv),hair:hairOf(pi),stick:stickV(pi,M),g:rotF(V3(0,1,0),M)})),v,cw,ch,KV.map((_,pi)=>op(pi)));cvs.hidden=false;}
+    else cvs.hidden=true;
+    KV.forEach((kv,pi)=>{const sg=opStickSeg(kv,stickV(pi,M),opTorso(kv,bodyOf(pi)));if(!sg)return;const on=pi===T.cur&&T.selStick;if(T.flesh&&!on)return;
+      const pts=sg.pts.map(p=>p.x.toFixed(1)+','+p.y.toFixed(1)).join(' '),pl=(c,wd,o)=>`<polyline points="${pts}" fill="none" stroke="${c}" stroke-opacity="${o||1}" stroke-width="${wd.toFixed(1)}" stroke-linecap="round" stroke-linejoin="round"/>`;
+      h+=`<g opacity="${op(pi)}">${T.flesh?pl('#fff',sg.r*2+px(4),.45):pl(on?'#fff':'#3d2e1d',sg.r*2+px(on?4:2.4))+pl('#a07c52',sg.r*2)}</g>`;});
     /* 線：2人とも、奥から順に（重なった所は手前が上） */
     const lines=[];KV.forEach((kp,pi)=>OP_LIMB.forEach(([a,b],i)=>{const A=kp[a],B=kp[b];if(A.h||B.h)return;lines.push({z:((A.z||0)+(B.z||0))/2,pi,s:`<line x1="${A.x.toFixed(1)}" y1="${A.y.toFixed(1)}" x2="${B.x.toFixed(1)}" y2="${B.y.toFixed(1)}" stroke="rgb(${OP_COL[i]})" stroke-width="${w}" stroke-opacity="${.75*op(pi)}" stroke-linecap="round"/>`});}));
     lines.sort((a,b)=>a.z-b.z);h+=lines.map(x=>x.s).join('');
@@ -3351,7 +3522,8 @@ function openOpTrace(o){
     /* 2. 選んでいる点 */
     const q=T.sel!=null&&P()?P()[T.sel]:null,G=gizmo(),kq=q&&T.kv[T.cur]?T.kv[T.cur][T.sel]:null;
     let sh='';
-    if(q){const bj=bendJ(T.sel),b=bj!=null?opBend(P(),bj):null;
+    if(T.selStick&&T.stick[T.cur]){sh=`<div class="optsel"><b>棒</b>（人物${T.cur+1}）<span class="hint" style="margin:0">輪に沿ってなぞると、棒の向きが回ります</span></div><div class="row" style="margin:6px 0 0"><button type="button" class="btn ghost sm" id="optStkR">向きをもとに戻す</button><button type="button" class="btn ghost sm" id="optDesel">選ぶのをやめる</button></div>`;}
+    else if(q){const bj=bendJ(T.sel),b=bj!=null?opBend(P(),bj):null;
       sh=`<div class="optsel"><b>${OP_JA[T.sel]}</b>（人物${T.cur+1}）${G?`<span class="hint" style="margin:0">回す所：${esc(G.nm)}</span>`:''}</div>
         ${b?`<p class="hint" style="margin:4px 0 0">${bj===3||bj===6?'ひじ':'ひざ'}の曲がり：<b>${b.back?'逆向きに ':''}${Math.round(b.flex)}°</b>（人が曲げられるのは ${b.back?'逆向き 0°':OP_LIM[bj]+'°'} まで。${OP_LIMX}° こえると止まります）</p>`:''}
         ${G?'':FACE.includes(T.sel)?'<p class="hint" style="margin:4px 0 0">顔のパーツを動かせるようにしているので、点を指で動かせます。「1 画像・体型」の「顔を固定する」を押すと、輪で頭を回せるようになります。</p>':''}
@@ -3359,8 +3531,10 @@ function openOpTrace(o){
         <div class="row" style="margin:6px 0 0">${G?'<button type="button" class="btn ghost sm" id="optReset">もとに戻す</button>':''}<button type="button" class="btn ghost sm" id="optHide">${kq&&kq.h?'見えるに戻す':'隠す（見えていない）'}</button><button type="button" class="btn ghost sm" id="optDesel">選ぶのをやめる</button></div>`;}
     else sh=`<p style="margin:0;font-size:14px"><b>関節の点を押すと、色の輪が出ます。</b></p><p class="hint" style="margin:4px 0 0">輪に沿って指でなぞると、押した関節を中心に<b>その先</b>が回ります（赤・青：曲げる向き、緑：ねじる）。ひじ・ひざは、人が曲げられる角度を ${OP_LIMX}° こえると止まります。<br>肩：腕全体／ひじ：下の腕／腰：脚全体／ひざ：すね／首：体全体／顔：頭。<br>点を<b>ダブルタップ</b>すると「隠す」、もう一度で戻ります。人物を<b>長押し</b>してドラッグすると人物ごと動きます。</p>`;
     $('#optSel',el).innerHTML=sh;
+    const skr=$('#optStkR',el);if(skr)skr.onclick=()=>{const st=T.stick[T.cur];if(!st)return;mark();st.dir=opStickDir(st.at,frameOf(P()));draw();drawPanel();toast('棒の向きをもとに戻しました');};
+    drawHair();
     const hb=$('#optHide',el);if(hb)hb.onclick=()=>{mark();const w=P()[T.sel],vh=T.kv[T.cur][T.sel].h;w.h=!vh;w.man=true;draw();drawPanel();};
-    const ds=$('#optDesel',el);if(ds)ds.onclick=()=>{T.sel=null;draw();drawPanel();};
+    const ds=$('#optDesel',el);if(ds)ds.onclick=()=>{T.sel=null;T.selStick=false;draw();drawPanel();};
     const rs=$('#optReset',el);if(rs)rs.onclick=()=>{mark();if(resetJoint(P(),T.sel)){draw();drawPanel();toast(`${OP_JA[T.sel]}の角度を、もとに戻しました`);}else{T.undo.pop();drawUndo();toast('もとの角度のままです');}};
     /* 1. 体のサイズ */
     const k=P(),sc=scOf(T.cur);$('#optLenH',el).textContent=`体のサイズ（人物${T.cur+1}）`;
@@ -3368,9 +3542,9 @@ function openOpTrace(o){
     $$('[data-olen]',el).forEach(x=>{x.onpointerdown=()=>mark();x.onkeydown=()=>mark();x.oninput=()=>{setLen(T.cur,x.dataset.olen,+x.value);x.nextElementSibling.textContent=(+x.value).toFixed(2);draw();};x.onchange=()=>drawPanel();});
     /* 肉付けの体つき（選んでいる人物） */
     const bb=$('#optBody',el);if(!T.flesh)bb.innerHTML='';else{const B=bodyOf(T.cur);
-      const sl=(key,lab)=>`<label class="obrow"><span>${lab}</span><input type="range" min="0.5" max="1.8" step="0.05" value="${B[key]}" data-ob="${key}" aria-label="${lab}"><b>${(+B[key]).toFixed(2)}</b></label>`;
+      const sl=(key,lab,mn,mx)=>`<label class="obrow"><span>${lab}</span><input type="range" min="${mn||0.5}" max="${mx||1.8}" step="0.05" value="${B[key]}" data-ob="${key}" aria-label="${lab}"><b>${(+B[key]).toFixed(2)}</b></label>`;
       bb.innerHTML=`<div class="obody"><div class="obh"><b>人物${T.cur+1}の肉付き</b><span class="ptabs obsex"><button type="button" data-osx="f" class="${B.sex!=='m'?'on':''}">女性</button><button type="button" data-osx="m" class="${B.sex==='m'?'on':''}">男性</button></span></div>
-        ${sl('all','全体')}${sl('arm','腕')}${sl('leg','脚')}${sl('torso','胴')}${B.sex!=='m'?sl('chest','胸'):''}${sl('head','頭')}
+        ${sl('all','全体')}${sl('arm','腕')}${sl('leg','脚')}${sl('torso','胴')}${B.sex!=='m'?sl('chest','胸')+sl('chestH','胸の高さ',.5,1.5)+sl('chestF','胸の突き出し',.4,2):''}${sl('head','頭')}
         <div class="row" style="margin:4px 0 0"><button type="button" class="btn ghost sm" id="obReset">ふつうに戻す</button><span class="hint" style="align-self:center;margin:0">1.00 がふつう。「全体」は腕・脚・胴・胸にかかります。</span></div></div>`;
       $$('[data-osx]',bb).forEach(x=>x.onclick=()=>{T.body[T.cur]=Object.assign(bodyOf(T.cur),{sex:x.dataset.osx});draw();drawPanel();});
       $$('[data-ob]',bb).forEach(x=>{x.oninput=()=>{T.body[T.cur]=Object.assign(bodyOf(T.cur),{[x.dataset.ob]:+x.value});x.nextElementSibling.textContent=(+x.value).toFixed(2);draw();};});
@@ -3400,7 +3574,7 @@ function openOpTrace(o){
     const cb=$('#optCopyB',el);if(cb)cb.onchange=()=>{T.copyBody=cb.checked;};
     const a2=$('#optAdd2',el);if(a2)a2.onclick=addPerson;
     const g2=$('#optGo2',el);if(g2)g2.onclick=()=>{setStep('2');optin.scrollTop=0;draw();drawPanel();};
-    const d2=$('#optDel2',el);if(d2)d2.onclick=()=>{if(!confirm(`人物${T.cur+1}を消しますか？`))return;mark();[T.people,T.body,T.face,T.sc].forEach(a=>a.splice(T.cur,1));T.cur=0;T.sel=null;draw();drawPanel();};
+    const d2=$('#optDel2',el);if(d2)d2.onclick=()=>{if(!confirm(`人物${T.cur+1}を消しますか？`))return;mark();[T.people,T.body,T.face,T.sc,T.hair,T.stick].forEach(a=>a.splice(T.cur,1));T.cur=0;T.sel=null;T.selStick=false;draw();drawPanel();};
     /* 4. 前後 */
     const dp=$('#optDepth',el);
     if(n<2)dp.innerHTML='';
@@ -3471,7 +3645,8 @@ function openOpTrace(o){
   const pinchStart=()=>{const[a,b]=[...ptrs.values()],r=svg.getBoundingClientRect(),v=T.vb,mx=(a.x+b.x)/2,my=(a.y+b.y)/2;
     if(T.drag&&T.drag.k==='ring'&&T.drag.marked){T.people=JSON.parse(T.drag.snap).p;T.undo.pop();drawUndo();}/* 輪を回している途中で2本指にしたら、回したのを戻す */
     pinch={d0:Math.hypot(a.x-b.x,a.y-b.y)||1,vb:Object.assign({},v),ix:v.x+(mx-r.left)/r.width*v.w,iy:v.y+(my-r.top)/r.height*v.h};if(T.drag&&T.drag.lp)clearTimeout(T.drag.lp);T.drag=null;T.lastTap=null;};
-  let rafD=0;const drawSoon=()=>{if(rafD)return;rafD=requestAnimationFrame(()=>{rafD=0;draw();});};/* 指で動かしている間は、1コマに1回だけ描く（軽くするため） */
+  /* 指で動かしている間は、1コマに1回だけ、肉付けの絵は半分の細かさで描く（軽くするため）。止まって少したったら、細かく描き直す */
+  let rafD=0,fullT=0;const drawSoon=()=>{clearTimeout(fullT);fullT=setTimeout(()=>{if(!T.drag)draw();},260);if(rafD)return;rafD=requestAnimationFrame(()=>{rafD=0;fastDraw=true;draw();fastDraw=false;});};/* 指で動かしている間は、1コマに1回だけ描く（軽くするため） */
   const pinchMove=()=>{const[a,b]=[...ptrs.values()],r=svg.getBoundingClientRect(),mx=(a.x+b.x)/2,my=(a.y+b.y)/2,f=Math.hypot(a.x-b.x,a.y-b.y)/pinch.d0;
     const B=SR(),w=Math.min(B.w,Math.max(B.w/8,pinch.vb.w/f)),h=w*B.h/B.w;T.vb={x:Math.min(Math.max(B.x,pinch.ix-(mx-r.left)/r.width*w),B.x+B.w-w),y:Math.min(Math.max(B.y,pinch.iy-(my-r.top)/r.height*h),B.y+B.h-h),w,h};drawSoon();};
   const onBody=(q,pi)=>{const k=T.kv[pi];if(!k)return false;const r=R();
@@ -3495,15 +3670,18 @@ function openOpTrace(o){
     const rr=R()*2.75;let best=null,bd=rr,bp=T.cur;
     T.kv.forEach((kp,pi)=>kp.forEach((p2,i)=>{if(p2.h&&pi!==T.cur)return;const d=Math.hypot(p2.x-q.x,p2.y-q.y)*(pi===T.cur?1:1.4);if(d<bd){bd=d;best=i;bp=pi;}}));
     /* 1. 輪をつかむ（点の真上を押したときは、点のほうを選ぶ） */
-    const G=gizmo();if(G&&!(best!=null&&bd<R()*1.4&&best!==T.sel)){const hit=ringHit(G,q);if(hit){T.drag=Object.assign({k:'ring',G,x:q.x,y:q.y,snap:snapNow(),marked:false,warned:false},hit);draw();return;}}
+    const G=gizmo();if(G&&!(best!=null&&bd<R()*(T.selStick?.7:1.4)&&best!==T.sel)){const hit=ringHit(G,q);if(hit){T.drag=Object.assign({k:'ring',G,x:q.x,y:q.y,snap:snapNow(),marked:false,warned:false},hit);draw();return;}}
     /* 2. 点を押す */
     if(best!=null){const now=Date.now(),lt=T.lastTap,dbl=!!(lt&&lt.i===best&&lt.p===bp&&now-lt.t<400);T.lastTap={i:best,p:bp,t:now};
-      T.cur=bp;T.sel=best;
+      T.cur=bp;T.sel=best;T.selStick=false;
       /* 顔のパーツを動かせるときは、顔の点は指で動かす */
       if(FACE.includes(best)&&!faceLocked(bp)){mark();T.drag={k:'fpt',dbl,cx:e.clientX,cy:e.clientY};}
       else{T.drag={k:'tap',dbl,cx:e.clientX,cy:e.clientY};startLong(T.drag,q,bp);}
       draw();drawPanel();return;}
     /* 3. 顔のパーツを動かせるときは、丸の中をなぞると丸が動く */
+    /* 棒を押す：棒を選んで、輪で向きを回せるようにする */
+    {const M=camR();let hit=null,hd2=1e9;T.people.forEach((k,pi)=>{const kv=T.kv[pi],sg=kv&&opStickSeg(kv,stickV(pi,M),opTorso(kv,bodyOf(pi)));if(!sg)return;let d=1e9;for(let j=0;j<sg.pts.length-1;j++)d=Math.min(d,segD(q,sg.pts[j],sg.pts[j+1])[0]);if(d<Math.max(R()*1.6,sg.r+R()*.6)&&d<hd2){hd2=d;hit=pi;}});
+      if(hit!=null){T.cur=hit;T.sel=null;T.selStick=true;T.drag={k:'tap',cx:e.clientX,cy:e.clientY};startLong(T.drag,q,hit);draw();drawPanel();return;}}
     const kv=T.kv[T.cur];if(kv&&!faceLocked(T.cur)){const f=faceOf(T.cur),c=faceCenter(T.cur,kv);if(Math.hypot(q.x-c.x,q.y-c.y)<f.r){mark();T.drag={k:'sphere',x:q.x,y:q.y};return;}}
     /* 4. 空いている所：なぞると見る角度が回る（人物の上で長押しなら、人物ごと動かす） */
     T.drag={k:'orbit',cx:e.clientX,cy:e.clientY,yaw:T.cam.yaw,pitch:T.cam.pitch,moved:false};startLong(T.drag,q,null);});
@@ -3524,6 +3702,8 @@ function openOpTrace(o){
       let tx=ts.x,ty=ts.y;if(L2<mn){const C=proj(d.G.c,M),gx=q.x-C.x,gy=q.y-C.y,gl=Math.hypot(gx,gy)||1;if(L2<1e-9){tx=-gy/gl*Math.sqrt(mn);ty=gx/gl*Math.sqrt(mn);}else{const s=Math.sqrt(mn/L2);tx*=s;ty*=s;}L2=mn;}
       let dt=((q.x-d.x)*tx+(q.y-d.y)*ty)/L2;dt=Math.max(-.35,Math.min(.35,dt));d.x=q.x;d.y=q.y;if(Math.abs(dt)<1e-6)return;
       if(!d.marked){T.undo.push(d.snap);while(T.undo.length>10)T.undo.shift();d.marked=true;}
+      /* 棒の輪：棒の向きだけを回す */
+      if(d.G.stick){const st=T.stick[T.cur];if(st){st.dir=vRot(st.dir,d.ax,dt);d.t+=dt;}drawSoon();return;}
       const k=P(),before=OP_LIMB3.map(([,j])=>opOver(k,j)),keep=k.map(p2=>({x:p2.x,y:p2.y,z:p2.z}));
       opRotIds(k,d.G.ids,d.G.c,d.ax,dt);
       /* ひじ・ひざが、人の曲げられる角度を10°こえるなら、回さない */
@@ -3531,6 +3711,8 @@ function openOpTrace(o){
       if(badI>=0){k.forEach((p2,n2)=>opSet(p2,keep[n2]));const j=OP_LIMB3[badI][1],b=opBend(k,j);T.warn={pi:T.cur,j,t:Date.now()};
         if(!d.warned){d.warned=true;try{navigator.vibrate&&navigator.vibrate([30,40,30]);}catch(_){}toast(`⚠ ${OP_JA[j]}はこれ以上曲げられません（${b.back?'逆向きは 0°':`人が曲げられるのは ${OP_LIM[j]}°`}。${OP_LIMX}°こえる所で止めています）`);}
         drawSoon();return;}
+      /* 手に持った棒は手と一緒に、わき・股の棒は体全体を回したときに一緒に回す */
+      {const st=T.stick[T.cur];if(st&&st.dir){const ix={rh:4,lh:7}[st.at];if(d.G.ids.includes(ix==null?1:ix))st.dir=vRot(st.dir,d.ax,dt);}}
       d.t+=dt;const f=T.face[T.cur];if(f&&f.off&&d.G.ids.includes(1)&&d.G.ids.includes(0))f.off=vRot(f.off,d.ax,dt);
       drawSoon();return;}});
   const end=e=>{if(e&&e.pointerId!=null)ptrs.delete(e.pointerId);if(pinch){if(ptrs.size<2){pinch=null;T.drag=null;}return;}
@@ -3539,7 +3721,7 @@ function openOpTrace(o){
     if(!d)return;T.drag=null;
     /* ダブルタップ：その点を隠す・戻す */
     if((d.k==='tap'||d.k==='fpt')&&d.dbl){const w=P()[T.sel],vh=T.kv[T.cur][T.sel].h;if(d.k==='tap')mark();w.h=!vh;w.man=true;T.lastTap=null;draw();drawPanel();toast(`${OP_JA[T.sel]}を${w.h?'隠しました':'見えるに戻しました'}`);return;}
-    if(d.k==='orbit'&&!d.moved){if(T.sel!=null){T.sel=null;draw();drawPanel();}return;}
+    if(d.k==='orbit'&&!d.moved){if(T.sel!=null||T.selStick){T.sel=null;T.selStick=false;draw();drawPanel();}return;}
     if(d.k==='ring'&&d.marked)drawUndo();
     draw();drawPanel();};
   st.addEventListener('pointerup',end);st.addEventListener('pointercancel',end);
@@ -3591,7 +3773,7 @@ function openOpTrace(o){
       body:T.people.map((_,i)=>T.body[i]?bodyOf(i):null),face:T.people.map((_,i)=>T.face[i]?clone(T.face[i]):null),
       people:A.people.map(k=>k.map(q=>Object.assign({x:r5(q.x/A.W),y:r5(q.y/A.H),z:r5(q.z/A.W),h:q.h?1:0},q.auto?{a:1}:{},q.man?{m:1}:{}))),
       icrop:I?{x:r5((F.x-I.x)/I.w),y:r5((F.y-I.y)/I.h),w:r5(F.w/I.w),h:r5(F.h/I.h)}:null,
-      w3:{out:T.out,cw:T.cw,ch:T.ch,imgOff:clone(T.imgOff),floorY:r2(T.floorY),cam:clone(T.cam),sc:T.people.map((_,i)=>scOf(i)),people:T.people.map(k=>k.map(q=>Object.assign({x:r2(q.x),y:r2(q.y),z:r2(q.z||0),h:q.h?1:0},q.man?{man:1}:{})))}};
+      w3:{hair:T.people.map((_,i)=>T.hair[i]||null),stick:T.people.map((_,i)=>T.stick[i]||null),out:T.out,cw:T.cw,ch:T.ch,imgOff:clone(T.imgOff),floorY:r2(T.floorY),cam:clone(T.cam),sc:T.people.map((_,i)=>scOf(i)),people:T.people.map(k=>k.map(q=>Object.assign({x:r2(q.x),y:r2(q.y),z:r2(q.z||0),h:q.h?1:0},q.man?{man:1}:{})))}};
     const old=T.partId&&!asNew?byId('parts',T.partId):null;
     let img;if(T.img&&T.imgBlob)img=(old&&old.img===T.imgBlob)?T.imgBlob:await opShrink(T.imgBlob,1600);
     else img=await new Promise(r=>opRender(A).toBlob(r,'image/png'));
@@ -3619,6 +3801,11 @@ function openOpTrace(o){
       T.sel=null;draw();drawPanel();toast(`「${p.name||'名前なし'}」を呼び出しました`);});});
   /* 部品から開いたときは、しまった画像を敷く */
   if(o.part&&o.part.img&&o.part.op&&o.part.op.hasImg)setImg(o.part.img,'保存した画像');
+  /* Depth 画像の保存。「両方を保存」は、OpenPose と Depth を同じ名前（openpose_… と depth_…）で続けて保存する */
+  const pngName=kind=>`${kind}_${String(o.title||'trace').replace(/[\\/:*?"<>|\s]+/g,'_')}_${ymdhm()}.png`;
+  $('#optDepUp',el).onclick=()=>{depPrev();toast('Depth の見本を新しくしました');};
+  $('#optSaveD',el).onclick=()=>{const cv=depthCv();cv.toBlob(b=>{if(!b)return toast('画像を作れませんでした');downloadBlob(b,pngName('depth'));toast(`Depth の画像を保存しました（${cv.width}×${cv.height}）`);},'image/png');};
+  $('#optSave2',el).onclick=()=>{const nm1=pngName('openpose'),nm2=pngName('depth');opRender(frameT()).toBlob(b=>{if(b)downloadBlob(b,nm1);depthCv().toBlob(b2=>{if(b2)setTimeout(()=>downloadBlob(b2,nm2),500);toast('OpenPose と Depth の画像を保存しました');},'image/png');},'image/png');};
   $('#optSave',el).onclick=()=>{const cv=opRender(frameT());cv.toBlob(b=>{if(!b)return toast('画像を作れませんでした');
     downloadBlob(b,`openpose_${String(o.title||'trace').replace(/[\\/:*?"<>|\s]+/g,'_')}_${ymdhm()}.png`);toast(`OpenPose の画像を保存しました（${cv.width}×${cv.height}）`);},'image/png');};
   const close=()=>history.back();
