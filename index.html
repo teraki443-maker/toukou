@@ -468,6 +468,32 @@ details.nh .nhb .sec{border:0;padding:0;background:none;box-shadow:none}
   .stc .pick,.pgrid .gi{filter:none}
   img,canvas{color-scheme:light}
 }
+/* ===== 深度ポーズ（v83） ===== */
+.dprow{display:flex;gap:10px;align-items:flex-start;padding:10px 0;border-top:1px solid var(--line)}
+#dpSec>h2+.dprow{border-top:0;padding-top:2px}
+.dpth{flex:0 0 72px;width:72px;height:82px;border:1px dashed var(--line3);border-radius:10px;background:#000;color:#ddd;padding:0;overflow:hidden;display:flex;align-items:center;justify-content:center;flex-direction:column;line-height:1.2}
+.dpth img{width:100%;height:100%;object-fit:contain;display:block}
+.dpth b{font-size:22px}.dpth small{font-size:11px}
+.dpinfo{flex:1;min-width:0}
+.dpnm{display:flex;gap:6px;align-items:baseline;flex-wrap:wrap}.dpnm b{font-size:13px}.dpnm small{color:var(--sub);font-size:12px}
+.dppn{font-size:13px;margin-top:2px;word-break:break-all}
+.dpseg{display:flex;align-items:center;gap:4px;margin-top:6px;flex-wrap:wrap}
+.dpseg>span{font-size:12px;color:var(--sub);min-width:2.6em}
+.dpseg button,.dpcats button,.dpwho button{border:1px solid var(--line2);background:var(--card);color:var(--ink);border-radius:999px;padding:4px 10px;font-size:12px;line-height:1.4}
+.dpseg button.on,.dpcats button.on,.dpwho button.on{background:var(--acc);border-color:var(--acc);color:#fff}
+.dpcats,.dpwho{display:flex;gap:6px;flex-wrap:wrap;margin:0 0 10px}
+.dpwho{margin:6px 0 4px}
+.dpstage{margin:10px 0 6px;background:#000;border-radius:10px;overflow:hidden}
+.dpstage canvas{display:block;width:100%;height:auto;touch-action:none}
+.dprng{margin:6px 0}
+.dprng input{width:100%}
+.dpedit{background:#000;border-radius:10px;overflow:hidden;min-height:60px;display:flex;align-items:center;justify-content:center}
+.dpedit canvas{display:block;max-width:100%;max-height:52vh;width:auto;height:auto}
+.dpedit .ph{color:#aaa;font-size:13px;padding:24px}
+.dpchk{background:repeating-conic-gradient(#9a9a9a 0 25%,#d8d8d8 0 50%) 0 0/16px 16px}
+.dpgrid .gi{background-color:#000;background-size:contain;background-position:center;background-repeat:no-repeat}
+.pim.dpim{background:#000;object-fit:contain}
+@media (max-width:360px){.dpth{flex-basis:56px;width:56px;height:64px}.dpseg{gap:3px}.dpseg button{padding:3px 8px}.dpseg>span{min-width:2.2em}}
 </style>
 </head>
 <body>
@@ -515,11 +541,12 @@ const PT={
   camera:{label:'構図',hint:'カメラの距離（全身・上半身・アップなど）やピント',ph:'full body',namePh:'例：全身'},
   light:{label:'光',hint:'光の当たり方・明るさだけ（逆光・薄暗いなど）。場所（暗い部屋・夕方の海など）は「背景」に入れます',ph:'soft lighting',namePh:'例：やわらかい光'},
   openpose:{label:'OpenPose',hint:'OpenPose の棒人形の点と、合わせたときに下に敷いた画像を一緒にしまう部品です。押すと、画像と点がそのまま出て、直したり PNG で保存したりできます。シーンのプロンプトには入りません',ph:'',namePh:'例：向かい合って腕組み'},
+  depth:{label:'深度ポーズ',hint:'深度（Depth）のポーズ画像です。画像をコピーして「📋 貼り付け」で追加します。黒い背景は透明として扱います。シーンで人物ごとに選ぶと、カテゴリ・アングル・手足の接地のタグがプロンプトに入り、2人以上を重ねた画像を保存できます',ph:'hand on hip',namePh:'例：片手を腰に立つ'},
   other:{label:'その他',hint:'どの項目にも当てはまらないタグ（持ち物・小物・細かい指定など）。人物ごとにも、シーン全体にも、いくつでも付けられます',ph:'holding umbrella',namePh:'例：傘を持つ'},
   style:{label:'画風',hint:'画質・画風のタグ。タグの形では最後に入ります',ph:'masterpiece, best quality',namePh:'例：いつもの画風'},
   lora:{label:'LoRA',hint:'LoRA を使うときにプロンプトへ足すタグ（なければ空のまま）。LoRA は作られたモデルの系統（SDXL 系・Tsubaki 系）でしか使えません',ph:'トリガーワード',namePh:'例：水彩風'}
 };
-const PT_ORDER=['chara','phys','outfit','action','openpose','act','face','body','inter','bg','angle','camera','light','fx','np','other','style','lora'];
+const PT_ORDER=['chara','phys','outfit','action','depth','act','face','body','inter','bg','angle','camera','light','fx','np','other','style','lora'];
 /* プロンプトの形（PixAI 公式ブログの勧めに合わせる） */
 const FMT={
   tag:{label:'タグ（SDXL 系：Haruka・Hoshino など）',hint:'人数 → 人物の特徴 → 身体の特徴 → 服 → ポーズ → 行動 → 表情 → 体の状態 → 絡み → 背景 → カメラ位置 → 構図 → 光 → エフェクト・動き → ネガポジ → 画風 の順に、タグを並べます。'},
@@ -529,7 +556,7 @@ const FMT={
 
 /* ========== データベース（IndexedDB） ========== */
 let db=null;
-const APP_VER='v82';/* sw.js の VERSION と同じにする */
+const APP_VER='v83';/* sw.js の VERSION と同じにする */
 const STORES=['parts','scenes','works','images','meta','fonts','stamps'];
 function openDB(){return new Promise((res,rej)=>{const r=indexedDB.open('manga4koma',3);r.onupgradeneeded=()=>{const d=r.result;for(const s of STORES)if(!d.objectStoreNames.contains(s))d.createObjectStore(s,{keyPath:'id'});};r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error);});}
 function tx(store,mode,fn){return new Promise((res,rej)=>{if(!db)return res(undefined);const t=db.transaction(store,mode);const req=fn(t.objectStore(store));let out;if(req)req.onsuccess=()=>{out=req.result;};t.oncomplete=()=>res(out);t.onerror=()=>rej(t.error);t.onabort=()=>rej(t.error);});}
@@ -554,6 +581,7 @@ function mapSceneIds(s,fn,snaps){
   const one=v=>v?(fn(v)||''):v;
   const arr=a=>{const o=[];for(const x of A_(a)){const n=one(x);if(n&&!o.includes(n))o.push(n);}return o;};
   const fix=s=>{for(const c of s.chars||[]){for(const f of['chara','face'])if(c[f])c[f]=one(c[f]);for(const f of['outfit','action','body','phys','act','other'])if(c[f]!=null&&A_(c[f]).length)c[f]=arr(c[f]);if(c.pic&&c.pic.pose)c.pic.pose=fn(c.pic.pose)||'stand';}
+    if(s.dpose&&Array.isArray(s.dpose.L))for(const e of s.dpose.L)if(e&&e.id)e.id=one(e.id);
     for(const f of['bg','style','camera','light','openpose'])if(s[f])s[f]=one(s[f]);for(const f of['inter','angle','fx','np','other'])if(Array.isArray(s[f]))s[f]=arr(s[f]);
     if(Array.isArray(s.loras)){const seen=new Set();s.loras=s.loras.map(l=>Object.assign({},l,{id:one(l.id)})).filter(l=>{if(!l.id||seen.has(l.id))return false;seen.add(l.id);return true;});}};
   const before=JSON.stringify(s);fix(s);if(snaps)for(const m of Object.values(s.imgMeta||{}))if(m&&m.snap)fix(m.snap);return JSON.stringify(s)!==before;}
@@ -781,7 +809,7 @@ const ROLE_RE={
 const COUNT_RE=/^(\d+(girl|boy)s?|solo|multiple (girls|boys))$/;
 function roleCheck(type,tags){
   const out={groups:[],count:[],paren:false};
-  if(type==='np'||type==='lora'||type==='other'||type==='openpose')return out;
+  if(type==='np'||type==='lora'||type==='other'||type==='openpose'||type==='depth')return out;
   const g={};
   for(const t of splitTags(tags)){const k=norm(t);
     if(COUNT_RE.test(k)){out.count.push(t);continue;}
@@ -837,10 +865,10 @@ function dupScan(sc){
   for(const l of sc.loras||[])addIds([l.id],new Set(),'g','');
   const multi=(sc.chars||[]).length>1,PIC=picTags(sc),OPA=opAutoScene(sc);
   (sc.chars||[]).forEach((sl,i)=>{const rm=new Set(splitTags(sl.remove).map(norm)),scope=fmt==='group'?'s'+i:'g',pre=multi?`人物${i+1}の`:'';
-    addIds([sl.chara,...(sl.phys||[]),...A_(sl.outfit),...A_(sl.action),...(sl.act||[]),sl.face,...(sl.body||[]),...(sl.other||[])],rm,scope,pre);addT(splitTags(sl.add),pre+'足すタグ',rm,scope);addT(PIC.per[i]||[],pre+'向き・位置',rm,scope);addT(OPA.per[i]||[],pre+'OpenPose（自動）',rm,scope);});
+    addIds([sl.chara,...(sl.phys||[]),...A_(sl.outfit),...A_(sl.action),...(sl.act||[]),sl.face,...(sl.body||[]),...(sl.other||[])],rm,scope,pre);addT(splitTags(sl.add),pre+'足すタグ',rm,scope);addT(PIC.per[i]||[],pre+'向き・位置',rm,scope);addT(OPA.per[i]||[],pre+'深度ポーズ（自動）',rm,scope);});
   const srm=new Set(splitTags(sc.remove).map(norm));
-  addIds([...(sc.inter||[]),sc.bg,...(sc.angle||[]),sc.camera,sc.light,...(sc.fx||[]),...(sc.np||[]),...(sc.other||[]),sc.openpose,sc.style],srm,'g','');
-  addT(splitTags(sc.add),'足すタグ（人物以外）',srm,'g');addT(PIC.scene,'向き・位置',srm,'g');addT(OPA.scene,'OpenPose（自動）',srm,'g');
+  addIds([...(sc.inter||[]),sc.bg,...(sc.angle||[]),sc.camera,sc.light,...(sc.fx||[]),...(sc.np||[]),...(sc.other||[]),sc.style],srm,'g','');
+  addT(splitTags(sc.add),'足すタグ（人物以外）',srm,'g');addT(PIC.scene,'向き・位置',srm,'g');addT(OPA.scene,'深度ポーズ（自動）',srm,'g');
   const nsrc=[];const negOf=(id,suf)=>{const p=P_(id);if(p)for(const t of splitTags(p.neg))nsrc.push({t,label:lab(id)+suf});};
   if(sc.style)negOf(sc.style,'のネガティブ');for(const id of sc.np||[])negOf(id,'のネガティブ');for(const t of splitTags(sc.neg))nsrc.push({t,label:'ネガティブに足すタグ'});
   const wt=t=>{const w=parseTag(t).w;return w!=null?`（${w}）`:'';};
@@ -881,7 +909,7 @@ function buildPrompt0(sc,D){
   /* ピクトグラムで決めた向き・位置のタグ */
   const OPA=opAutoScene(sc);
   const PIC=picTags(sc);slots.forEach((s,i)=>s.pic=uniq(PIC.per[i]||[],[...s.rm,...s.feat,...s.phys,...s.out,...s.pose,...s.act,...s.face,...s.body,...s.other,...s.add]));slots.forEach((s,i)=>s.opa=uniq(OPA.per[i]||[],[...s.rm,...s.feat,...s.phys,...s.out,...s.pose,...s.act,...s.face,...s.body,...s.other,...s.add,...s.pic]));const picS=uniq(PIC.scene,srm);
-  const inter=uniq((sc.inter||[]).flatMap(T_),srm),bg=uniq(T_(sc.bg),srm),ang=uniq((sc.angle||[]).flatMap(T_),srm),cam=uniq(T_(sc.camera),srm),lit=uniq(T_(sc.light),srm),fx=uniq((sc.fx||[]).flatMap(T_),srm),npP=uniq((sc.np||[]).flatMap(T_),srm),add=uniq(splitTags(sc.add),srm),oth=uniq((sc.other||[]).flatMap(T_),srm),opT=uniq([...T_(sc.openpose),...OPA.scene],srm),style=uniq(T_(sc.style),srm);
+  const inter=uniq((sc.inter||[]).flatMap(T_),srm),bg=uniq(T_(sc.bg),srm),ang=uniq((sc.angle||[]).flatMap(T_),srm),cam=uniq(T_(sc.camera),srm),lit=uniq(T_(sc.light),srm),fx=uniq((sc.fx||[]).flatMap(T_),srm),npP=uniq((sc.np||[]).flatMap(T_),srm),add=uniq(splitTags(sc.add),srm),oth=uniq((sc.other||[]).flatMap(T_),srm),opT=uniq([...OPA.scene],srm),style=uniq(T_(sc.style),srm);
   const loras=[],trig=[];
   for(const l of sc.loras||[]){
     const p=P_(l.id);if(!p)continue;
@@ -895,8 +923,8 @@ function buildPrompt0(sc,D){
      人物が2人以上のときだけ、人物のタグに番号を付けて、人物ごとに重みを付けられるようにする */
   const multi=slots.length>1;
   const I=(arr,cat,si)=>arr.map(t=>({t,cat,si:multi?si:null,p:si}));
-  const slotItems=(s,i)=>[...I(s.feat,'chara',i),...I(s.phys,'phys',i),...I(s.out,'outfit',i),...I(s.pose,'action',i),...I(s.act,'act',i),...I(s.face,'face',i),...I(s.body,'body',i),...I(s.other,'other',i),...I(s.add,'add',i),...I(s.pic,'pic',i),...I(s.opa,'openpose',i)];
-  const restItems=()=>[...I(inter,'inter'),...I(picS,'pic'),...I(bg,'bg'),...I(ang,'angle'),...I(opT,'openpose'),...I(add,'add'),...I(oth,'other'),...I(cam,'camera'),...I(lit,'light'),...I(fx,'fx'),...I(npP,'np'),...I(style,'style')];
+  const slotItems=(s,i)=>[...I(s.feat,'chara',i),...I(s.phys,'phys',i),...I(s.out,'outfit',i),...I(s.pose,'action',i),...I(s.act,'act',i),...I(s.face,'face',i),...I(s.body,'body',i),...I(s.other,'other',i),...I(s.add,'add',i),...I(s.pic,'pic',i),...I(s.opa,'depth',i)];
+  const restItems=()=>[...I(inter,'inter'),...I(picS,'pic'),...I(bg,'bg'),...I(ang,'angle'),...I(opT,'depth'),...I(add,'add'),...I(oth,'other'),...I(cam,'camera'),...I(lit,'light'),...I(fx,'fx'),...I(npP,'np'),...I(style,'style')];
   /* uniq と同じ決まりで、同じタグを1つにする（重複の欄で「残す」にしたものは残す） */
   const uniqI=arr=>{const seen=new Set();return arr.filter(x=>{const k=norm(x.t);if(seen.has(k)&&!(KEEP&&KEEP.has(k)))return false;seen.add(k);return true;});};
   const pfI=()=>{const f=D.pf();return x=>f(x.t);};
@@ -997,7 +1025,7 @@ $('#sheet .bk').onclick=closeSheet;
 /* ========== 使われている場所 ========== */
 function usedIn(sceneId){const r=[];for(const w of S.works)(w.panels||[]).forEach((p,i)=>{if(p===sceneId)r.push({w,i});});return r;}
 function partUsage(pid){const e=x=>!!x&&(x===pid||(!pid.includes(VSEP)&&vBase(x)===pid)),h=a=>A_(a).some(e);
-  return S.scenes.filter(s=>e(s.bg)||e(s.style)||e(s.camera)||e(s.light)||e(s.openpose)||h(s.inter)||h(s.angle)||h(s.fx)||h(s.np)||h(s.other)||(s.chars||[]).some(c=>e(c.chara)||h(c.outfit)||h(c.action)||(c.pic&&e(c.pic.pose))||e(c.face)||h(c.body)||h(c.phys)||h(c.act)||h(c.other))||(s.loras||[]).some(l=>e(l.id))).length;}
+  return S.scenes.filter(s=>e(s.bg)||e(s.style)||e(s.camera)||e(s.light)||e(s.openpose)||((s.dpose&&s.dpose.L)||[]).some(x=>x&&e(x.id))||h(s.inter)||h(s.angle)||h(s.fx)||h(s.np)||h(s.other)||(s.chars||[]).some(c=>e(c.chara)||h(c.outfit)||h(c.action)||(c.pic&&e(c.pic.pose))||e(c.face)||h(c.body)||h(c.phys)||h(c.act)||h(c.other))||(s.loras||[]).some(l=>e(l.id))).length;}
 /* 服装・ポーズは、前は1つだけ（文字）、今はいくつでも（配列）。どちらでも読めるようにする */
 const A_=v=>Array.isArray(v)?v:(v?[v]:[]);
 const newSlot=()=>({chara:'',phys:[],outfit:[],action:[],act:[],face:'',body:[],other:[],add:'',remove:''});
@@ -1159,7 +1187,7 @@ function vScenes(c){
 /* ========== シーンの編集 ========== */
 function opts(type,sel){const ps=S.parts.filter(p=>p.type===type).sort((a,b)=>(a.name||'').localeCompare(b.name||'','ja'));return `<option value="">（なし）</option>${ps.map(p=>`<option value="${p.id}"${p.id===sel?' selected':''}>${esc(p.name||'名前なし')}${(p.vars||[]).length?'（派生あり）':''}</option>`+(p.vars||[]).map(v=>`<option value="${p.id}${VSEP}${v.id}"${p.id+VSEP+v.id===sel?' selected':''}>　└ ${esc(v.name||'派生')}</option>`).join('')).join('')}<option value="__new">＋ 新しく登録…</option>`;}
 /* 部品の種類ごとの色（シーンの欄と部品の一覧で同じ色を使う） */
-const CATC={add:'#9ca3af',pic:'#0d9488',act:'#f43f5e',chara:'#3b82f6',phys:'#0ea5a4',outfit:'#8b5cf6',action:'#f97316',face:'#ec4899',body:'#ef4444',inter:'#d946ef',bg:'#22a34a',angle:'#6366f1',camera:'#0891b2',light:'#eab308',fx:'#84cc16',np:'#64748b',other:'#78716c',openpose:'#0f766e',style:'#a16207',lora:'#475569'};
+const CATC={add:'#9ca3af',pic:'#0d9488',act:'#f43f5e',chara:'#3b82f6',phys:'#0ea5a4',outfit:'#8b5cf6',action:'#f97316',face:'#ec4899',body:'#ef4444',inter:'#d946ef',bg:'#22a34a',angle:'#6366f1',camera:'#0891b2',light:'#eab308',fx:'#84cc16',np:'#64748b',other:'#78716c',openpose:'#0f766e',depth:'#334155',style:'#a16207',lora:'#475569'};
 /* 長押し：0.5秒押し続けたら fn を呼ぶ。そのあとの「押した」はなかったことにする */
 function longPress(el,fn){let t=0,x=0,y=0,fired=false;
   const stop=()=>{clearTimeout(t);t=0;};
@@ -1169,7 +1197,7 @@ function longPress(el,fn){let t=0,x=0,y=0,fired=false;
   el.addEventListener('click',e=>{if(fired){fired=false;e.stopImmediatePropagation();e.preventDefault();}},true);
   el.addEventListener('contextmenu',e=>e.preventDefault());}
 /* 種類ごとの小さな絵（ピクトグラム） */
-const CATI={pic:'🕴',chara:'👤',phys:'🧍',outfit:'👕',action:'🤸',act:'✋',face:'😊',body:'💧',inter:'🤝',bg:'🏞️',angle:'🎥',camera:'🖼️',light:'💡',fx:'✨',np:'⚖️',other:'📦',openpose:'🦴',style:'🎨',lora:'🧩'};
+const CATI={pic:'🕴',chara:'👤',phys:'🧍',outfit:'👕',action:'🤸',act:'✋',face:'😊',body:'💧',inter:'🤝',bg:'🏞️',angle:'🎥',camera:'🖼️',light:'💡',fx:'✨',np:'⚖️',other:'📦',openpose:'🦴',depth:'🌗',style:'🎨',lora:'🧩'};
 const catLab=c=>c==='add'?'足すタグ':c==='pic'?'向き・位置':PT[c].label;
 const pic=t=>CATI[t]?`<i class="pic" aria-hidden="true">${CATI[t]}</i>`:'';
 const catAttr=t=>`data-cat="${t}" style="--c:${CATC[t]||'#888'}"`;
@@ -1259,7 +1287,7 @@ function vScene(c){
     </div>`).join('')}
     <button class="btn ghost sm" id="addSlot">＋ 人物を足す</button>
   </div>
-  ${opSecHTML(sc)}
+  ${dpSecHTML(sc)}
 
   <div class="sec"><h2>絡み <small>人物どうしの関わり</small></h2>
     ${chipSel('絡み','inter',sc.inter,'data-chip="inter"')}
@@ -1376,7 +1404,7 @@ function vScene(c){
     drawDup(p);
     $('#pLora').innerHTML=p.loras.length?'PixAI で選ぶ LoRA：'+p.loras.map(l=>`<span>${esc(l.name)}（${esc(l.weight===''?'—':l.weight)}）</span>`).join(''):'';};
   upd();
-  opSecWire(sc);
+  dpSecWire(sc);
   setupFold(c);
   /* たたんだままでもコピーできる、見出しのボタン */
   $$('[data-cp]',view).forEach(b=>b.onclick=()=>{const p=buildPrompt(sc);copyText(b.dataset.cp==='neg'?p.neg:p.pos);});
@@ -2050,7 +2078,7 @@ function vPList(c){
   setHead((CATI[t]?CATI[t]+' ':'')+T.label);
   const list=S.parts.filter(p=>p.type===t).sort((a,b)=>(a.name||'').localeCompare(b.name||'','ja'));
   view.innerHTML=`
-  ${mergeBanner(t)}${simBanner(t)}<p class="hint" style="margin:0 0 12px">${esc(T.hint)}</p>
+  ${mergeBanner(t)}${simBanner(t)}<p class="hint" style="margin:0 0 12px">${esc(T.hint)}</p>${t==='depth'?dpListTop():''}
   ${list.length?list.map(p=>{const n=partUsage(p.id);const inner=`<small>${n?n+'シーン':'未使用'}</small><b>${esc(p.name||'名前なし')}</b>${roleN(p)?' <span class="chip warn">⚠ ぶつかりやすいタグ</span>':''}${p.type==='chara'?` <span class="chip">${esc(p.subject||'girl')}</span>`:''}${p.type==='lora'?` <span class="chip">重み ${esc(p.weight??'')}</span>`:''}${(p.vars||[]).length?` <span class="chip">派生 ${p.vars.length}</span>`:''}${(p.links||[]).length?` <span class="chip">🔗 呼び出す設定 ${p.links.length}</span>`:''}<div class="ptags">${esc(p.tags)||'<span class="muted">タグなし</span>'}${(p.vars||[]).map(v=>`<br><span class="pvar">└ ${esc(v.name||'派生')}：${esc(v.tags)||'タグなし'}</span>`).join('')}${p.type==='np'&&p.neg?`<br><span style="color:var(--warn)">ネガ：${esc(p.neg)}</span>`:''}</div>`;
     if(p.type==='openpose')return `<button class="pitem hasimg" data-id="${p.id}"><img class="pim" data-opthumb="${p.id}" alt=""><div>${inner}</div></button>`;
     return p.img?`<button class="pitem hasimg" data-id="${p.id}"><img class="pim" src="${partImgUrl(p)}" alt=""><div>${inner}</div></button>`:`<button class="pitem" data-id="${p.id}">${inner}</button>`;}).join('')
@@ -2059,14 +2087,14 @@ function vPList(c){
   if(t==='openpose'){$$('img[data-opthumb]',view).forEach(async im=>{const pp=byId('parts',im.dataset.opthumb);if(pp)im.src=await opThumb(pp);});}
   $$('.pitem',view).forEach(b=>b.onclick=()=>openPart(b.dataset.id,null,()=>render(true)));
   $('#newPart').onclick=()=>openPart(null,t,()=>render(true));
-  mergeWire(t);simWire(t);
+  mergeWire(t);simWire(t);if(t==='depth')dpListWire();
 }
 /* ===== 似ている部品を派生にまとめる =====
    同じ種類の部品で、タグがもう一方に全部入っているもの・名前とタグが近いものを組にする。
    組の中でタグが少ないものを「基本」の候補にし、ほかを派生の候補にする（基本は画面で選びなおせる）。
    派生を持っている部品・ピクトグラムの形がある部品・見本の画像がある部品は、派生にはしない */
 function simGroups(type){
-  if(type==='lora'||type==='chara'||type==='openpose')return[];
+  if(type==='lora'||type==='chara'||type==='openpose'||type==='depth')return[];
   const nm=p=>(p.name||'').replace(/[（(].*?[)）]/g,'').trim();
   const ps=S.parts.filter(p=>p.type===type).map(p=>({p,t:new Set(splitTags(p.tags).map(norm)),n:nm(p)})).filter(x=>x.t.size);
   ps.sort((a,b)=>a.t.size-b.t.size||(a.p.name||'').length-(b.p.name||'').length);
@@ -2141,6 +2169,8 @@ async function jaToTags(t){const words=jaSplit(t);const out=[];let dict=0,net=0,
   return{tags:out,dict,net,fail};}
 function openPart(id,type,onSave){
   id=id?vBase(id):id;
+  /* 深度ポーズの部品は、専用の画面で開く */
+  {const sp=id?byId('parts',id):null;if((sp&&sp.type==='depth')||(!id&&type==='depth'))return openDepthPart(sp?sp.id:null,p2=>{onSave&&onSave(p2||null);});}
   /* OpenPose の部品は、画像に合わせる画面で開く */
   {const sp=id?byId('parts',id):null;if((sp&&sp.type==='openpose')||(!id&&type==='openpose'))return openOpTrace({part:sp||null,onDone:pid=>{const p2=pid?byId('parts',pid):null;if(p2||sp)onSave&&onSave(p2||null);}});}/* 派生を押したときも、基本の部品を開く */
   const src=id?byId('parts',id):null;
@@ -3918,7 +3948,8 @@ const opAutoTextCache={};
 function opAutoPart(p){if(!p||!p.op)return{per:[],scene:[]};const key=p.id+':'+(p.updated||0);if(opAutoTextCache[key])return opAutoTextCache[key];
   const d=p.op,W=d.W||800,H=d.H||912;return opAutoTextCache[key]=opAutoTags({W,H,out:d.out||'gen',people:(d.people||[]).map(k=>k.map(q=>({x:q.x*W,y:q.y*H,z:(q.z||0)*W,h:!!q.h})))});}
 /* シーンで使う自動のタグ（オフ・OpenPose なしなら空） */
-const opAutoScene=sc=>sc&&sc.opAuto!==false&&sc.openpose?opAutoPart(P_(sc.openpose)):{per:[],scene:[]};
+/* v83：OpenPose はシーンで使わない。自動のタグは深度ポーズ（dpTags）から作る */
+const opAutoScene=sc=>dpTags(sc);
 const opAutoText=A=>[...A.per.map((t,i)=>t.length?`人物${i+1}：<code>${esc(t.join(', '))}</code>`:''),A.scene.length?`全体：<code>${esc(A.scene.join(', '))}</code>`:''].filter(Boolean).join('<br>')||'（なし）';
 function opSecHTML(sc){const p=byId('parts',sc.openpose);
   return `<div class="sec" id="opSec"><h2>🦴 OpenPose <small>立ち位置・ポーズ</small></h2>
@@ -4091,6 +4122,200 @@ function openPoseEditor(sc,slotI,partId,onDone){
   render();
   if(db&&navigator.storage&&navigator.storage.persist)navigator.storage.persisted().then(v=>{if(!v)navigator.storage.persist().catch(()=>{});}).catch(()=>{});
 })();
+/* ========== 深度ポーズ（v83） ==========
+   部品の種類 depth：深度（Depth）のポーズ画像 p.img（PNG の Blob、長い辺1024まで）と p.dp={cat,ang,bg}。
+   ・画像はコピーして「📋 貼り付け」で入れる（PC は Ctrl＋V）。
+   ・bg より暗い所は背景として透明にする（黒い背景がほかの人物を隠さない）。
+   シーン：sc.dpose={L:[{id,x,y,s,z,flip,hand,foot}],trans}。L[i] がシーンの人物 i。
+   ・x・y は人物の真ん中・足もとの位置（0〜1）。null なら自動（1人なら元の画像の位置、2人以上なら横に並べる）。s は大きさ。
+   ・z は 'f' 手前・'m' 同じ位置・'b' 奥。奥ほど暗く・小さく描く（深度は白いほど手前）。
+   ・重ねるときは明るい方（手前）が勝つ（lighten）。
+   ・hand・foot は 0 なし・1 片方・2 両方。地面についていればタグに入れる。 */
+const DP_CATS=[['','（なし）',''],['stand','立ち姿','standing'],['sit','座り姿','sitting'],['kneel','膝立ち','kneeling'],['lie','寝そべり','lying'],['wariza','横座り・女の子座り','wariza, sitting'],['squat','しゃがみ','squatting'],['lean','前傾','leaning forward'],['arch','反り','arched back'],['twist','ひねり','twisting torso'],['cute','かわいい',''],['other','その他','']];
+const DP_ANGS=[['','正面',''],['above','俯瞰','from above'],['side','横向き','from side'],['diag','斜め',''],['below','アオリ','from below'],['behind','後ろ','from behind']];
+const DP_Z={f:{l:'手前',v:1,s:1.06,dy:.02,r:0},m:{l:'同じ位置',v:.86,s:1,dy:0,r:1},b:{l:'奥',v:.7,s:.86,dy:-.07,r:2}};
+const DP_HAND=['','hand on ground','hands on ground'],DP_FOOT=['','one foot on ground','feet on ground'];
+const DP_W=800,DP_H=912;
+let dpFilter='',dpSelI=0;
+const dpCatTag=p=>{const c=DP_CATS.find(x=>x[0]===((p&&p.dp)||{}).cat);return c?c[2]:'';};
+const dpCatName=p=>{const c=DP_CATS.find(x=>x[0]===((p&&p.dp)||{}).cat);return c&&c[0]?c[1]:'';};
+const dpAngName=p=>{const a=DP_ANGS.find(x=>x[0]===((p&&p.dp)||{}).ang);return a?a[1]:'';};
+function dpGet(sc){if(!sc.dpose||!Array.isArray(sc.dpose.L))sc.dpose={L:[],trans:false};return sc.dpose;}
+function dpLoad(blob){return new Promise((res,rej)=>{const u=URL.createObjectURL(blob);const im=new Image();im.onload=()=>{URL.revokeObjectURL(u);res(im);};im.onerror=()=>{URL.revokeObjectURL(u);rej(new Error('画像を読めません'));};im.src=u;});}
+/* 取り込んだ画像を、長い辺1024までの PNG にする。背景の暗さも調べる */
+async function dpNorm(blob){const im=await dpLoad(blob);const k=Math.min(1,1024/Math.max(im.naturalWidth,im.naturalHeight));
+  const c=document.createElement('canvas');c.width=Math.max(1,Math.round(im.naturalWidth*k));c.height=Math.max(1,Math.round(im.naturalHeight*k));const g=c.getContext('2d');g.drawImage(im,0,0,c.width,c.height);
+  const bg=dpAutoBg(g.getImageData(0,0,c.width,c.height));
+  const out=await new Promise(r=>c.toBlob(r,'image/png'));return{blob:out||blob,bg};}
+/* 背景の暗さ：まわりのふち（幅の3%）の明るさの、明るい方から5%の所＋少し */
+function dpAutoBg(d){const{width:w,height:h,data:a}=d,m=Math.max(2,Math.round(Math.min(w,h)*.03)),L=[];
+  const at=(x,y)=>{const i=(y*w+x)*4;L.push((a[i]*299+a[i+1]*587+a[i+2]*114)/1000);};
+  for(let y=0;y<h;y+=2)for(let x=0;x<w;x+=2)if(x<m||y<m||x>=w-m||y>=h-m)at(x,y);
+  L.sort((p,q)=>p-q);const v=L.length?L[Math.floor(L.length*.95)]:0;
+  /* 背景にグラデーションがある画像のため、明るさの分かれ目（大津の方法）の8割も見て、大きい方を使う */
+  const Hs=new Array(256).fill(0);let N=0;for(let i=0;i<a.length;i+=8){Hs[Math.round((a[i]*299+a[i+1]*587+a[i+2]*114)/1000)]++;N++;}
+  let sum=0;for(let t=0;t<256;t++)sum+=t*Hs[t];let sB=0,wB=0,best=0,th=0;for(let t=0;t<256;t++){wB+=Hs[t];if(!wB)continue;const wF=N-wB;if(!wF)break;sB+=t*Hs[t];const mB=sB/wB,mF=(sum-sB)/wF,b=wB*wF*(mB-mF)*(mB-mF);if(b>best){best=b;th=t;}}
+  return Math.min(140,Math.round(Math.max(v+8,th*.8)));}
+/* 背景を透明にした絵（v は明るさの倍率）。体のある範囲 bb も返す */
+function dpProc(im,bg,v){const w=im.naturalWidth||im.width,h=im.naturalHeight||im.height;const c=document.createElement('canvas');c.width=w;c.height=h;const g=c.getContext('2d');g.drawImage(im,0,0);
+  const d=g.getImageData(0,0,w,h),a=d.data;let x1=w,y1=h,x2=-1,y2=-1;const span=Math.max(1,255-bg);
+  for(let y=0,i=0;y<h;y++)for(let x=0;x<w;x++,i+=4){const L=(a[i]*299+a[i+1]*587+a[i+2]*114)/1000;const al=Math.max(0,Math.min(1,(L-bg)/12))*(a[i+3]/255);
+    const t=Math.max(0,Math.min(1,(L-bg)/span));const o=Math.round((34+221*t)*v);a[i]=a[i+1]=a[i+2]=o;a[i+3]=Math.round(al*255);
+    if(al>.4){if(x<x1)x1=x;if(x>x2)x2=x;if(y<y1)y1=y;if(y>y2)y2=y;}}
+  g.putImageData(d,0,0);if(x2<0){x1=0;y1=0;x2=w-1;y2=h-1;}return{c,w,h,bb:{x1,y1,x2:x2+1,y2:y2+1}};}
+const dpImCache={},dpLCache={};
+async function dpImgOf(p){const k=p.id+':'+(p.updated||0);if(!dpImCache[k])dpImCache[k]=dpLoad(p.img);return dpImCache[k];}
+async function dpLayer(p,v){const bg=dpBg(p);const k=p.id+':'+(p.updated||0)+':'+v+':'+bg;if(dpLCache[k])return dpLCache[k];return dpLCache[k]=dpProc(await dpImgOf(p),bg,v);}
+const dpBg=p=>{const b=((p&&p.dp)||{}).bg;return typeof b==='number'?b:16;};
+/* プロンプトに入るタグ。per[i] は人物 i、scene は全体 */
+function dpTags(sc){const D=sc&&sc.dpose;const n=((sc&&sc.chars)||[]).length;if(!D||!Array.isArray(D.L))return{per:[],scene:[]};
+  const per=[],scene=[],used=[];
+  for(let i=0;i<n;i++){const e=D.L[i],p=e&&P_(e.id),t=[];
+    if(p){t.push(...splitTags(dpCatTag(p)),...splitTags(p.tags));const a=DP_ANGS.find(x=>x[0]===((p.dp||{}).ang));if(a&&a[2])scene.push(a[2]);
+      if(e.hand)t.push(DP_HAND[e.hand]);if(e.foot)t.push(DP_FOOT[e.foot]);used.push(i);}
+    per.push(t);}
+  if(used.length>1){const r=i=>(DP_Z[D.L[i].z]||DP_Z.m).r,mn=Math.min(...used.map(r)),mx=Math.max(...used.map(r));
+    if(mn!==mx)for(const i of used){if(r(i)===mn)per[i].push('in foreground');else if(r(i)===mx)per[i].push('in background');}}
+  return{per:per.map(x=>[...new Set(x)]),scene:[...new Set(scene)]};}
+/* 置き方。x・y・s が null なら自動 */
+function dpGeo(e,Lr,W,H,k,n){const z=DP_Z[e.z]||DP_Z.m,k0=Math.min(W/Lr.w,H/Lr.h),bb=Lr.bb,cx=(bb.x1+bb.x2)/2,by=bb.y2;
+  const s=e.s!=null?e.s:(n>1?.8:1),kk=k0*s*z.s;
+  const ox=(W-Lr.w*k0)/2+cx*k0,oy=(H-Lr.h*k0)/2+by*k0;
+  const ax=e.x!=null?e.x*W:(n>1?W*(k+1)/(n+1):ox),ay=(e.y!=null?e.y*H:oy)+z.dy*H;
+  const fx=e.flip?Lr.w-cx:cx;const dx=ax-fx*kk,dy=ay-by*kk;
+  const rx=e.flip?Lr.w-bb.x2:bb.x1;
+  return{dx,dy,dw:Lr.w*kk,dh:Lr.h*kk,s,ax,ay:ay-z.dy*H,box:[dx+rx*kk,dy+bb.y1*kk,(bb.x2-bb.x1)*kk,(bb.y2-bb.y1)*kk]};}
+/* 重ねて描く。opt.trans で背景を透明に、opt.sel で選んでいる人物に枠 */
+async function dpDraw(sc,cv,opt){opt=opt||{};const W=cv.width,H=cv.height,g=cv.getContext('2d'),D=dpGet(sc);
+  const items=(D.L||[]).map((e,i)=>({e,i,p:e&&P_(e.id)})).filter(x=>x.p&&x.p.img&&x.i<(sc.chars||[]).length);
+  const n=items.length;const lays=await Promise.all(items.map(x=>dpLayer(x.p,(DP_Z[x.e.z]||DP_Z.m).v)));
+  g.save();g.globalCompositeOperation='source-over';g.clearRect(0,0,W,H);if(!opt.trans){g.fillStyle='#000';g.fillRect(0,0,W,H);}
+  const geo={};items.forEach((x,k)=>{geo[x.i]=dpGeo(x.e,lays[k],W,H,k,n);});
+  const order=items.map((x,k)=>k).sort((a,b)=>(DP_Z[items[b].e.z]||DP_Z.m).r-(DP_Z[items[a].e.z]||DP_Z.m).r);
+  g.globalCompositeOperation='lighten';
+  for(const k of order){const x=items[k],G=geo[x.i],Lr=lays[k];g.save();if(x.e.flip){g.translate(G.dx+G.dw,G.dy);g.scale(-1,1);g.drawImage(Lr.c,0,0,G.dw,G.dh);}else g.drawImage(Lr.c,G.dx,G.dy,G.dw,G.dh);g.restore();}
+  g.restore();
+  if(opt.sel!=null&&geo[opt.sel]&&n>0){const b=geo[opt.sel].box;g.save();g.strokeStyle='#ffb020';g.lineWidth=3;g.setLineDash([10,7]);g.strokeRect(b[0],b[1],b[2],b[3]);
+    g.setLineDash([]);g.fillStyle='#ffb020';g.font='bold 26px system-ui,sans-serif';g.fillText('人物'+(opt.sel+1),b[0]+4,Math.max(26,b[1]-6));g.restore();}
+  return{geo,items};}
+function dpRenderBlob(sc,trans){const c=document.createElement('canvas');c.width=DP_W;c.height=DP_H;return dpDraw(sc,c,{trans}).then(()=>new Promise(r=>c.toBlob(r,'image/png')));}
+
+/* ===== シーンの欄 ===== */
+function dpSecHTML(sc){const D=dpGet(sc),chars=sc.chars||[],n=chars.length;
+  const posed=chars.map((_,i)=>D.L[i]&&P_(D.L[i].id)?i:-1).filter(i=>i>=0);
+  if(!posed.includes(dpSelI))dpSelI=posed.length?posed[0]:0;
+  const seg=(i,k,labels,cur)=>`<div class="dpseg" data-i="${i}" data-k="${k}"><span>${k==='hand'?'手が地面':k==='foot'?'足が地面':'前後'}</span>${labels.map(([v,l])=>`<button type="button" data-v="${v}" class="${String(cur)===String(v)?'on':''}">${l}</button>`).join('')}</div>`;
+  const A=dpTags(sc),txt=[...A.per.map((t,i)=>t.length?`人物${i+1}：<code>${esc(t.join(', '))}</code>`:''),A.scene.length?`全体：<code>${esc(A.scene.join(', '))}</code>`:''].filter(Boolean).join('<br>');
+  const ps=S.parts.filter(p=>p.type==='depth').length;
+  return `<div class="sec" id="dpSec"><h2>🌗 深度ポーズ <small>ポーズ・手足の接地・前後</small></h2>
+    ${n?chars.map((sl,i)=>{const e=D.L[i]||{},p=P_(e.id),cn=P_(sl.chara);
+      return `<div class="dprow"><button type="button" class="dpth" data-dppick="${i}" aria-label="人物${i+1}の深度ポーズを選ぶ">${p&&p.img?`<img src="${partImgUrl(p)}" alt="">`:'<b>＋</b><small>ポーズ</small>'}</button>
+        <div class="dpinfo"><div class="dpnm"><b>人物${i+1}</b>${cn?`<small>${esc(cn.name||'')}</small>`:''}</div>
+        ${p?`<div class="dppn">${esc(p.name||'名前なし')}${dpCatName(p)?` <span class="chip">${esc(dpCatName(p))}</span>`:''}${dpAngName(p)&&(p.dp||{}).ang?` <span class="chip">${esc(dpAngName(p))}</span>`:''} <button type="button" class="linkb" data-dpx="${i}">外す</button></div>
+          ${seg(i,'hand',[[0,'なし'],[1,'片手'],[2,'両手']],e.hand||0)}${seg(i,'foot',[[0,'なし'],[1,'片足'],[2,'両足']],e.foot||0)}
+          ${posed.length>1?seg(i,'z',[['f','手前'],['m','同じ位置'],['b','奥']],e.z||'m'):''}`:`<p class="hint" style="margin:4px 0 0">左の「＋」で深度ポーズを選びます。</p>`}</div></div>`;}).join('')
+      :'<p class="hint">先に「人物」を足してください。</p>'}
+    ${posed.length?`<div class="dpstage"><canvas id="dpCv" width="${DP_W}" height="${DP_H}" aria-label="深度ポーズを重ねた画像"></canvas></div>
+      ${posed.length>1?`<div class="dpwho">${posed.map(i=>`<button type="button" data-dpsel="${i}" class="${i===dpSelI?'on':''}">人物${i+1}</button>`).join('')}</div>`:''}
+      <label class="f dprng"><span>人物${dpSelI+1}の大きさ <b id="dpSV"></b></span><input type="range" id="dpS" min="0.3" max="1.6" step="0.01"></label>
+      <div class="row" style="margin:0 0 6px"><label class="switch" style="margin:0"><input type="checkbox" id="dpFlip" ${(D.L[dpSelI]||{}).flip?'checked':''}><span>左右を反転</span></label><button type="button" class="btn ghost sm" id="dpAuto">位置と大きさを自動に戻す</button></div>
+      <label class="switch" style="margin:4px 0"><input type="checkbox" id="dpTrans" ${D.trans?'checked':''}><span>保存する PNG の背景を透明にする</span></label>
+      <div class="row" style="margin:6px 0 0"><button type="button" class="btn sm" id="dpPng">💾 PNG を保存（${DP_W}×${DP_H}）</button><button type="button" class="btn ghost sm" id="dpAsPart">＋ 深度ポーズの部品として保存</button></div>
+      <p class="hint">絵の人物を指でドラッグすると動かせます。黒い背景は透明として重ねるので、ほかの人物を隠しません。前後は明るさ（白いほど手前）と大きさで表します。PixAI では、保存した PNG を ControlNet の Depth に入れます。</p>`:''}
+    ${!ps?'<p class="hint">深度ポーズはまだありません。「＋」から、コピーした画像を貼り付けて登録できます。</p>':''}
+    <p class="hint" style="margin:6px 0 0">プロンプトに入るタグ：${txt||'（なし）'}</p>
+  </div>`;}
+function dpSecWire(sc){const box=$('#dpSec');if(!box)return;const D=dpGet(sc);
+  const ent=i=>{D.L[i]=D.L[i]||{id:'',x:null,y:null,s:null,z:'m',flip:false,hand:0,foot:0};return D.L[i];};
+  $$('[data-dppick]',box).forEach(b=>b.onclick=()=>dpPick(sc,+b.dataset.dppick));
+  $$('[data-dpx]',box).forEach(b=>b.onclick=()=>{const i=+b.dataset.dpx;D.L[i]=null;save('scenes',sc);render(true);});
+  $$('.dpseg',box).forEach(sg=>$$('button',sg).forEach(b=>b.onclick=()=>{const i=+sg.dataset.i,k=sg.dataset.k,e=ent(i);e[k]=k==='z'?b.dataset.v:+b.dataset.v;dpSelI=i;save('scenes',sc);render(true);}));
+  $$('[data-dpsel]',box).forEach(b=>b.onclick=()=>{dpSelI=+b.dataset.dpsel;render(true);});
+  const cv=$('#dpCv',box);if(!cv)return;
+  let G=null,raf=0;const draw=()=>{raf=0;dpDraw(sc,cv,{sel:$$('[data-dpsel]',box).length?dpSelI:null}).then(r=>{G=r;const g=G.geo[dpSelI];const sv=$('#dpSV',box),si=$('#dpS',box);if(g&&si&&document.activeElement!==si){si.value=g.s.toFixed(2);}if(g&&sv)sv.textContent=Math.round(g.s*100)+'%';});};
+  const redraw=()=>{if(!raf)raf=requestAnimationFrame(draw);};redraw();
+  const si=$('#dpS',box);si.oninput=()=>{const e=ent(dpSelI);if(G&&G.geo[dpSelI]&&e.x==null){e.x=G.geo[dpSelI].ax/DP_W;e.y=G.geo[dpSelI].ay/DP_H;}e.s=+si.value;$('#dpSV',box).textContent=Math.round(e.s*100)+'%';redraw();save('scenes',sc);};
+  $('#dpFlip',box).onchange=e=>{ent(dpSelI).flip=e.target.checked;redraw();save('scenes',sc);};
+  $('#dpAuto',box).onclick=()=>{for(const e of D.L)if(e){e.x=null;e.y=null;e.s=null;}save('scenes',sc);redraw();};
+  $('#dpTrans',box).onchange=e=>{D.trans=e.target.checked;save('scenes',sc);};
+  const fname=()=>`depth_${String(sc.title||'scene').replace(/[\\/:*?"<>|\s]+/g,'_')}_${ymdhm()}.png`;
+  $('#dpPng',box).onclick=async()=>{const b=await dpRenderBlob(sc,!!D.trans);if(b){downloadBlob(b,fname());toast('深度ポーズの画像を保存しました');}};
+  $('#dpAsPart',box).onclick=async()=>{const b=await dpRenderBlob(sc,false);if(!b)return;const nm=prompt('部品の名前',(sc.title||'シーン')+'の深度ポーズ');if(nm===null)return;
+    const p={id:uid(),type:'depth',name:nm.trim()||'深度ポーズ',tags:'',subject:'',weight:'',loraName:'',neg:'',memo:'シーン「'+(sc.title||'')+'」で重ねて作った画像',text:'',img:b,dp:{cat:'',ang:'',bg:8},created:Date.now()};
+    S.parts.push(p);await saveNow('parts',p);toast('深度ポーズの部品として保存しました');};
+  /* ドラッグで動かす（前にある人物から当てる） */
+  let drag=null;const pt=ev=>{const r=cv.getBoundingClientRect();return[(ev.clientX-r.left)*DP_W/r.width,(ev.clientY-r.top)*DP_H/r.height];};
+  cv.onpointerdown=ev=>{if(!G)return;const[x,y]=pt(ev);const hit=Object.keys(G.geo).map(Number).sort((a,b)=>((DP_Z[(D.L[a]||{}).z]||DP_Z.m).r-(DP_Z[(D.L[b]||{}).z]||DP_Z.m).r)||b-a).find(i=>{const q=G.geo[i].box;return x>=q[0]&&x<=q[0]+q[2]&&y>=q[1]&&y<=q[1]+q[3];});
+    if(hit==null)return;ev.preventDefault();cv.setPointerCapture(ev.pointerId);const g=G.geo[hit],e=ent(hit);
+    const chg=dpSelI!==hit;dpSelI=hit;for(const k of Object.keys(G.geo)){const ee=D.L[k];if(ee&&ee.x==null){ee.x=G.geo[k].ax/DP_W;ee.y=G.geo[k].ay/DP_H;if(ee.s==null)ee.s=G.geo[k].s;}}
+    drag={x0:x,y0:y,ex:e.x,ey:e.y,chg};redraw();};
+  cv.onpointermove=ev=>{if(!drag)return;const[x,y]=pt(ev),e=ent(dpSelI);e.x=Math.max(-.2,Math.min(1.2,drag.ex+(x-drag.x0)/DP_W));e.y=Math.max(0,Math.min(1.4,drag.ey+(y-drag.y0)/DP_H));redraw();};
+  const up=()=>{if(!drag)return;const c=drag.chg;drag=null;save('scenes',sc);if(c)render(true);};
+  cv.onpointerup=up;cv.onpointercancel=up;
+}
+/* 人物 i の深度ポーズを選ぶシート */
+function dpPick(sc,i){const D=dpGet(sc),cur=(D.L[i]||{}).id;
+  const ps=S.parts.filter(p=>p.type==='depth').sort((a,b)=>(a.name||'').localeCompare(b.name||'','ja'));
+  const cats=DP_CATS.filter(c=>c[0]&&ps.some(p=>(p.dp||{}).cat===c[0]));
+  openSheet(`<h2>人物${i+1}の深度ポーズ</h2>
+    <div class="row" style="margin:0 0 8px">${pasteBtn('dpPkIn')}<label class="btn ghost sm">画像から新しく追加<input type="file" accept="image/*" hidden id="dpPkIn"></label></div>${pasteBox('dpPkIn')}
+    ${cats.length?`<div class="dpcats"><button type="button" data-dpc="" class="on">すべて</button>${cats.map(c=>`<button type="button" data-dpc="${c[0]}">${c[1]}</button>`).join('')}</div>`:''}
+    ${ps.length?`<div class="pgrid dpgrid">${ps.map(p=>`<button type="button" class="${p.id===cur?'on':''}" data-dpp="${p.id}" data-cat="${esc((p.dp||{}).cat||'')}"><span class="gi" style="background-image:url(${partImgUrl(p)})"></span><small>${esc(p.name||'名前なし')}</small></button>`).join('')}</div>`
+      :'<p class="hint">まだありません。深度ポーズの画像をコピーして「📋 貼り付け」を押すと登録できます。</p>'}
+    <div class="row"><button type="button" class="btn ghost" id="dpPkCancel">やめる</button></div>`);
+  const sb=$('#sheetBody');
+  $$('[data-dpc]',sb).forEach(b=>b.onclick=()=>{$$('[data-dpc]',sb).forEach(x=>x.classList.toggle('on',x===b));$$('[data-dpp]',sb).forEach(x=>x.hidden=!!b.dataset.dpc&&x.dataset.cat!==b.dataset.dpc);});
+  const setId=id=>{const e=D.L[i]||{x:null,y:null,s:null,z:'m',flip:false,hand:0,foot:0};e.id=id;D.L[i]=e;dpSelI=i;saveNow('scenes',sc);};
+  $$('[data-dpp]',sb).forEach(b=>b.onclick=()=>{setId(b.dataset.dpp);closeSheet();render(true);});
+  $('#dpPkCancel',sb).onclick=()=>closeSheet();
+  $('#dpPkIn',sb).onchange=e=>{const f=e.target.files[0];e.target.value='';if(!f)return;closeSheet();setTimeout(()=>openDepthPart(null,p=>{if(p){setId(p.id);}render(true);},f),60);};
+}
+/* ===== 部品の一覧（深度ポーズ）の上の欄 ===== */
+function dpListTop(){const ps=S.parts.filter(p=>p.type==='depth');const cats=DP_CATS.filter(c=>c[0]&&ps.some(p=>(p.dp||{}).cat===c[0]));
+  return `<div class="dptop"><div class="row" style="margin:0 0 6px">${pasteBtn('dpLIn')}<label class="btn ghost sm">画像を選んで追加<input type="file" accept="image/*" multiple hidden id="dpLIn"></label></div>${pasteBox('dpLIn')}
+    <p class="hint" style="margin:0 0 8px">深度ポーズの画像を長押し→「画像をコピー」してから「📋 貼り付け」を押すと追加できます（PC は Ctrl＋V）。画像を選ぶときは、いくつかまとめて選べます。</p>
+    ${cats.length?`<div class="dpcats"><button type="button" data-dpc="" class="${dpFilter?'':'on'}">すべて</button>${cats.map(c=>`<button type="button" data-dpc="${c[0]}" class="${dpFilter===c[0]?'on':''}">${c[1]}</button>`).join('')}</div>`:''}</div>`;}
+function dpListWire(){
+  $$('.pitem',view).forEach(b=>{const p=P_(b.dataset.id);b.dataset.cat=(p&&p.dp&&p.dp.cat)||'';b.hidden=!!dpFilter&&b.dataset.cat!==dpFilter;$$('.pim',b).forEach(im=>im.classList.add('dpim'));});
+  $$('[data-dpc]',view).forEach(b=>b.onclick=()=>{dpFilter=b.dataset.dpc;render(true);});
+  $('#dpLIn').onchange=async e=>{const fs=[...e.target.files];e.target.value='';if(!fs.length)return;
+    if(fs.length===1)return openDepthPart(null,()=>render(true),fs[0]);
+    let k=S.parts.filter(p=>p.type==='depth').length;
+    for(const f of fs){try{const r=await dpNorm(f);const p={id:uid(),type:'depth',name:(f.name||'').replace(/\.[^.]+$/,'')||('深度ポーズ '+(++k)),tags:'',subject:'',weight:'',loraName:'',neg:'',memo:'',text:'',img:r.blob,dp:{cat:'',ang:'',bg:r.bg},created:Date.now()};S.parts.push(p);await saveNow('parts',p);}catch(_){}}
+    toast(fs.length+' 件の深度ポーズを追加しました');render(true);};
+}
+/* ===== 深度ポーズの部品を直す ===== */
+function openDepthPart(id,onSave,blob0){
+  const src=id?P_(id):null;
+  const p=src?Object.assign({},src,{dp:Object.assign({cat:'',ang:'',bg:null},src.dp||{})}):{id:uid(),type:'depth',name:'',tags:'',subject:'',weight:'',loraName:'',neg:'',memo:'',text:'',img:null,dp:{cat:'',ang:'',bg:null},created:Date.now()};
+  const used=src?partUsage(src.id):0;let im=null;
+  openSheet(`<h2>${src?'深度ポーズを直す':'新しい深度ポーズ'}</h2>
+    <div class="f"><span>深度の画像</span>
+      <div class="dpedit"><canvas id="dpPrev" class="dpchk" width="10" height="10"></canvas><div class="ph" id="dpPh">画像なし</div></div>
+      <div class="row" style="margin:6px 0 0">${pasteBtn('dpIn')}<label class="btn ghost sm">画像を選ぶ<input type="file" accept="image/*" hidden id="dpIn"></label></div>${pasteBox('dpIn')}
+      <span class="hint">深度ポーズの画像を長押し→「画像をコピー」してから「📋 貼り付け」を押します（PC は Ctrl＋V）。市松模様の所は透明（背景）として扱います。</span></div>
+    <label class="f"><span>背景とみなす暗さ <b id="dpBgV"></b></span><input type="range" id="dpBg" min="0" max="140" step="1"><span class="hint">背景が残るときは右へ、体が欠けるときは左へ動かします。</span></label>
+    <label class="f"><span>名前</span><input id="dpName" value="${esc(p.name)}" placeholder="例：片手を腰に立つ"></label>
+    <div class="two"><label class="f"><span>カテゴリ</span><select id="dpCat">${DP_CATS.map(c=>`<option value="${c[0]}"${c[0]===p.dp.cat?' selected':''}>${c[1]}${c[2]?'（'+c[2]+'）':''}</option>`).join('')}</select></label>
+      <label class="f"><span>アングル</span><select id="dpAng">${DP_ANGS.map(a=>`<option value="${a[0]}"${a[0]===p.dp.ang?' selected':''}>${a[1]}${a[2]?'（'+a[2]+'）':''}</option>`).join('')}</select></label></div>
+    <label class="f"><span>足すタグ（なくてもよい）</span><textarea id="dpTags" rows="2" placeholder="hand on hip, looking at viewer">${esc(p.tags||'')}</textarea><span class="hint">シーンで選ぶと、カテゴリ・アングルのタグと一緒にプロンプトに入ります（カテゴリ・手足は人物ごと、アングルは全体）。手・足が地面についているかは、シーンで選びます。</span></label>
+    <label class="f"><span>メモ</span><textarea id="dpMemo" rows="2">${esc(p.memo||'')}</textarea></label>
+    ${used?`<div class="banner info">この深度ポーズは ${used} 件のシーンで使っています。</div>`:''}
+    <div class="row"><button class="btn" id="dpSave">保存</button>${src?'<button class="btn danger" id="dpDel">削除</button>':''}<button class="btn ghost" id="dpCancel">やめる</button></div>`);
+  const sb=$('#sheetBody'),cv=$('#dpPrev',sb),rg=$('#dpBg',sb);
+  const show=()=>{const has=!!im;cv.hidden=!has;$('#dpPh',sb).hidden=has;if(!has)return;const bg=+rg.value;$('#dpBgV',sb).textContent=bg;const r=dpProc(im,bg,1);cv.width=r.w;cv.height=r.h;cv.getContext('2d').drawImage(r.c,0,0);};
+  const setBlob=async b=>{try{const r=await dpNorm(b);p.img=r.blob;p.dp.bg=r.bg;rg.value=r.bg;im=await dpLoad(r.blob);if(!$('#dpName',sb).value.trim()){const k=S.parts.filter(x=>x.type==='depth').length+1;$('#dpName',sb).value=(b.name&&!/^貼り付け_/.test(b.name)&&b.name!=='image.png')?b.name.replace(/\.[^.]+$/,''):'深度ポーズ '+k;}show();}catch(_){toast('画像を読めませんでした');}};
+  rg.value=dpBg(p);rg.oninput=show;
+  if(blob0)setBlob(blob0);else if(p.img)dpLoad(p.img).then(x=>{im=x;show();});else show();
+  $('#dpIn',sb).onchange=e=>{const f=e.target.files[0];e.target.value='';if(f)setBlob(f);};
+  $('#dpCancel',sb).onclick=()=>closeSheet();
+  $('#dpSave',sb).onclick=async()=>{if(!p.img)return toast('先に画像を貼り付けてください');
+    p.name=$('#dpName',sb).value.trim()||'深度ポーズ';p.tags=$('#dpTags',sb).value.trim();p.memo=$('#dpMemo',sb).value;p.dp={cat:$('#dpCat',sb).value,ang:$('#dpAng',sb).value,bg:+rg.value};
+    const i=S.parts.findIndex(x=>x.id===p.id);if(i>=0)S.parts[i]=p;else S.parts.push(p);await saveNow('parts',p);closeSheet();onSave&&onSave(p);toast('保存しました');};
+  const dl=$('#dpDel',sb);if(dl)dl.onclick=async()=>{if(!confirm(used?`この深度ポーズは ${used} 件のシーンで使っています。削除すると、そのシーンからも外れます。削除しますか？`:'この深度ポーズを削除しますか？'))return;
+    for(const s of S.scenes)if(mapSceneIds(s,x=>x===p.id?'':x,false))await saveNow('scenes',s);
+    S.parts=S.parts.filter(x=>x.id!==p.id);await dbDel('parts',p.id);markDeleted(p.id);closeSheet();onSave&&onSave(null);};
+}
 </script>
 </body>
 </html>
