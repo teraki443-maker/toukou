@@ -481,7 +481,34 @@ details.nh .nhb .sec{border:0;padding:0;background:none;box-shadow:none}
 .dpseg>span{font-size:12px;color:var(--sub);min-width:2.6em}
 .dpseg button,.dpcats button,.dpwho button{border:1px solid var(--line2);background:var(--card);color:var(--ink);border-radius:999px;padding:4px 10px;font-size:12px;line-height:1.4}
 .dpseg button.on,.dpcats button.on,.dpwho button.on{background:var(--acc);border-color:var(--acc);color:#fff}
-.dpcats,.dpwho{display:flex;gap:6px;flex-wrap:wrap;margin:0 0 10px}
+.dpcats,.dpwho{display:flex;gap:6px;flex-wrap:wrap;margin:0 0 10px;align-items:center}
+.dpcats>span{font-size:12px;color:var(--sub);min-width:4.2em}
+.dpga{color:var(--sub);font-size:11px}
+.dpgrid>button[hidden],.pitem[hidden],#dpPkN[hidden],#dpBr2F[hidden]{display:none!important}
+.dpedit canvas{cursor:crosshair;touch-action:none;transform-origin:0 0}
+/* 深度ポーズの編集：画像と道具は上に貼りつけて、下の欄を動かしても見える */
+.dpstick{position:sticky;top:-1px;z-index:3;background:var(--card);padding:0 0 6px;margin:0 -2px;box-shadow:0 6px 8px -8px rgba(0,0,0,.35)}
+#dpView{position:relative;max-height:44vh}
+#dpView canvas{max-height:44vh}
+.dpzoom{position:absolute;right:6px;bottom:6px;display:flex;gap:4px}
+.dpzoom button{min-width:38px;height:34px;border:0;border-radius:8px;background:rgba(0,0,0,.6);color:#fff;font-size:15px;padding:0 8px}
+.dptool{margin-top:6px}
+.dpmode{display:flex;gap:4px}
+.dpmode button{flex:1;border:1px solid var(--line2);background:var(--card);color:var(--ink);border-radius:10px;padding:7px 2px;font-size:12px;line-height:1.3}
+.dpmode button.on{background:var(--acc);border-color:var(--acc);color:#fff}
+.dptrow{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:6px}
+.dptrow .btn{flex:1 1 auto}
+.dpst{display:flex;align-items:center;gap:4px;font-size:12px;color:var(--sub);white-space:nowrap}
+.dpst button{width:32px;height:30px;border:1px solid var(--line2);border-radius:8px;background:var(--card);color:var(--ink);font-size:16px;padding:0}
+.dpst b{min-width:1.6em;text-align:center;color:var(--ink)}
+.dpbr{display:flex;align-items:center;gap:6px;flex:1;min-width:120px;font-size:12px;color:var(--sub)}
+.dpbr input{flex:1;min-width:60px}
+#dpBr2F[hidden]{display:none!important}
+.dpadv{margin:8px 0 0;border:1px solid var(--line);border-radius:10px;padding:6px 10px}
+.dpadv summary{font-size:13px;cursor:pointer}
+.dpadv .hint{margin:0 0 6px}
+.dprng2{display:flex;flex-direction:column;font-size:12px;margin-top:6px}
+.dprng2 input{width:100%}
 .dpwho{margin:6px 0 4px}
 .dpstage{margin:10px 0 6px;background:#000;border-radius:10px;overflow:hidden}
 .dpstage canvas{display:block;width:100%;height:auto;touch-action:none}
@@ -490,7 +517,7 @@ details.nh .nhb .sec{border:0;padding:0;background:none;box-shadow:none}
 .dpedit{background:#000;border-radius:10px;overflow:hidden;min-height:60px;display:flex;align-items:center;justify-content:center}
 .dpedit canvas{display:block;max-width:100%;max-height:52vh;width:auto;height:auto}
 .dpedit .ph{color:#aaa;font-size:13px;padding:24px}
-.dpchk{background:repeating-conic-gradient(#9a9a9a 0 25%,#d8d8d8 0 50%) 0 0/16px 16px}
+.dpchk{background:repeating-conic-gradient(#7fb2ff 0 25%,#d3e4ff 0 50%) 0 0/16px 16px}
 .dpgrid .gi{background-color:#000;background-size:contain;background-position:center;background-repeat:no-repeat}
 .pim.dpim{background:#000;object-fit:contain}
 @media (max-width:360px){.dpth{flex-basis:56px;width:56px;height:64px}.dpseg{gap:3px}.dpseg button{padding:3px 8px}.dpseg>span{min-width:2.2em}}
@@ -556,7 +583,7 @@ const FMT={
 
 /* ========== データベース（IndexedDB） ========== */
 let db=null;
-const APP_VER='v83';/* sw.js の VERSION と同じにする */
+const APP_VER='v90';/* sw.js の VERSION と同じにする */
 const STORES=['parts','scenes','works','images','meta','fonts','stamps'];
 function openDB(){return new Promise((res,rej)=>{const r=indexedDB.open('manga4koma',3);r.onupgradeneeded=()=>{const d=r.result;for(const s of STORES)if(!d.objectStoreNames.contains(s))d.createObjectStore(s,{keyPath:'id'});};r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error);});}
 function tx(store,mode,fn){return new Promise((res,rej)=>{if(!db)return res(undefined);const t=db.transaction(store,mode);const req=fn(t.objectStore(store));let out;if(req)req.onsuccess=()=>{out=req.result;};t.oncomplete=()=>res(out);t.onerror=()=>rej(t.error);t.onabort=()=>rej(t.error);});}
@@ -4136,17 +4163,23 @@ const DP_ANGS=[['','正面',''],['above','俯瞰','from above'],['side','横向�
 const DP_Z={f:{l:'手前',v:1,s:1.06,dy:.02,r:0},m:{l:'同じ位置',v:.86,s:1,dy:0,r:1},b:{l:'奥',v:.7,s:.86,dy:-.07,r:2}};
 const DP_HAND=['','hand on ground','hands on ground'],DP_FOOT=['','one foot on ground','feet on ground'];
 const DP_W=800,DP_H=912;
-let dpFilter='',dpSelI=0;
+let dpFilter='',dpFilterA='',dpSelI=0;
+const dpAngKey=p=>((p&&p.dp)||{}).ang||'front';
+/* 絞り込みのボタン（カテゴリ data-dpc・アングル data-dpa）。fc・fa は今の選び */
+function dpFiltHTML(ps,fc,fa){const cats=DP_CATS.filter(c=>c[0]&&ps.some(p=>(p.dp||{}).cat===c[0])),angs=DP_ANGS.filter(a=>ps.some(p=>dpAngKey(p)===(a[0]||'front')));
+  return (cats.length?`<div class="dpcats"><span>カテゴリ</span><button type="button" data-dpc="" class="${fc?'':'on'}">すべて</button>${cats.map(c=>`<button type="button" data-dpc="${c[0]}" class="${fc===c[0]?'on':''}">${c[1]}</button>`).join('')}</div>`:'')
+    +(angs.length?`<div class="dpcats"><span>アングル</span><button type="button" data-dpa="" class="${fa?'':'on'}">すべて</button>${angs.map(a=>`<button type="button" data-dpa="${a[0]||'front'}" class="${fa===(a[0]||'front')?'on':''}">${a[1]}</button>`).join('')}</div>`:'');}
+const dpHit=(p,fc,fa)=>(!fc||((p.dp||{}).cat||'')===fc)&&(!fa||dpAngKey(p)===fa);
 const dpCatTag=p=>{const c=DP_CATS.find(x=>x[0]===((p&&p.dp)||{}).cat);return c?c[2]:'';};
 const dpCatName=p=>{const c=DP_CATS.find(x=>x[0]===((p&&p.dp)||{}).cat);return c&&c[0]?c[1]:'';};
 const dpAngName=p=>{const a=DP_ANGS.find(x=>x[0]===((p&&p.dp)||{}).ang);return a?a[1]:'';};
 function dpGet(sc){if(!sc.dpose||!Array.isArray(sc.dpose.L))sc.dpose={L:[],trans:false};return sc.dpose;}
 function dpLoad(blob){return new Promise((res,rej)=>{const u=URL.createObjectURL(blob);const im=new Image();im.onload=()=>{URL.revokeObjectURL(u);res(im);};im.onerror=()=>{URL.revokeObjectURL(u);rej(new Error('画像を読めません'));};im.src=u;});}
-/* 取り込んだ画像を、長い辺1024までの PNG にする。背景の暗さも調べる */
-async function dpNorm(blob){const im=await dpLoad(blob);const k=Math.min(1,1024/Math.max(im.naturalWidth,im.naturalHeight));
+/* 取り込んだ画像を、長い辺1200までの PNG にする。背景の暗さも調べる */
+async function dpNorm(blob){const im=await dpLoad(blob);const k=Math.min(1,1200/Math.max(im.naturalWidth,im.naturalHeight));
   const c=document.createElement('canvas');c.width=Math.max(1,Math.round(im.naturalWidth*k));c.height=Math.max(1,Math.round(im.naturalHeight*k));const g=c.getContext('2d');g.drawImage(im,0,0,c.width,c.height);
-  const bg=dpAutoBg(g.getImageData(0,0,c.width,c.height));
-  const out=await new Promise(r=>c.toBlob(r,'image/png'));return{blob:out||blob,bg};}
+  const bg=dpAutoBg(g.getImageData(0,0,c.width,c.height)),h=dpSig(c);
+  const out=await new Promise(r=>c.toBlob(r,'image/png'));return{blob:out||blob,bg,h};}
 /* 背景の暗さ：まわりのふち（幅の3%）の明るさの、明るい方から5%の所＋少し */
 function dpAutoBg(d){const{width:w,height:h,data:a}=d,m=Math.max(2,Math.round(Math.min(w,h)*.03)),L=[];
   const at=(x,y)=>{const i=(y*w+x)*4;L.push((a[i]*299+a[i+1]*587+a[i+2]*114)/1000);};
@@ -4157,15 +4190,93 @@ function dpAutoBg(d){const{width:w,height:h,data:a}=d,m=Math.max(2,Math.round(Ma
   let sum=0;for(let t=0;t<256;t++)sum+=t*Hs[t];let sB=0,wB=0,best=0,th=0;for(let t=0;t<256;t++){wB+=Hs[t];if(!wB)continue;const wF=N-wB;if(!wF)break;sB+=t*Hs[t];const mB=sB/wB,mF=(sum-sB)/wF,b=wB*wF*(mB-mF)*(mB-mF);if(b>best){best=b;th=t;}}
   return Math.min(140,Math.round(Math.max(v+8,th*.8)));}
 /* 背景を透明にした絵（v は明るさの倍率）。体のある範囲 bb も返す */
-function dpProc(im,bg,v){const w=im.naturalWidth||im.width,h=im.naturalHeight||im.height;const c=document.createElement('canvas');c.width=w;c.height=h;const g=c.getContext('2d');g.drawImage(im,0,0);
-  const d=g.getImageData(0,0,w,h),a=d.data;let x1=w,y1=h,x2=-1,y2=-1;const span=Math.max(1,255-bg);
-  for(let y=0,i=0;y<h;y++)for(let x=0;x<w;x++,i+=4){const L=(a[i]*299+a[i+1]*587+a[i+2]*114)/1000;const al=Math.max(0,Math.min(1,(L-bg)/12))*(a[i+3]/255);
-    const t=Math.max(0,Math.min(1,(L-bg)/span));const o=Math.round((34+221*t)*v);a[i]=a[i+1]=a[i+2]=o;a[i+3]=Math.round(al*255);
+/* 背景を透明にした絵（v は明るさの倍率）。体のある範囲 bb も返す。
+   sel={seeds:[[x,y,t]…]}（x・y は 0〜1、t は 1 体・2 背景）：体として選んだ所につながる部分だけを残す（dpKeep） */
+function dpProc(im,bg,v,sel){const w=im.naturalWidth||im.width,h=im.naturalHeight||im.height;const c=document.createElement('canvas');c.width=w;c.height=h;const g=c.getContext('2d');g.drawImage(im,0,0);
+  const d=g.getImageData(0,0,w,h),a=d.data,N=w*h,lum=new Float32Array(N);for(let k=0,i=0;k<N;k++,i+=4)lum[k]=(a[i]*299+a[i+1]*587+a[i+2]*114)/1000;
+  /* 体を選んでいるときは、暗さ（bg）では切らず、dpKeep で決めた体だけを出す（1＝体、2＝輪郭の1画素）。明るさの幅は体の中のいちばん暗い所から */
+  const keep=sel&&sel.cut?dpCut(lum,w,h,sel.cut,sel.tol||1.2,sel.gap,sel.shrink):dpKeep(lum,w,h,bg,sel);
+  if(keep){let lo=255;for(let k=0;k<N;k++)if(keep[k]===1&&lum[k]<lo)lo=lum[k];bg=Math.max(0,Math.min(bg,lo-2));}
+  let x1=w,y1=h,x2=-1,y2=-1;const span=Math.max(1,255-bg);
+  for(let y=0,i=0,k=0;y<h;y++)for(let x=0;x<w;x++,i+=4,k++){const L=lum[k];let al=keep?(keep[k]===1?1:keep[k]===2?.5:0)*(a[i+3]/255):Math.max(0,Math.min(1,(L-bg)/12))*(a[i+3]/255);
+    const t=Math.max(0,Math.min(1,(L-bg)/span));const o=Math.round((sel&&sel.cut?L:(34+221*t))*v);/* 背景を消す方式では、元の明るさのまま */a[i]=a[i+1]=a[i+2]=o;a[i+3]=Math.round(al*255);
     if(al>.4){if(x<x1)x1=x;if(x>x2)x2=x;if(y<y1)y1=y;if(y>y2)y2=y;}}
   g.putImageData(d,0,0);if(x2<0){x1=0;y1=0;x2=w-1;y2=h-1;}return{c,w,h,bb:{x1,y1,x2:x2+1,y2:y2+1}};}
+/* 選んだ所から体を決める（分水嶺の考え方）。
+   sel.seeds=[[x,y,t,id,r]…]：x・y は 0〜1、t は 1 体・2 背景、id はなぞった線の番号（同じ番号の点は線でつなぐ）、r は筆の太さ（短い辺に対する割合）。
+   ・背景の線：筆の中をすべて背景にする。
+   ・体の線：筆の中で、分かれ目より明るい所を体、暗い所を背景にする（ぼやけた輪郭でも、筆の中で分かれ目が決まる）。
+     分かれ目は、なぞった線の上の明るさ（真ん中の値）と、筆の中の暗い所（下から1割）の中間。差が小さければ、筆の中をすべて体にする。
+   そのあと、体と背景（画像のふち・ふちの明るさの真ん中の6割より暗い所も）から同時に広げ、明るさの段差の小さい所から取っていく */
+function dpKeep(lum,w,h,bg,sel){const sd=sel&&sel.seeds;if(!sd||!sd.some(s=>(s[2]||1)===1))return null;const N=w*h,lab=new Uint8Array(N),S0=Math.min(w,h);
+  /* 線ごとにまとめて、筆の通る画素を集める */
+  const groups=[];let cur=null;for(const s of sd){const id=s[3]==null?'p'+groups.length:s[3];if(!cur||cur.id!==id){cur={id,t:s[2]||1,r:s[4]==null?.012:s[4],pts:[]};groups.push(cur);}cur.pts.push([s[0]*(w-1),s[1]*(h-1)]);}
+  const tube=G=>{const R=Math.max(1,Math.round(G.r*S0)),set=new Set(),P=G.pts;
+    const disk=(cx,cy)=>{for(let y=Math.max(0,Math.round(cy-R));y<=Math.min(h-1,Math.round(cy+R));y++)for(let x=Math.max(0,Math.round(cx-R));x<=Math.min(w-1,Math.round(cx+R));x++)if((x-cx)*(x-cx)+(y-cy)*(y-cy)<=R*R)set.add(y*w+x);};
+    for(let i=0;i<P.length;i++){if(i===0)disk(P[0][0],P[0][1]);else{const[x1,y1]=P[i-1],[x2,y2]=P[i],n=Math.max(1,Math.ceil(Math.hypot(x2-x1,y2-y1)/Math.max(1,R/2)));for(let j=1;j<=n;j++)disk(x1+(x2-x1)*j/n,y1+(y2-y1)*j/n);}}
+    const line=[];if(P.length===1)line.push(lum[Math.round(P[0][1])*w+Math.round(P[0][0])]);
+    for(let i=1;i<P.length;i++){const[x1,y1]=P[i-1],[x2,y2]=P[i],n=Math.max(1,Math.ceil(Math.hypot(x2-x1,y2-y1)));for(let j=0;j<=n;j++)line.push(lum[Math.round(y1+(y2-y1)*j/n)*w+Math.round(x1+(x2-x1)*j/n)]);}
+    return{set,line};};
+  for(const G of groups){const{set:T,line}=tube(G);if(G.t===2){for(const k of T)lab[k]=2;continue;}
+    const v=[];for(const k of T)v.push(lum[k]);v.sort((a,b)=>a-b);line.sort((a,b)=>a-b);
+    const dark=v[Math.floor(v.length*.1)]||0,cm=line[Math.floor(line.length/2)]||0;
+    if(cm-dark<10){for(const k of T)if(lab[k]!==2)lab[k]=1;continue;}
+    const th=(cm+dark)/2;for(const k of T){if(lab[k]===2)continue;lab[k]=lum[k]>th?1:2;}}
+  {const m=Math.max(2,Math.round(S0*.03)),E=[];for(let y=0;y<h;y+=2)for(let x=0;x<w;x+=2)if(x<m||y<m||x>=w-m||y>=h-m)E.push(lum[y*w+x]);E.sort((a,b)=>a-b);
+    const dark=(E.length?E[Math.floor(E.length*.5)]:0)*.6;for(let k=0;k<N;k++)if(!lab[k]&&lum[k]<dark)lab[k]=2;}
+  for(let x=0;x<w;x++){if(!lab[x])lab[x]=2;if(!lab[N-w+x])lab[N-w+x]=2;}for(let y=0;y<h;y++){if(!lab[y*w])lab[y*w]=2;if(!lab[y*w+w-1])lab[y*w+w-1]=2;}
+  const B=[];for(let i=0;i<256;i++)B.push([]);let c=0;
+  const push=(k,l,pr)=>{B[pr].push(k*4+l);if(pr<c)c=pr;};
+  const nb=(k,f)=>{const x=k%w;if(x>0)f(k-1);if(x<w-1)f(k+1);if(k>=w)f(k-w);if(k<N-w)f(k+w);};
+  for(let k=0;k<N;k++)if(lab[k]){const L=lum[k],l=lab[k];nb(k,n=>{if(!lab[n])push(n,l,Math.min(255,Math.round(Math.abs(lum[n]-L))));});}
+  for(c=0;c<256;){const b=B[c];if(!b.length){c++;continue;}const v=b.pop(),k=v>>2,l=v&3;if(lab[k])continue;lab[k]=l;const L=lum[k];
+    nb(k,n=>{if(!lab[n])push(n,l,Math.min(255,Math.round(Math.abs(lum[n]-L))));});}
+  const out=new Uint8Array(N);for(let k=0;k<N;k++)if(lab[k]===1)out[k]=1;
+  for(let k=0;k<N;k++)if(lab[k]===1)nb(k,n=>{if(!out[n])out[n]=2;});
+  return out;}
+/* 背景を消す（v87・v88）。cut=[[x,y]…]（0〜1。x<0 は「画像のふちから」）、戻すときは [x,y,2,線の id,筆の太さ]（なぞった線）。
+   ・明るさの傾き G を前後2画素ずつ（5画素の幅）で見て、tol より急な所を輪郭とする。
+   ・輪郭を gap 画素ぶん太らせた所は通らない（輪郭に細いすき間があっても、そこから体の中へ入り込まない）。
+   ・タップした所から、輪郭でない所をたどって消す。戻すときは、なぞった所を塗って戻す（あとで消すタップをすると、そこからまた消えることがある）。
+   ・最後に、太らせたぶん（gap 画素）だけ、輪郭の手前まで消す所を広げる。
+   消した所は 0、残す所は 1、消した所ととなり合う残す所は 2（半分すける）を返す */
+function dpCut(lum,w,h,cut,tol,gap,shrink){const N=w*h,G=new Float32Array(N),r=2;gap=gap==null?2:gap;shrink=Math.max(0,Math.round(shrink||0));
+  for(let y=0;y<h;y++){const y0=Math.max(0,y-r),y1=Math.min(h-1,y+r);for(let x=0;x<w;x++){const x0=Math.max(0,x-r),x1=Math.min(w-1,x+r);
+    G[y*w+x]=Math.max(Math.abs(lum[y*w+x1]-lum[y*w+x0])/((x1-x0)||1),Math.abs(lum[y1*w+x]-lum[y0*w+x])/((y1-y0)||1));}}
+  const E=new Uint8Array(N);for(let k=0;k<N;k++)E[k]=G[k]>tol?1:0;
+  /* 輪郭を太らせる（横→縦） */
+  let B=E;if(gap>0){const T=new Uint8Array(N);for(let y=0;y<h;y++){let last=-1e9;for(let x=0;x<w;x++){if(E[y*w+x])last=x;if(x-last<=gap)T[y*w+x]=1;}last=1e9;for(let x=w-1;x>=0;x--){if(E[y*w+x])last=x;if(last-x<=gap)T[y*w+x]=1;}}
+    B=new Uint8Array(N);for(let x=0;x<w;x++){let last=-1e9;for(let y=0;y<h;y++){if(T[y*w+x])last=y;if(y-last<=gap)B[y*w+x]=1;}last=1e9;for(let y=h-1;y>=0;y--){if(T[y*w+x])last=y;if(last-y<=gap)B[y*w+x]=1;}}}
+  const rem=new Uint8Array(N),prot=new Uint8Array(N),q=new Int32Array(N),step=tol*2+1,S0=Math.min(w,h),L_=cut||[];
+  for(let i=0;i<L_.length;i++){const c=L_[i];let qt=0,qh=0;
+    /* なぞった線（同じ id の点）を筆の太さで塗る。t=2 は戻す（線の上の明るさの暗い方から1割より暗い所は、背景なので戻さない）、t=3 は消す（明るさに関係なく） */
+    const tt=c[2]||1;if(tt===2||tt===3){const id=c[3],P=[];while(i<L_.length&&(L_[i][2]||1)===tt&&L_[i][3]===id){P.push([L_[i][0]*(w-1),L_[i][1]*(h-1)]);if(id==null){break;}i++;}if(id!=null)i--;
+      const R=Math.max(2,Math.round((c[4]||.03)*S0)),line=[],cells=[];
+      const disk=(cx,cy)=>{for(let y=Math.max(0,Math.round(cy-R));y<=Math.min(h-1,Math.round(cy+R));y++)for(let x=Math.max(0,Math.round(cx-R));x<=Math.min(w-1,Math.round(cx+R));x++)if((x-cx)*(x-cx)+(y-cy)*(y-cy)<=R*R)cells.push(y*w+x);};
+      for(let j=0;j<P.length;j++){const[x2,y2]=P[j];if(!j){disk(x2,y2);line.push(lum[Math.round(y2)*w+Math.round(x2)]);continue;}const[x1,y1]=P[j-1],n=Math.max(1,Math.ceil(Math.hypot(x2-x1,y2-y1)/Math.max(1,R/3)));
+        for(let t=1;t<=n;t++){const x=x1+(x2-x1)*t/n,y=y1+(y2-y1)*t/n;disk(x,y);line.push(lum[Math.round(y)*w+Math.round(x)]);}}
+      line.sort((a,b)=>a-b);const lo=(line[Math.floor(line.length*.1)]||0)-6;
+      if(tt===3){for(const k of cells){rem[k]=1;prot[k]=0;}}else for(const k of cells)if(lum[k]>=lo){rem[k]=0;prot[k]=1;}
+      continue;}
+    const add=k=>{if(!rem[k]){rem[k]=1;q[qt++]=k;}};
+    if(c[0]<0){for(let x=0;x<w;x++){add(x);add(N-w+x);}for(let y=0;y<h;y++){add(y*w);add(y*w+w-1);}}
+    else add(Math.round(c[1]*(h-1))*w+Math.round(c[0]*(w-1)));
+    while(qh<qt){const k=q[qh++],x=k%w,L=lum[k];const tr=n=>{if(!rem[n]&&!B[n]&&Math.abs(lum[n]-L)<=step){rem[n]=1;q[qt++]=n;}};
+      if(x>0)tr(k-1);if(x<w-1)tr(k+1);if(k>=w)tr(k-w);if(k<N-w)tr(k+w);}}
+  /* 太らせたぶんだけ、輪郭の手前まで消す */
+  for(let i=0;i<gap;i++){const add=[];for(let k=0;k<N;k++){if(rem[k]||E[k]||!B[k]||prot[k])continue;const x=k%w;if((x>0&&rem[k-1]===1)||(x<w-1&&rem[k+1]===1)||(k>=w&&rem[k-w]===1)||(k<N-w&&rem[k+w]===1))add.push(k);}for(const k of add)rem[k]=1;}
+  /* 輪郭を縮める（v89）：明るさに関係なく、消した所から shrink 画素以内の所も消す（丸い形で広げる） */
+  if(shrink>0&&cut&&cut.length){const R2=shrink*shrink,d=new Float32Array(N).fill(1e9);
+    /* 消した所からの距離（横→縦の2回で、ユークリッド距離の2乗を近似なく求める：各行で横の最短距離、各列でそれを使って縦を足す） */
+    const hx=new Float32Array(N);for(let y=0;y<h;y++){let last=-1e9;for(let x=0;x<w;x++){if(rem[y*w+x])last=x;hx[y*w+x]=x-last;}last=1e9;for(let x=w-1;x>=0;x--){if(rem[y*w+x])last=x;const v=last-x;if(v<hx[y*w+x])hx[y*w+x]=v;}}
+    for(let x=0;x<w;x++)for(let y=0;y<h;y++){const k=y*w+x;if(rem[k])continue;let best=1e9;for(let dy=-shrink;dy<=shrink;dy++){const yy=y+dy;if(yy<0||yy>=h)continue;const hv=hx[yy*w+x];if(hv>shrink)continue;const v=hv*hv+dy*dy;if(v<best)best=v;}d[k]=best;}
+    for(let k=0;k<N;k++)if(!rem[k]&&d[k]<=R2)rem[k]=1;}
+  const out=new Uint8Array(N);for(let k=0;k<N;k++)if(!rem[k]){const x=k%w;out[k]=((x>0&&rem[k-1])||(x<w-1&&rem[k+1])||(k>=w&&rem[k-w])||(k<N-w&&rem[k+w]))?2:1;}
+  return out;}
 const dpImCache={},dpLCache={};
 async function dpImgOf(p){const k=p.id+':'+(p.updated||0);if(!dpImCache[k])dpImCache[k]=dpLoad(p.img);return dpImCache[k];}
-async function dpLayer(p,v){const bg=dpBg(p);const k=p.id+':'+(p.updated||0)+':'+v+':'+bg;if(dpLCache[k])return dpLCache[k];return dpLCache[k]=dpProc(await dpImgOf(p),bg,v);}
+const dpSel=p=>{const d=(p&&p.dp)||{};if(Array.isArray(d.cut))return{cut:d.cut,tol:d.tol||1.2,gap:d.gap==null?2:d.gap,shrink:d.shrink||0};return d.seeds&&d.seeds.some(x=>(x[2]||1)===1)?{seeds:d.seeds}:null;};
+async function dpLayer(p,v){const bg=dpBg(p),sl=dpSel(p);const k=p.id+':'+(p.updated||0)+':'+v+':'+bg+':'+(sl?JSON.stringify(sl):'');if(dpLCache[k])return dpLCache[k];return dpLCache[k]=dpProc(await dpImgOf(p),bg,v,sl);}
 const dpBg=p=>{const b=((p&&p.dp)||{}).bg;return typeof b==='number'?b:16;};
 /* プロンプトに入るタグ。per[i] は人物 i、scene は全体 */
 function dpTags(sc){const D=sc&&sc.dpose;const n=((sc&&sc.chars)||[]).length;if(!D||!Array.isArray(D.L))return{per:[],scene:[]};
@@ -4256,62 +4367,154 @@ function dpSecWire(sc){const box=$('#dpSec');if(!box)return;const D=dpGet(sc);
 /* 人物 i の深度ポーズを選ぶシート */
 function dpPick(sc,i){const D=dpGet(sc),cur=(D.L[i]||{}).id;
   const ps=S.parts.filter(p=>p.type==='depth').sort((a,b)=>(a.name||'').localeCompare(b.name||'','ja'));
-  const cats=DP_CATS.filter(c=>c[0]&&ps.some(p=>(p.dp||{}).cat===c[0]));
+  let fc='',fa='';
   openSheet(`<h2>人物${i+1}の深度ポーズ</h2>
     <div class="row" style="margin:0 0 8px">${pasteBtn('dpPkIn')}<label class="btn ghost sm">画像から新しく追加<input type="file" accept="image/*" hidden id="dpPkIn"></label></div>${pasteBox('dpPkIn')}
-    ${cats.length?`<div class="dpcats"><button type="button" data-dpc="" class="on">すべて</button>${cats.map(c=>`<button type="button" data-dpc="${c[0]}">${c[1]}</button>`).join('')}</div>`:''}
-    ${ps.length?`<div class="pgrid dpgrid">${ps.map(p=>`<button type="button" class="${p.id===cur?'on':''}" data-dpp="${p.id}" data-cat="${esc((p.dp||{}).cat||'')}"><span class="gi" style="background-image:url(${partImgUrl(p)})"></span><small>${esc(p.name||'名前なし')}</small></button>`).join('')}</div>`
+    <div id="dpPkF">${dpFiltHTML(ps,fc,fa)}</div><p class="hint" id="dpPkN" hidden style="margin:0 0 6px">当てはまる深度ポーズがありません。</p>
+    ${ps.length?`<div class="pgrid dpgrid">${ps.map(p=>`<button type="button" class="${p.id===cur?'on':''}" data-dpp="${p.id}"><span class="gi" style="background-image:url(${partImgUrl(p)})"></span><small>${esc(p.name||'名前なし')}<br><span class="dpga">${esc([dpCatName(p),dpAngName(p)].filter(Boolean).join('・'))}</span></small></button>`).join('')}</div>`
       :'<p class="hint">まだありません。深度ポーズの画像をコピーして「📋 貼り付け」を押すと登録できます。</p>'}
     <div class="row"><button type="button" class="btn ghost" id="dpPkCancel">やめる</button></div>`);
   const sb=$('#sheetBody');
-  $$('[data-dpc]',sb).forEach(b=>b.onclick=()=>{$$('[data-dpc]',sb).forEach(x=>x.classList.toggle('on',x===b));$$('[data-dpp]',sb).forEach(x=>x.hidden=!!b.dataset.dpc&&x.dataset.cat!==b.dataset.dpc);});
+  const filt=()=>{let n=0;$$('[data-dpp]',sb).forEach(x=>{const h=!dpHit(P_(x.dataset.dpp)||{},fc,fa);x.hidden=h;if(!h)n++;});$('#dpPkN',sb).hidden=!!n||!ps.length;
+    $$('[data-dpc]',sb).forEach(x=>x.classList.toggle('on',x.dataset.dpc===fc));$$('[data-dpa]',sb).forEach(x=>x.classList.toggle('on',x.dataset.dpa===fa));};
+  $$('[data-dpc]',sb).forEach(b=>b.onclick=()=>{fc=b.dataset.dpc;filt();});
+  $$('[data-dpa]',sb).forEach(b=>b.onclick=()=>{fa=b.dataset.dpa;filt();});
   const setId=id=>{const e=D.L[i]||{x:null,y:null,s:null,z:'m',flip:false,hand:0,foot:0};e.id=id;D.L[i]=e;dpSelI=i;saveNow('scenes',sc);};
   $$('[data-dpp]',sb).forEach(b=>b.onclick=()=>{setId(b.dataset.dpp);closeSheet();render(true);});
   $('#dpPkCancel',sb).onclick=()=>closeSheet();
-  $('#dpPkIn',sb).onchange=e=>{const f=e.target.files[0];e.target.value='';if(!f)return;closeSheet();setTimeout(()=>openDepthPart(null,p=>{if(p){setId(p.id);}render(true);},f),60);};
+  $('#dpPkIn',sb).onchange=e=>{const f=e.target.files[0];e.target.value='';if(!f)return;closeSheet();setTimeout(()=>openDepthPart(null,p=>{if(p){setId(p.id);}render(true);},f,{noNext:true}),60);};
 }
+/* 元のギャラリー（深度ポーズ集）。1枚ずつ使うのはよいが、一括ダウンロード・再配布は禁止 */
+const DP_GALLERY='https://ai-pose-depth-gallery.pages.dev/';
+/* Android では intent: で Chrome の新しいタブに開く（アプリの画面はそのまま残る）。ほかは名前つきの別のタブ（2回目からは同じタブ） */
+const DP_GAL_INTENT='intent://ai-pose-depth-gallery.pages.dev/#Intent;scheme=https;package=com.android.chrome;S.browser_fallback_url='+encodeURIComponent(DP_GALLERY)+';end';
+const dpGalBtn=()=>`<a class="btn ghost sm" href="${/Android/i.test(navigator.userAgent)?DP_GAL_INTENT:DP_GALLERY}" target="dpgallery" rel="noopener noreferrer" data-dpgal>🔗 深度ポーズ集を開く</a>`;
+document.addEventListener('click',e=>{const a=e.target.closest&&e.target.closest('a[data-dpgal]');if(!a||/Android/i.test(navigator.userAgent))return;e.preventDefault();const w=window.open(DP_GALLERY,'dpgallery');if(w){try{w.opener=null;w.focus();}catch(_){}}else location.assign(DP_GALLERY);});
+/* ファイル名から名前とアングル（例：full_single_P001_front_depth.png → full_single P001 正面・正面） */
+const DP_FANG={front:['','正面'],high:['above','上から'],low:['below','下から'],side:['side','横'],diag:['diag','斜め']};
+function dpFromName(n){n=String(n||'');if(!n||/^貼り付け_/.test(n)||n==='image.png')return null;
+  const m=n.match(/^(.*?)_P(\d+)_(front|high|low|side|diag)(?:_depth)?\.[a-z0-9]+$/i);
+  if(m){const a=DP_FANG[m[3].toLowerCase()];return{name:`${m[1]} P${m[2]} ${a[1]}`,ang:a[0]};}
+  return{name:n.replace(/\.[^.]+$/,''),ang:null};}
+/* 同じ画像の見分け：32×32 の明るさから作る印 */
+function dpSig(im){const c=document.createElement('canvas');c.width=32;c.height=32;const g=c.getContext('2d');g.drawImage(im,0,0,32,32);const a=g.getImageData(0,0,32,32).data;let h=2166136261>>>0;
+  for(let i=0;i<a.length;i+=4){h^=(a[i]*299+a[i+1]*587+a[i+2]*114)/1000>>4;h=Math.imul(h,16777619)>>>0;}return h.toString(36);}
+async function dpSame(sig,selfId){for(const p of S.parts){if(p.type!=='depth'||p.id===selfId||!p.img)continue;
+    if(!p.dp)p.dp={};if(!p.dp.h){try{p.dp.h=dpSig(await dpImgOf(p));}catch(_){continue;}}if(p.dp.h===sig)return p;}return null;}
 /* ===== 部品の一覧（深度ポーズ）の上の欄 ===== */
-function dpListTop(){const ps=S.parts.filter(p=>p.type==='depth');const cats=DP_CATS.filter(c=>c[0]&&ps.some(p=>(p.dp||{}).cat===c[0]));
-  return `<div class="dptop"><div class="row" style="margin:0 0 6px">${pasteBtn('dpLIn')}<label class="btn ghost sm">画像を選んで追加<input type="file" accept="image/*" multiple hidden id="dpLIn"></label></div>${pasteBox('dpLIn')}
-    <p class="hint" style="margin:0 0 8px">深度ポーズの画像を長押し→「画像をコピー」してから「📋 貼り付け」を押すと追加できます（PC は Ctrl＋V）。画像を選ぶときは、いくつかまとめて選べます。</p>
-    ${cats.length?`<div class="dpcats"><button type="button" data-dpc="" class="${dpFilter?'':'on'}">すべて</button>${cats.map(c=>`<button type="button" data-dpc="${c[0]}" class="${dpFilter===c[0]?'on':''}">${c[1]}</button>`).join('')}</div>`:''}</div>`;}
+function dpListTop(){const ps=S.parts.filter(p=>p.type==='depth');
+  return `<div class="dptop"><div class="row" style="margin:0 0 6px">${dpGalBtn()}${pasteBtn('dpLIn')}<label class="btn ghost sm">画像を選んで追加<input type="file" accept="image/*" multiple hidden id="dpLIn"></label></div>${pasteBox('dpLIn')}
+    <p class="hint" style="margin:0 0 8px">「深度ポーズ集を開く」でポーズを押し、大きい画像を長押し→「画像をコピー」してから、ここに戻って「📋 貼り付け」を押します（PC は Ctrl＋V）。「保存して次を貼り付け」で続けて登録できます。<br>「depthをダウンロード（PNG）」で保存したファイルを「画像を選んで追加」で入れると、ファイル名から名前とアングルが入ります（いくつかまとめて選べます）。<br>深度ポーズ集の決まり：1枚ずつ使うのはよいですが、一括でのダウンロード・再配布は禁止です。未成年を思わせる使い方もしないでください。</p>
+    ${dpFiltHTML(ps,dpFilter,dpFilterA)}</div>`;}
 function dpListWire(){
-  $$('.pitem',view).forEach(b=>{const p=P_(b.dataset.id);b.dataset.cat=(p&&p.dp&&p.dp.cat)||'';b.hidden=!!dpFilter&&b.dataset.cat!==dpFilter;$$('.pim',b).forEach(im=>im.classList.add('dpim'));});
+  $$('.pitem',view).forEach(b=>{const p=P_(b.dataset.id);b.hidden=!p||!dpHit(p,dpFilter,dpFilterA);$$('.pim',b).forEach(im=>im.classList.add('dpim'));});
   $$('[data-dpc]',view).forEach(b=>b.onclick=()=>{dpFilter=b.dataset.dpc;render(true);});
+  $$('[data-dpa]',view).forEach(b=>b.onclick=()=>{dpFilterA=b.dataset.dpa;render(true);});
   $('#dpLIn').onchange=async e=>{const fs=[...e.target.files];e.target.value='';if(!fs.length)return;
     if(fs.length===1)return openDepthPart(null,()=>render(true),fs[0]);
-    let k=S.parts.filter(p=>p.type==='depth').length;
-    for(const f of fs){try{const r=await dpNorm(f);const p={id:uid(),type:'depth',name:(f.name||'').replace(/\.[^.]+$/,'')||('深度ポーズ '+(++k)),tags:'',subject:'',weight:'',loraName:'',neg:'',memo:'',text:'',img:r.blob,dp:{cat:'',ang:'',bg:r.bg},created:Date.now()};S.parts.push(p);await saveNow('parts',p);}catch(_){}}
-    toast(fs.length+' 件の深度ポーズを追加しました');render(true);};
+    let k=S.parts.filter(p=>p.type==='depth').length,add=0,skip=0;
+    for(const f of fs){try{const r=await dpNorm(f);if(await dpSame(r.h)){skip++;continue;}const nm=dpFromName(f.name);
+      const p={id:uid(),type:'depth',name:(nm&&nm.name)||('深度ポーズ '+(++k)),tags:'',subject:'',weight:'',loraName:'',neg:'',memo:'',text:'',img:r.blob,dp:{cat:'',ang:(nm&&nm.ang)||'',bg:r.bg,h:r.h},created:Date.now()};S.parts.push(p);await saveNow('parts',p);add++;}catch(_){}}
+    toast(`${add} 件の深度ポーズを追加しました${skip?`（同じ画像 ${skip} 件は飛ばしました）`:''}`);render(true);};
 }
-/* ===== 深度ポーズの部品を直す ===== */
-function openDepthPart(id,onSave,blob0){
+/* ===== 深度ポーズの部品を直す =====
+   opt.noNext：「保存して次を貼り付け」を出さない（シーンの人物に選ぶときなど） */
+function openDepthPart(id,onSave,blob0,opt){opt=opt||{};
   const src=id?P_(id):null;
-  const p=src?Object.assign({},src,{dp:Object.assign({cat:'',ang:'',bg:null},src.dp||{})}):{id:uid(),type:'depth',name:'',tags:'',subject:'',weight:'',loraName:'',neg:'',memo:'',text:'',img:null,dp:{cat:'',ang:'',bg:null},created:Date.now()};
+  const p=src?Object.assign({},src,{dp:Object.assign({cat:'',ang:'',bg:null},src.dp||{})}):{id:uid(),type:'depth',name:'',tags:'',subject:'',weight:'',loraName:'',neg:'',memo:'',text:'',img:null,dp:{cat:opt.cat||'',ang:'',bg:null},created:Date.now()};
   const used=src?partUsage(src.id):0;let im=null;
-  openSheet(`<h2>${src?'深度ポーズを直す':'新しい深度ポーズ'}</h2>
-    <div class="f"><span>深度の画像</span>
-      <div class="dpedit"><canvas id="dpPrev" class="dpchk" width="10" height="10"></canvas><div class="ph" id="dpPh">画像なし</div></div>
-      <div class="row" style="margin:6px 0 0">${pasteBtn('dpIn')}<label class="btn ghost sm">画像を選ぶ<input type="file" accept="image/*" hidden id="dpIn"></label></div>${pasteBox('dpIn')}
-      <span class="hint">深度ポーズの画像を長押し→「画像をコピー」してから「📋 貼り付け」を押します（PC は Ctrl＋V）。市松模様の所は透明（背景）として扱います。</span></div>
-    <label class="f"><span>背景とみなす暗さ <b id="dpBgV"></b></span><input type="range" id="dpBg" min="0" max="140" step="1"><span class="hint">背景が残るときは右へ、体が欠けるときは左へ動かします。</span></label>
+  openSheet(`<h2>${src?'深度ポーズを直す':'新しい深度ポーズ'}${opt.n?` <small class="hint">続けて ${opt.n} 件目</small>`:''}</h2>
+    <div class="f"><span>深度の画像 <b id="dpCutN"></b></span>
+      <div class="dpstick">
+        <div class="dpedit" id="dpView"><canvas id="dpPrev" class="dpchk" width="10" height="10" aria-label="背景を消す"></canvas><div class="ph" id="dpPh">${opt.n?'次の画像をコピーして「📋 貼り付け」を押してください':'画像なし'}</div>
+          <div class="dpzoom"><button type="button" data-dz="-1" aria-label="小さく">－</button><button type="button" data-dz="0">全体</button><button type="button" data-dz="1" aria-label="大きく">＋</button></div></div>
+        <div class="dptool">
+          <div class="dpmode"><button type="button" data-dpm="1" class="on">👆 タップで消す</button><button type="button" data-dpm="3">✏️ なぞって消す</button><button type="button" data-dpm="2">🖌 なぞって戻す</button></div>
+          <div class="dptrow"><button type="button" class="btn sm" id="dpCutEdge">ふちをまとめて消す</button><button type="button" class="btn ghost sm" id="dpCutUndo">↶ 1つ戻す</button><button type="button" class="btn ghost sm" id="dpCutClr">全部戻す</button></div>
+          <div class="dptrow"><span class="dpst">輪郭を縮める<button type="button" data-sh="-1" aria-label="縮めるのを減らす">－</button><b id="dpShV"></b><button type="button" data-sh="1" aria-label="もっと縮める">＋</button></span>
+            <label class="dpbr" id="dpBr2F" hidden><span>筆</span><input type="range" id="dpBr2" min="0.005" max="0.08" step="0.005" aria-label="筆の太さ"><b id="dpBr2V"></b></label></div>
+          <input type="hidden" id="dpSh"></div></div>
+      <details class="dpadv"><summary>細かい調整</summary>
+        <label class="dprng2"><span>境目の見分け <b id="dpTolV"></b></span><input type="range" id="dpTol" min="0.3" max="4" step="0.1"></label><p class="hint">体まで消えるときは左へ、背景が残るときは右へ。</p>
+        <label class="dprng2"><span>輪郭のすき間をふさぐ <b id="dpGapV"></b></span><input type="range" id="dpGap" min="0" max="6" step="1"></label><p class="hint">タップで脚や腕の中まで消えるときは右へ。</p></details>
+      <details class="dpadv"><summary>使い方</summary><p class="hint">はじめは画像がそのまま出ます。<b>👆 タップで消す</b>：背景をタップすると、明るさが急に変わる所（体の輪郭）までまとめて消えます。「ふちをまとめて消す」で、まわりの背景を一度に消せます。<br><b>✏️ なぞって消す</b>：なぞった所を、明るさに関係なく消します。<br><b>🖌 なぞって戻す</b>：消えた体の上をなぞると戻ります（体より暗い背景は戻りません）。<br><b>輪郭を縮める</b>：体のまわりに残った背景を、輪郭ごと内側へ削ります。<br><b>拡大</b>：2本の指で広げる・動かす（PC はホイール）か、＋・－・全体のボタン。<br>青い市松模様の所が、消えた（透明な）所です。</p></details>
+      <div class="row" style="margin:6px 0 0">${pasteBtn('dpIn')}<label class="btn ghost sm">画像を選ぶ<input type="file" accept="image/*" hidden id="dpIn"></label>${dpGalBtn()}</div>${pasteBox('dpIn')}
+      <div id="dpSameMsg"></div>
+      <span class="hint">深度ポーズの画像を長押し→「画像をコピー」してから「📋 貼り付け」を押します（PC は Ctrl＋V）。</span></div>
     <label class="f"><span>名前</span><input id="dpName" value="${esc(p.name)}" placeholder="例：片手を腰に立つ"></label>
     <div class="two"><label class="f"><span>カテゴリ</span><select id="dpCat">${DP_CATS.map(c=>`<option value="${c[0]}"${c[0]===p.dp.cat?' selected':''}>${c[1]}${c[2]?'（'+c[2]+'）':''}</option>`).join('')}</select></label>
       <label class="f"><span>アングル</span><select id="dpAng">${DP_ANGS.map(a=>`<option value="${a[0]}"${a[0]===p.dp.ang?' selected':''}>${a[1]}${a[2]?'（'+a[2]+'）':''}</option>`).join('')}</select></label></div>
     <label class="f"><span>足すタグ（なくてもよい）</span><textarea id="dpTags" rows="2" placeholder="hand on hip, looking at viewer">${esc(p.tags||'')}</textarea><span class="hint">シーンで選ぶと、カテゴリ・アングルのタグと一緒にプロンプトに入ります（カテゴリ・手足は人物ごと、アングルは全体）。手・足が地面についているかは、シーンで選びます。</span></label>
     <label class="f"><span>メモ</span><textarea id="dpMemo" rows="2">${esc(p.memo||'')}</textarea></label>
     ${used?`<div class="banner info">この深度ポーズは ${used} 件のシーンで使っています。</div>`:''}
-    <div class="row"><button class="btn" id="dpSave">保存</button>${src?'<button class="btn danger" id="dpDel">削除</button>':''}<button class="btn ghost" id="dpCancel">やめる</button></div>`);
-  const sb=$('#sheetBody'),cv=$('#dpPrev',sb),rg=$('#dpBg',sb);
-  const show=()=>{const has=!!im;cv.hidden=!has;$('#dpPh',sb).hidden=has;if(!has)return;const bg=+rg.value;$('#dpBgV',sb).textContent=bg;const r=dpProc(im,bg,1);cv.width=r.w;cv.height=r.h;cv.getContext('2d').drawImage(r.c,0,0);};
-  const setBlob=async b=>{try{const r=await dpNorm(b);p.img=r.blob;p.dp.bg=r.bg;rg.value=r.bg;im=await dpLoad(r.blob);if(!$('#dpName',sb).value.trim()){const k=S.parts.filter(x=>x.type==='depth').length+1;$('#dpName',sb).value=(b.name&&!/^貼り付け_/.test(b.name)&&b.name!=='image.png')?b.name.replace(/\.[^.]+$/,''):'深度ポーズ '+k;}show();}catch(_){toast('画像を読めませんでした');}};
-  rg.value=dpBg(p);rg.oninput=show;
+    <div class="row"><button class="btn" id="dpSave">保存</button>${!src&&!opt.noNext?'<button class="btn" id="dpNext">保存して次を貼り付け</button>':''}${src?'<button class="btn danger" id="dpDel">削除</button>':''}<button class="btn ghost" id="dpCancel">${opt.n?'終わる':'やめる'}</button></div>
+    ${!src&&!opt.noNext?'<span class="hint">「保存して次を貼り付け」を押すと、保存してすぐ次の深度ポーズの画面になります（カテゴリはそのまま引き継ぎます）。</span>':''}`);
+  const sb=$('#sheetBody'),cv=$('#dpPrev',sb),tl=$('#dpTol',sb),vw=$('#dpView',sb);
+  let cut=Array.isArray(p.dp.cut)?p.dp.cut.map(x=>x.slice()):[];tl.value=p.dp.tol||1.2;const gp=$('#dpGap',sb);gp.value=p.dp.gap==null?2:p.dp.gap;const sh=$('#dpSh',sb);sh.value=p.dp.shrink||0;let mode=1;
+  const br2=$('#dpBr2',sb);br2.value=S.meta.dpBrush2||.03;
+  $$('[data-dpm]',sb).forEach(b=>b.onclick=()=>{mode=+b.dataset.dpm;$$('[data-dpm]',sb).forEach(x=>x.classList.toggle('on',x===b));$('#dpBr2F',sb).hidden=mode===1;});
+  br2.oninput=()=>{S.meta.dpBrush2=+br2.value;$('#dpBr2V',sb).textContent=Math.round(+br2.value*1000)/10+'%';};br2.onchange=()=>dbPut('meta',S.meta);
+  $$('[data-sh]',sb).forEach(b=>b.onclick=()=>{sh.value=Math.max(0,Math.min(15,(+sh.value||0)+(+b.dataset.sh)));show();});
+  /* タップ・なぞりの回数（なぞった線は1回） */
+  const isLine=c=>{const t=c[2]||1;return(t===2||t===3)&&c[3]!=null;};
+  const ops=()=>{const o=[];let last=null;for(const c of cut){if(isLine(c)&&last&&last.id===c[3]&&last.t===(c[2]||1)){last.pts.push(c);continue;}last={id:isLine(c)?c[3]:null,t:c[2]||1,pts:[c]};o.push(last);}return o;};
+  const show=()=>{const has=!!im;cv.hidden=!has;$('#dpPh',sb).hidden=has;$('#dpTolV',sb).textContent=tl.value;$('#dpGapV',sb).textContent=gp.value;$('#dpShV',sb).textContent=sh.value;
+    $('#dpBr2V',sb).textContent=Math.round(+br2.value*1000)/10+'%';$('#dpCutN',sb).textContent=cut.length?`（${ops().length} 回）`:'（まだ消していません）';$('#dpCutUndo',sb).disabled=!cut.length;$('#dpCutClr',sb).disabled=!cut.length;
+    if(!has)return;const r=dpProc(im,dpBg(p),1,{cut,tol:+tl.value,gap:+gp.value,shrink:+sh.value});cv.width=r.w;cv.height=r.h;const g=cv.getContext('2d');g.drawImage(r.c,0,0);
+    const S0=Math.min(r.w,r.h);for(const o of ops()){const c=o.pts[0];if(c[0]<0)continue;
+      if(o.t===2||o.t===3){const col=o.t===2?'255,138,0':'214,51,108';g.save();g.lineCap='round';g.lineJoin='round';g.strokeStyle=`rgba(${col},.55)`;g.fillStyle=`rgba(${col},.55)`;g.lineWidth=Math.max(2,S0*.006);
+        if(o.pts.length===1){g.beginPath();g.arc(c[0]*(r.w-1),c[1]*(r.h-1),Math.max(4,S0*.012),0,7);g.fill();}else{g.beginPath();o.pts.forEach((q,i)=>{const x=q[0]*(r.w-1),y=q[1]*(r.h-1);i?g.lineTo(x,y):g.moveTo(x,y);});g.stroke();}g.restore();continue;}
+      g.beginPath();g.arc(c[0]*(r.w-1),c[1]*(r.h-1),Math.max(4,S0*.012),0,7);g.fillStyle='#d6336c';g.fill();g.lineWidth=Math.max(2,S0*.004);g.strokeStyle='#fff';g.stroke();}};
+  let showT=0;const showSoon=()=>{cancelAnimationFrame(showT);showT=requestAnimationFrame(show);};
+  /* ===== 拡大（2本の指・ホイール・ボタン）。画像は CSS の transform で大きくし、点の位置は getBoundingClientRect で取る ===== */
+  let Z={z:1,x:0,y:0};
+  const zApply=()=>{const w=cv.offsetWidth,h=cv.offsetHeight;Z.z=Math.max(1,Math.min(8,Z.z));Z.x=Math.min(0,Math.max((1-Z.z)*w,Z.x));Z.y=Math.min(0,Math.max((1-Z.z)*h,Z.y));
+    cv.style.transform=`translate(${Z.x}px,${Z.y}px) scale(${Z.z})`;vw.classList.toggle('zoomed',Z.z>1.01);};
+  const zAt=(nz,cx,cy)=>{const o=vw.getBoundingClientRect(),ox=o.left+cv.offsetLeft,oy=o.top+cv.offsetTop;const px=(cx-ox-Z.x)/Z.z,py=(cy-oy-Z.y)/Z.z;Z.z=Math.max(1,Math.min(8,nz));Z.x=cx-ox-px*Z.z;Z.y=cy-oy-py*Z.z;zApply();};
+  $$('[data-dz]',sb).forEach(b=>b.onclick=()=>{const d=+b.dataset.dz,r=cv.getBoundingClientRect(),vr=vw.getBoundingClientRect();if(!d){Z={z:1,x:0,y:0};zApply();return;}
+    const cx=(Math.max(r.left,vr.left)+Math.min(r.right,vr.right))/2,cy=(Math.max(r.top,vr.top)+Math.min(r.bottom,vr.bottom))/2;zAt(Z.z*(d>0?1.6:1/1.6),cx,cy);});
+  vw.addEventListener('wheel',e=>{if(!im)return;e.preventDefault();zAt(Z.z*(e.deltaY<0?1.2:1/1.2),e.clientX,e.clientY);},{passive:false});
+  /* ===== 指の操作：1本は消す・なぞる、2本は拡大と移動（なぞりかけの線は取り消す） ===== */
+  const P=new Map();let act=null,pin=null;
+  const ptOf=e=>{const b=cv.getBoundingClientRect();return[+Math.max(0,Math.min(1,(e.clientX-b.left)/b.width)).toFixed(4),+Math.max(0,Math.min(1,(e.clientY-b.top)/b.height)).toFixed(4)];};
+  const pinStart=()=>{const[a,b]=[...P.values()];pin={d:Math.hypot(a.x-b.x,a.y-b.y)||1,mx:(a.x+b.x)/2,my:(a.y+b.y)/2,z:Z.z,x:Z.x,y:Z.y};};
+  cv.onpointerdown=e=>{e.preventDefault();try{cv.setPointerCapture(e.pointerId);}catch(_){}P.set(e.pointerId,{x:e.clientX,y:e.clientY});
+    if(P.size===2){if(act){if(act.kind==='line'){cut.length=act.n0;show();}act=null;}pinStart();return;}
+    if(P.size>2||!im)return;const[x,y]=ptOf(e);
+    if(mode===1){act={kind:'tap',x,y,cx:e.clientX,cy:e.clientY};return;}
+    const id=Date.now().toString(36);act={kind:'line',id,last:[x,y],n0:cut.length};cut.push([x,y,mode,id,+br2.value]);};
+  cv.onpointermove=e=>{if(!P.has(e.pointerId))return;P.set(e.pointerId,{x:e.clientX,y:e.clientY});
+    if(pin&&P.size>=2){const[a,b]=[...P.values()],d=Math.hypot(a.x-b.x,a.y-b.y)||1,mx=(a.x+b.x)/2,my=(a.y+b.y)/2;
+      const o=vw.getBoundingClientRect(),ox=o.left+cv.offsetLeft,oy=o.top+cv.offsetTop,px=(pin.mx-ox-pin.x)/pin.z,py=(pin.my-oy-pin.y)/pin.z;
+      Z.z=Math.max(1,Math.min(8,pin.z*d/pin.d));Z.x=mx-ox-px*Z.z;Z.y=my-oy-py*Z.z;zApply();return;}
+    if(!act)return;
+    if(act.kind==='tap'){if(Math.hypot(e.clientX-act.cx,e.clientY-act.cy)>12)act.moved=true;return;}
+    const[x,y]=ptOf(e);if(Math.hypot((x-act.last[0])*cv.width,(y-act.last[1])*cv.height)<Math.min(cv.width,cv.height)*.004)return;
+    const W=cv.width,H=cv.height,g=cv.getContext('2d');g.save();g.lineCap='round';g.strokeStyle=mode===2?'rgba(255,138,0,.5)':'rgba(214,51,108,.5)';g.lineWidth=2*Math.max(2,+br2.value*Math.min(W,H));g.beginPath();g.moveTo(act.last[0]*(W-1),act.last[1]*(H-1));g.lineTo(x*(W-1),y*(H-1));g.stroke();g.restore();
+    act.last=[x,y];cut.push([x,y,mode,act.id,+br2.value]);};
+  const up=e=>{P.delete(e.pointerId);if(pin){if(P.size<2)pin=null;act=null;return;}if(!act)return;const a=act;act=null;
+    if(a.kind==='tap'){if(!a.moved){cut.push([a.x,a.y]);show();}return;}show();};
+  cv.onpointerup=up;cv.onpointercancel=up;
+  $('#dpCutEdge',sb).onclick=()=>{if(!im)return;if(cut.some(c=>c[0]<0))return toast('ふちの背景は、もう消しています');cut.push([-1,-1]);show();};
+  $('#dpCutUndo',sb).onclick=()=>{const o=ops();if(!o.length)return;cut.splice(cut.length-o[o.length-1].pts.length);show();};
+  $('#dpCutClr',sb).onclick=()=>{cut=[];show();};
+  tl.oninput=showSoon;gp.oninput=showSoon;
+  const setBlob=async b=>{try{const r=await dpNorm(b);p.img=r.blob;p.dp.bg=r.bg;p.dp.h=r.h;cut=[];im=await dpLoad(r.blob);
+      const nm=dpFromName(b.name);
+      if(nm&&nm.ang!=null&&!src)$('#dpAng',sb).value=nm.ang;
+      if(!$('#dpName',sb).value.trim()){const k=S.parts.filter(x=>x.type==='depth').length+1;$('#dpName',sb).value=(nm&&nm.name)||('深度ポーズ '+k);}
+      const same=await dpSame(r.h,p.id);$('#dpSameMsg',sb).innerHTML=same?`<div class="banner" style="margin:6px 0;border-color:var(--warn);color:var(--warn)">この画像は「${esc(same.name||'名前なし')}」として、もう登録しています。前と同じ画像をコピーしたままかもしれません。</div>`:'';
+      show();}catch(_){toast('画像を読めませんでした');}};
   if(blob0)setBlob(blob0);else if(p.img)dpLoad(p.img).then(x=>{im=x;show();});else show();
   $('#dpIn',sb).onchange=e=>{const f=e.target.files[0];e.target.value='';if(f)setBlob(f);};
   $('#dpCancel',sb).onclick=()=>closeSheet();
-  $('#dpSave',sb).onclick=async()=>{if(!p.img)return toast('先に画像を貼り付けてください');
-    p.name=$('#dpName',sb).value.trim()||'深度ポーズ';p.tags=$('#dpTags',sb).value.trim();p.memo=$('#dpMemo',sb).value;p.dp={cat:$('#dpCat',sb).value,ang:$('#dpAng',sb).value,bg:+rg.value};
-    const i=S.parts.findIndex(x=>x.id===p.id);if(i>=0)S.parts[i]=p;else S.parts.push(p);await saveNow('parts',p);closeSheet();onSave&&onSave(p);toast('保存しました');};
+  const doSave=async next=>{if(!p.img)return toast('先に画像を貼り付けてください');
+    p.name=$('#dpName',sb).value.trim()||'深度ポーズ';p.tags=$('#dpTags',sb).value.trim();p.memo=$('#dpMemo',sb).value;if(!cut.length&&!confirm('背景をまだ消していません。このまま保存しますか？（重ねたとき、背景の明るい所が残ります）'))return;
+    p.dp={cat:$('#dpCat',sb).value,ang:$('#dpAng',sb).value,bg:dpBg(p),h:p.dp.h||(im?dpSig(im):''),cut:cut.map(x=>x.slice()),tol:+tl.value,gap:+gp.value,shrink:+sh.value};
+    const i=S.parts.findIndex(x=>x.id===p.id);if(i>=0)S.parts[i]=p;else S.parts.push(p);await saveNow('parts',p);closeSheet();onSave&&onSave(p);toast('「'+p.name+'」を保存しました');
+    if(next)setTimeout(()=>openDepthPart(null,onSave,null,{n:(opt.n||1)+1,cat:p.dp.cat}),120);};
+  $('#dpSave',sb).onclick=()=>doSave(false);
+  const nx=$('#dpNext',sb);if(nx)nx.onclick=()=>doSave(true);
   const dl=$('#dpDel',sb);if(dl)dl.onclick=async()=>{if(!confirm(used?`この深度ポーズは ${used} 件のシーンで使っています。削除すると、そのシーンからも外れます。削除しますか？`:'この深度ポーズを削除しますか？'))return;
     for(const s of S.scenes)if(mapSceneIds(s,x=>x===p.id?'':x,false))await saveNow('scenes',s);
     S.parts=S.parts.filter(x=>x.id!==p.id);await dbDel('parts',p.id);markDeleted(p.id);closeSheet();onSave&&onSave(null);};
