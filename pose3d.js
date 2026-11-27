@@ -8,7 +8,7 @@
    ・関節を選ぶと、赤（前後）・緑（左右）・青（ひねり）の輪が出る。輪を指でなぞると、その向きに回る。
    ・人物は2人まで（figs）。人物ごとに 人形・関節の角度・位置（x,y,z、m）・大きさ。
      位置は数字か ▲▼ で動かし、「地面につける」で体のいちばん低い所を床（高さ0）に合わせる。
-   ・変更は直近3回まで戻せる（undo）。
+   ・変更は直近5回まで戻せる（undo）。
    ・画面を長押し（0.45秒）してからなぞると、カメラが平行に動く（向きは変わらない）。
    ・上半身（肩・二の腕・ひじ・手首）・下半身（もも・ひざ・足首）を、左右どちらかに合わせて対称にできる（角度の決まりが左右で鏡写しなので、角度をそのまま写す）。
    ・最初からあるポーズ（PRESETS）。呼び出すと、名前・タグ・カテゴリも覚え、保存するときに部品に入れる（onSave の3つめ）。
@@ -22,6 +22,9 @@
        角度は、関節と同じく赤（X）・緑（Y）・青（Z）の輪をなぞって回す（v97。軸は物体といっしょに傾く）。
    ・人物ごとのタグ（v98）：figs[i].tags。「📂 ポーズ」で入れて保存する。深度ポーズとして保存すると、onSave の meta に tags（人物1）・tags2（人物2）・n（人数）を渡す。
      保存したポーズの呼び出し：足す（addPose）・入れかえる（loadPose）・形だけ当てる（applyOne、1人のポーズだけ）。
+   ・体の伸縮（v100・v102）：figs[i].scl=[横幅,高さ,厚み]（倍、0.5〜2）。腰を中心に、体の向き（左・上・前。腰の回りといっしょに回る）に沿って伸び縮みさせる（f.St の行列）。足もとの高さは変えない。
+   ・v101：人物の並びに物体（📦）も入れて選べる。戻すは5回まで。輪の上からでもダブルタップで移動の矢印。
+     3Dの画面はいつも上に止まる。位置・伸縮の欄にシークバー（▲▼・数字と合わせて3通り）。
    ・移動の矢印（v99）：人物・物体をダブルタップすると、X・Y・Z の矢印（mgiz）が出る。矢印をなぞると、その軸の向きに動く（S.mv）。
    ・深度の画像（v99）：距離を 16bit で測り、明るさは 1/z。外れ値を除いて広げ、重なりの境目を少し暗くし、2倍で作って縮める（measure・shade・depthCanvas）。
        物体を選んでいるときは、設定が道具の欄のいちばん上に出て、3Dの画面が上に止まる（#p3d に class p3om）。
@@ -34,7 +37,7 @@ import {MeshoptDecoder} from 'three/addons/libs/meshopt_decoder.module.js';
 import {OrbitControls} from 'three/addons/controls/OrbitControls.js';
 import {clone as cloneSkel} from 'three/addons/utils/SkeletonUtils.js';
 
-const OW=800,OH=912,D2R=Math.PI/180,MARGIN=10,UNDO=3;
+const OW=800,OH=912,D2R=Math.PI/180,MARGIN=10,UNDO=5;
 /* 選べる関節（骨・呼び名・種類）。左右は人形から見た左右。種類：torso 胴・首、arm 腕、leg 脚、foot 足首 */
 const JOINTS=[['pelvis','腰（体ぜんたい）','torso'],['spine_01','おなか','torso'],['spine_03','胸','torso'],['neck_01','首','torso'],['Head','頭','torso'],
   ['clavicle_l','左肩','arm'],['upperarm_l','左の二の腕','arm'],['lowerarm_l','左ひじ','arm'],['hand_l','左手首','arm'],
@@ -99,8 +102,10 @@ export async function open3D(o){o=o||{};
         <div class="p3sym"><span>左右対称</span><span class="p3sg">上半身<button type="button" data-sym="up" data-from="l">左→右</button><button type="button" data-sym="up" data-from="r">右→左</button></span><span class="p3sg">下半身<button type="button" data-sym="low" data-from="l">左→右</button><button type="button" data-sym="low" data-from="r">右→左</button></span></div></div>
       <div class="p3pos"><div class="p3ph"><b>人物の位置</b><span class="p3u">（cm）</span><span class="p3st">大きさ<button type="button" data-size="-1" aria-label="小さく">－</button><b class="p3sz"></b><button type="button" data-size="1" aria-label="大きく">＋</button></span></div>
         ${[['x','左右'],['y','上下'],['z','奥・手前']].map(([k,l],i)=>`<div class="p3pr"><span>${l}<small>（${k.toUpperCase()}）</small></span><button type="button" data-mv="${i}" data-d="-1" aria-label="${l}を減らす">▼</button><input type="number" inputmode="decimal" step="1" data-pv="${i}" aria-label="${l}（cm）"><button type="button" data-mv="${i}" data-d="1" aria-label="${l}を増やす">▲</button></div>`).join('')}
-        <div class="p3row"><button type="button" class="btn sm" data-a="ground">⬇ 地面につける</button></div>
-        <p class="p3hint" style="margin:4px 0 0">▲▼ で 5cm ずつ動きます。数字を入れて動かすこともできます。左右は画面の右が＋（正面から見たとき）、上下は上が＋、奥・手前は手前が＋です。動かしたあと「地面につける」を押すと、体のいちばん低い所が地面につきます。</p></div>
+        <div class="p3og">体の伸縮<small>（%）</small></div>
+        ${[['横幅','（左右）'],['高さ','（上下）'],['厚み','（前後）']].map(([l,s],i)=>`<div class="p3pr"><span>${l}<small>${s}</small></span><button type="button" data-fk="${i}" data-d="-1" aria-label="${l}を減らす">▼</button><input type="number" inputmode="decimal" step="1" data-fv="${i}" aria-label="${l}（%）"><button type="button" data-fk="${i}" data-d="1" aria-label="${l}を増やす">▲</button></div>`).join('')}
+        <div class="p3row"><button type="button" class="btn sm" data-a="ground">⬇ 地面につける</button><button type="button" data-a="sclReset">伸縮を戻す</button></div>
+        <p class="p3hint" style="margin:4px 0 0">▲▼ で 5cm ずつ動きます。数字を入れて動かすこともできます。左右は画面の右が＋（正面から見たとき）、上下は上が＋、奥・手前は手前が＋です。動かしたあと「地面につける」を押すと、体のいちばん低い所が地面につきます。体の伸縮は、体の向きに沿って 横幅・高さ・厚み を 5% ずつ変えます（50〜200%。足もとの高さはそのまま）。「大きさ」は形を変えずに全体の大きさを変えます。</p></div>
       <div class="p3obj"><div class="p3ph"><b>物体（glb）</b><button type="button" class="p3lb" data-a="objLib" style="margin-left:auto">📦 物体を呼び出す</button></div>
         <div class="p3ol"></div></div>
       <!-- 物体の設定。選んでいるときだけ出す。開いたあと、道具の欄のいちばん上へ移す -->
@@ -111,7 +116,7 @@ export async function open3D(o){o=o||{};
             +['X','Y','Z'].map((x,i)=>`<div class="p3pr"><span>${x}<small>${k==='p'?['（左右）','（上下）','（奥・手前）'][i]:''}</small></span><button type="button" data-ok="${k}" data-oi="${i}" data-d="-1" aria-label="${K.lab}${x}を減らす">▼</button><input type="number" inputmode="decimal" step="1" data-ov="${k}" data-oi="${i}" aria-label="${K.lab}${x}（${K.u}）"><button type="button" data-ok="${k}" data-oi="${i}" data-d="1" aria-label="${K.lab}${x}を増やす">▲</button></div>`).join('')).join('')}
           <div class="p3row"><button type="button" class="btn sm" data-oa="ground">⬇ 地面につける</button><button type="button" data-oa="scl0">伸縮を戻す</button><button type="button" data-oa="dup">複製</button><button type="button" data-oa="del">この物体を外す</button></div>
           <p class="p3hint" style="margin:4px 0 0">物体のまわりの赤（X）・緑（Y）・青（Z）の輪を指でなぞると、その軸のまわりに回ります（軸は物体といっしょに傾きます）。－5°・＋5° は、選んだ色の軸で回します。▲▼ で 位置は 5cm、伸縮は 10% ずつ変わります。伸縮の「全体」は、形を変えずに大きさだけ変えます。</p></div>
-      <p class="p3hint">体の点をタップすると、その関節に輪が出ます。輪を指でなぞると回ります（ふつうに曲がる範囲より10°先で止まります）。左右は人形から見た左右です。何もない所をなぞるとカメラが回り、長押ししてからなぞるとカメラが平行に動きます。2本の指で拡大・移動です。人物や物体を<b>ダブルタップ</b>すると、赤（左右）・緑（上下）・青（奥と手前）の矢印が出て、矢印をなぞるとその向きに動きます（何もない所をタップすると終わります）。「左右対称」の「左→右」は、人形の左側の形を右側に写します。「↶ 戻す」で、直近3回までの変更を戻せます。</p>
+      <p class="p3hint">体の点をタップすると、その関節に輪が出ます。輪を指でなぞると回ります（ふつうに曲がる範囲より10°先で止まります）。左右は人形から見た左右です。何もない所をなぞるとカメラが回り、長押ししてからなぞるとカメラが平行に動きます。2本の指で拡大・移動です。人物や物体を<b>ダブルタップ</b>すると、赤（左右）・緑（上下）・青（奥と手前）の矢印が出て、矢印をなぞるとその向きに動きます（何もない所をタップすると終わります）。「左右対称」の「左→右」は、人形の左側の形を右側に写します。「↶ 戻す」で、直近5回までの変更を戻せます。</p>
       <label class="p3sepl"><input type="checkbox" class="p3sep"> 重なった所の境目をはっきりさせる<small>手足が体の前にあるとき、奥側の縁を少し暗くして、AI が手足と体をくっつけたり、形を崩したりしにくくします。</small></label>
       <div class="p3row p3save"><button type="button" class="btn" data-a="save">深度ポーズとして保存</button><button type="button" class="btn ghost" data-a="png">PNG を保存</button></div>
     </div>
@@ -162,11 +167,15 @@ export async function open3D(o){o=o||{};
   const F=()=>S.figs[S.cur];
   let raf=0;const draw=()=>{if(!raf)raf=requestAnimationFrame(()=>{raf=0;render();});};
   const size=()=>{const w=stage.clientWidth,h=Math.round(w*OH/OW);const mh=Math.max(240,Math.round(window.innerHeight*.5));const ww=h>mh?Math.round(mh*OW/OH):w,hh=Math.min(h,mh);
-    cv.style.width=ww+'px';cv.style.height=hh+'px';renderer.setSize(ww,hh,false);cam.aspect=OW/OH;cam.updateProjectionMatrix();draw();};
+    cv.style.width=ww+'px';cv.style.height=hh+'px';renderer.setSize(ww,hh,false);cam.aspect=OW/OH;cam.updateProjectionMatrix();
+    /* 3Dの画面は、いつもいちばん上の帯のすぐ下に止める（下のメニューを操作しながら、画面の変わり方を見られる。v101） */
+    stage.style.top=$('.p3top').offsetHeight+'px';draw();};
 
   /* ===== 人形を1体作る ===== */
-  async function makeFig(model){const g=await loadModel(model);const obj=cloneSkel(g.scene);const G=new THREE.Group();G.add(obj);
-    const f={model,G,obj,bones:{},rest:{},info:{},ang:{},pos:[0,0,0],scale:1,meshes:[],marks:{},tags:''};/* tags：この人物のプロンプトのタグ（v98） */
+  async function makeFig(model){const g=await loadModel(model);const obj=cloneSkel(g.scene);const G=new THREE.Group();
+    /* St：体の伸縮（v102）の行列を入れる入れ物。G（位置・大きさ）→ St（伸縮）→ 人形 */
+    const St=new THREE.Group();St.matrixAutoUpdate=false;G.add(St);St.add(obj);
+    const f={model,G,St,obj,bones:{},rest:{},info:{},ang:{},pos:[0,0,0],scale:1,meshes:[],marks:{},tags:''};/* tags：この人物のプロンプトのタグ（v98） */
     obj.traverse(n=>{if(n.isBone){f.bones[n.name]=n;f.rest[n.name]=n.quaternion.clone();}if(n.isMesh){n.frustumCulled=false;n.material=new THREE.MeshStandardMaterial({color:0xcfcfcf,roughness:.75});if(n.isSkinnedMesh)f.meshes.push(n);}});
     G.updateMatrixWorld(true);
     const bb=new THREE.Box3().setFromObject(obj);f.height=bb.max.y-bb.min.y||1.7;
@@ -182,12 +191,26 @@ export async function open3D(o){o=o||{};
       const ch=CHILD[b]&&f.bones[CHILD[b]];const tL=ch?ch.position.clone().normalize().multiplyScalar(s):new THREE.Vector3(0,1,0);
       f.info[b]={pL:pW.applyQuaternion(pq).normalize(),rL:rW.applyQuaternion(pq).normalize(),tL,lim:limOf(b),dn:ua?-80:0};f.ang[b]=[0,0,0];}
     for(const[b]of JOINTS)if(f.bones[b]){const m=new THREE.Mesh(mkGeo,mkMat);m.renderOrder=999;f.marks[b]=m;markers.add(m);}
+    /* 体の伸縮（v100、v102 で作り直し）：scl=[横幅,高さ,厚み]。
+       体の向き（左 lf・上 up・前 fw）の3つの軸に沿って、腰を中心に、ポーズを付けたあとの体ぜんぶを伸び縮みさせる。
+       腰を回したときは、その回った分だけ軸も回す（体を横に向けても「厚み」は体の前後）。
+       v100 は腰の骨の大きさを変えていたが、骨の軸が体の向きと少しずれているため、厚みが斜めに足されていた */
+    f.scl=[1,1,1];f.Rbase=new THREE.Matrix4().makeBasis(lf,up,fw);
+    if(f.bones.pelvis)f.pqRestInv=f.bones.pelvis.getWorldQuaternion(Q()).invert();
     return f;}
   const applyBone=(f,b)=>{const I=f.info[b],a=f.ang[b],bone=f.bones[b];if(!I||!bone)return;
     const qp=Q().setFromAxisAngle(I.pL,a[0]*D2R),qr=Q().setFromAxisAngle(I.rL,a[1]*D2R),qt=Q().setFromAxisAngle(I.tL,a[2]*D2R);
     bone.quaternion.copy(qp).multiply(qr);if(I.dn)bone.quaternion.multiply(Q().setFromAxisAngle(I.rL,I.dn*D2R));bone.quaternion.multiply(f.rest[b]).multiply(qt);};
   /* 姿勢・位置・大きさを当てる（骨の行列も今の姿勢にする。しないと体の形の計算が1回遅れる） */
-  const pose=f=>{for(const b in f.info)applyBone(f,b);f.G.position.set(f.pos[0],f.pos[1],f.pos[2]);f.G.scale.setScalar(f.scale);f.G.updateMatrixWorld(true);for(const m of f.meshes)m.skeleton.update();};
+  const pose=f=>{for(const b in f.info)applyBone(f,b);
+    f.G.position.set(f.pos[0],f.pos[1],f.pos[2]);f.G.scale.setScalar(f.scale);f.St.matrix.identity();
+    if(f.pqRestInv&&f.scl.some(v=>v!==1)){
+      /* まず伸縮なしで姿勢を出し、腰の位置（G の中）と、休めの姿勢から腰がどれだけ回ったか（dq）を調べる */
+      f.G.updateMatrixWorld(true);const pv=f.bones.pelvis,pl=f.G.worldToLocal(pv.getWorldPosition(V())),dq=pv.getWorldQuaternion(Q()).multiply(f.pqRestInv);
+      /* 伸縮の行列 ＝ 腰へ移す × 体の軸に回す × 伸縮 × 体の軸から戻す × 腰から戻す */
+      const R=new THREE.Matrix4().makeRotationFromQuaternion(dq).multiply(f.Rbase),Rt=R.clone().transpose();
+      f.St.matrix.makeTranslation(pl.x,pl.y,pl.z).multiply(R).multiply(new THREE.Matrix4().makeScale(f.scl[0],f.scl[1],f.scl[2])).multiply(Rt).multiply(new THREE.Matrix4().makeTranslation(-pl.x,-pl.y,-pl.z));}
+    f.St.matrixWorldNeedsUpdate=true;f.G.updateMatrixWorld(true);for(const m of f.meshes)m.skeleton.update();};
   /* ===== 物体（glb）を1つ作る。d={id,name,pos,rot,scl}。中心を位置の点にする（inner の中で中心を原点へ） ===== */
   async function makeObj(d){const g=await loadObj(d.id);const raw=cloneSkel(g.scene);
     raw.traverse(n=>{if(n.isMesh)n.frustumCulled=false;});raw.updateMatrixWorld(true);
@@ -288,33 +311,39 @@ export async function open3D(o){o=o||{};
     c.position.copy(t).add(dir.multiplyScalar(d));c.up.set(0,1,0);c.lookAt(t);c.updateMatrixWorld();return t;};
   const setView=k=>{if(!S.figs.length)return;const t=frameCam(cam,S.figs,k);ctl.target.copy(t);ctl.update();draw();};
 
-  /* ===== 戻す（直近3回まで） ===== */
-  const snapData=()=>({figs:S.figs.map(f=>({model:f.model,ang:JSON.parse(JSON.stringify(f.ang)),pos:f.pos.slice(),scale:f.scale,tags:f.tags||''})),cur:S.cur,
+  /* ===== 戻す（直近5回まで） ===== */
+  const snapData=()=>({figs:S.figs.map(f=>({model:f.model,ang:JSON.parse(JSON.stringify(f.ang)),pos:f.pos.slice(),scale:f.scale,scl:f.scl.slice(),tags:f.tags||''})),cur:S.cur,
     objs:S.objs.map(o=>({id:o.id,name:o.name,pos:o.pos.slice(),rot:o.rot.slice(),scl:o.scl.slice()})),osel:S.osel});
   const snap=()=>{S.undo.push(snapData());if(S.undo.length>UNDO)S.undo.shift();drawUndo();};
   const drawUndo=()=>{const n=S.undo.length;$('.p3un').textContent=n?`（${n}）`:'';$('[data-a="undo"]').disabled=!n;};
   const restore=async d=>{const same=d.figs.length===S.figs.length&&d.figs.every((x,i)=>x.model===S.figs[i].model);
-    if(!same){const c={p:cam.position.toArray(),t:ctl.target.toArray()};await loadPose({figs:d.figs.map(x=>({model:x.model,a:x.ang,pos:x.pos,scale:x.scale,tags:x.tags})),cam:c},true);}
-    else d.figs.forEach((x,i)=>{const f=S.figs[i];for(const b in f.ang)f.ang[b]=(x.ang[b]||[0,0,0]).slice();f.pos=x.pos.slice();f.scale=x.scale;f.tags=x.tags||'';});
+    if(!same){const c={p:cam.position.toArray(),t:ctl.target.toArray()};await loadPose({figs:d.figs.map(x=>({model:x.model,a:x.ang,pos:x.pos,scale:x.scale,scl:x.scl,tags:x.tags})),cam:c},true);}
+    else d.figs.forEach((x,i)=>{const f=S.figs[i];for(const b in f.ang)f.ang[b]=(x.ang[b]||[0,0,0]).slice();f.pos=x.pos.slice();f.scale=x.scale;f.scl=(x.scl||[1,1,1]).slice();f.tags=x.tags||'';});
     await syncObjs(d.objs,d.osel);
     S.cur=Math.min(d.cur||0,S.figs.length-1);selJoint(S.sel);drawFigs();draw();};
 
   /* ===== 人物の切りかえ・足す・外す ===== */
   const drawFigs=()=>{const f=F();
-    $('.p3figs').innerHTML=S.figs.map((x,i)=>`<button type="button" data-fig="${i}" class="${i===S.cur?'on':''}">人物${i+1}（${MODELS[x.model]}）</button>`).join('')
-      +(S.figs.length<2?'<button type="button" data-fa="add">＋ 2人目を足す</button>':`<button type="button" data-fa="swap">人物1 ⇄ 人物2</button><button type="button" data-fa="del">人物${S.cur+1}を外す</button>`)
-      +`<span class="p3sel">${Object.entries(MODELS).map(([k,l])=>`<button type="button" data-model="${k}" class="${f&&f.model===k?'on':''}">${l}</button>`).join('')}</span>`;
-    $$('[data-fig]').forEach(b=>b.onclick=()=>{S.cur=+b.dataset.fig;selJoint(null);drawFigs();});
+    /* 操作する相手を選ぶ並び：人物と、置いた物体（v101。物体は data-osel で、.p3tool のクリックで受ける） */
+    const ob=S.osel!=null;
+    $('.p3figs').innerHTML=S.figs.map((x,i)=>`<button type="button" data-fig="${i}" class="${i===S.cur&&!ob?'on':''}">人物${i+1}（${MODELS[x.model]}）</button>`).join('')
+      +S.objs.map((o,i)=>`<button type="button" data-osel="${i}" class="p3fo${i===S.osel?' on':''}">📦 ${esc(o.name)}</button>`).join('')
+      +(ob?'':(S.figs.length<2?'<button type="button" data-fa="add">＋ 2人目を足す</button>':`<button type="button" data-fa="swap">人物1 ⇄ 人物2</button><button type="button" data-fa="del">人物${S.cur+1}を外す</button>`)
+      +`<span class="p3sel">${Object.entries(MODELS).map(([k,l])=>`<button type="button" data-model="${k}" class="${f&&f.model===k?'on':''}">${l}</button>`).join('')}</span>`);
+    $$('[data-fig]').forEach(b=>b.onclick=()=>{S.cur=+b.dataset.fig;S.osel=null;selJoint(null);drawObjs();});
     $$('[data-model]').forEach(b=>b.onclick=()=>changeModel(b.dataset.model));
     $$('[data-fa]').forEach(b=>b.onclick=()=>({add:act.addFig,del:act.delFig,swap:act.swapFig})[b.dataset.fa]());
     $('.p3sz').textContent=f?Math.round(f.scale*100)+'%':'';drawPos();};
-  const drawPos=()=>{const f=F();if(!f)return;$$('[data-pv]').forEach(i=>{if(document.activeElement!==i)i.value=Math.round(f.pos[+i.dataset.pv]*100);});};
+  /* 数字の欄と、となりのシークバー（i._rg）に値を出す */
+  const putV=(i,v)=>{if(document.activeElement!==i)i.value=v;if(i._rg&&!i._rg._s)i._rg.value=v;};
+  const drawPos=()=>{const f=F();if(!f)return;$$('[data-pv]').forEach(i=>putV(i,Math.round(f.pos[+i.dataset.pv]*100)));
+    $$('[data-fv]').forEach(i=>putV(i,Math.round(f.scl[+i.dataset.fv]*100)));};
   const removeFig=f=>{scene.remove(f.G);for(const m of Object.values(f.marks))markers.remove(m);};
   const addFig=async d=>{const f=await makeFig(d.model||'female');if(d.a)for(const[b,v]of Object.entries(d.a))if(f.ang[b])f.ang[b]=v.slice(0,3);
-    const p=d.pos;f.pos=!p?[0,0,0]:p.length===2?[p[0],0,p[1]]:p.slice(0,3);f.scale=d.scale||1;f.tags=d.tags||'';if(!p||p.length===2)toGround(f);scene.add(f.G);S.figs.push(f);return f;};
+    const p=d.pos;f.pos=!p?[0,0,0]:p.length===2?[p[0],0,p[1]]:p.slice(0,3);f.scale=d.scale||1;if(Array.isArray(d.scl)&&d.scl.length===3)f.scl=d.scl.map(Number);f.tags=d.tags||'';if(!p||p.length===2)toGround(f);scene.add(f.G);S.figs.push(f);return f;};
   const changeModel=async m=>{const f=F();if(!f||f.model===m)return;msg.hidden=false;msg.textContent='人形を読み込んでいます…';let n;
     try{n=await makeFig(m);}catch(e){msg.hidden=true;toast3('人形を読み込めませんでした');return;}
-    snap();n.ang=JSON.parse(JSON.stringify(f.ang));n.pos=f.pos.slice();n.scale=f.scale;n.tags=f.tags;removeFig(f);scene.add(n.G);S.figs[S.cur]=n;msg.hidden=true;selJoint(null);drawFigs();draw();};
+    snap();n.ang=JSON.parse(JSON.stringify(f.ang));n.pos=f.pos.slice();n.scale=f.scale;n.scl=f.scl.slice();n.tags=f.tags;removeFig(f);scene.add(n.G);S.figs[S.cur]=n;msg.hidden=true;selJoint(null);drawFigs();draw();};
   /* ポーズを丸ごと読みこむ（keep が true なら、戻すの記録は消さない） */
   const loadPose=async(ps,keep)=>{msg.hidden=false;msg.textContent='人形を読み込んでいます…';
     for(const f of S.figs)removeFig(f);S.figs=[];S.cur=0;if(!keep){S.undo=[];drawUndo();}
@@ -340,22 +369,21 @@ export async function open3D(o){o=o||{};
     msg.hidden=true;if(first>=0)S.cur=first;S.osel=null;selJoint(null);drawFigs();drawObjs();render();return fs.length-take.length;};
   /* 深度ポーズとして保存するときに渡す情報。tags は人物1、tags2 は人物2 のタグ、n は人数 */
   const metaOut=()=>({name:(S.meta&&S.meta.name)||'',cat:(S.meta&&S.meta.cat)||'',tags:(S.figs[0]&&S.figs[0].tags)||'',tags2:(S.figs[1]&&S.figs[1].tags)||'',n:S.figs.length});
-  const poseData=()=>({figs:S.figs.map(f=>{const a={};for(const[b,v]of Object.entries(f.ang))if(v.some(x=>x))a[b]=v.map(x=>Math.round(x*10)/10);return{model:f.model,a,pos:f.pos.map(x=>+x.toFixed(4)),scale:+f.scale.toFixed(3),...(f.tags?{tags:f.tags}:{})};}),
+  const poseData=()=>({figs:S.figs.map(f=>{const a={};for(const[b,v]of Object.entries(f.ang))if(v.some(x=>x))a[b]=v.map(x=>Math.round(x*10)/10);return{model:f.model,a,pos:f.pos.map(x=>+x.toFixed(4)),scale:+f.scale.toFixed(3),...(f.scl.some(v=>v!==1)?{scl:f.scl.map(v=>+v.toFixed(3))}:{}),...(f.tags?{tags:f.tags}:{})};}),
     cam:{p:cam.position.toArray().map(v=>+v.toFixed(4)),t:ctl.target.toArray().map(v=>+v.toFixed(4))},...(S.objs.length?{objs:S.objs.map(objData)}:{})});
 
   /* ===== 物体の画面 ===== */
   const drawObjs=()=>{const so=O();
-    $('.p3ol').innerHTML=S.objs.length?S.objs.map((o,i)=>`<button type="button" data-osel="${i}" class="${i===S.osel?'on':''}">${esc(o.name)}</button>`).join('')
+    /* 物体の選び方は、いちばん上の人物の並び（drawFigs）。ここは呼び出し方の説明だけ */
+    $('.p3ol').innerHTML=S.objs.length?'<p class="p3hint" style="margin:6px 0 0">置いた物体は、いちばん上の人物の並び（📦）から選べます。</p>'
       :'<p class="p3hint" style="margin:6px 0 0">まだ置いていません。「📦 物体を呼び出す」から glb ファイルを取り込むと、椅子・ベッドなどの物を置けます。</p>';
-    /* 選んでいるとき：設定を道具の欄のいちばん上に出し、画面（3D）を上に止めて、見ながら調整できるようにする（class p3om） */
+    /* 選んでいるとき：設定を道具の欄のいちばん上に出す（3Dの画面は、いつも上に止まっている） */
     if(so&&S.sel)selJoint(null);
     const was=!$('.p3oe').hidden;$('.p3oe').hidden=!so;el.classList.toggle('p3om',!!so);
-    if(so){$('.p3on').textContent='物体：'+so.name;if(!was||S._olast!==S.osel){stickTop();el.scrollTop=0;}}else stage.style.top='';/* 止めないときは top を外す（.p3stage は position:relative なので、残すと下にずれる） */S._olast=S.osel;
-    drawOAx();drawObjVals();draw();};
+    if(so){$('.p3on').textContent='物体：'+so.name;if(!was||S._olast!==S.osel)el.scrollTop=0;}S._olast=S.osel;
+    drawFigs();drawOAx();drawObjVals();draw();};
   const drawOAx=()=>{$$('[data-oa="ax"]').forEach(b=>b.classList.toggle('on',+b.dataset.k===S.oax));};
-  /* 止めた画面の上の位置（いちばん上の帯の高さ） */
-  const stickTop=()=>{stage.style.top=$('.p3top').offsetHeight+'px';};
-  const drawObjVals=()=>{const o=O();if(!o)return;$$('[data-ov]').forEach(i=>{if(document.activeElement===i)return;const k=i.dataset.ov,v=o[{p:'pos',r:'rot',s:'scl'}[k]][+i.dataset.oi];i.value=OK[k].show(v);});};
+  const drawObjVals=()=>{const o=O();if(!o)return;$$('[data-ov]').forEach(i=>{const k=i.dataset.ov,v=o[{p:'pos',r:'rot',s:'scl'}[k]][+i.dataset.oi];putV(i,OK[k].show(v));});};
   const KEY={p:'pos',r:'rot',s:'scl'};
   const setOV=(o,k,i,v)=>{if(k==='r')v=wrapDeg(v);if(k==='s')v=Math.max(.01,Math.min(100,v));o[KEY[k]][i]=k==='p'?r4(v):+(+v).toFixed(4);};
   const objAdd=async(d,quiet)=>{msg.hidden=false;msg.textContent='物体を読み込んでいます…';let o;
@@ -451,10 +479,18 @@ export async function open3D(o){o=o||{};
     if(mvd&&mvd.id===e.pointerId){const t=mvTarget();if(!t)return;const d=((e.clientX-mvd.x0)*mvd.dir.x+(e.clientY-mvd.y0)*mvd.dir.y)*mvd.mpp;t.pos[mvd.k]=r4(mvd.start+d);draw();return;}
     if(!rd||rd.id!==e.pointerId)return;const a=scrAng(e,rd.c);let d=a-rd.a;if(d>Math.PI)d-=2*Math.PI;if(d<-Math.PI)d+=2*Math.PI;rd.a=a;
     const n=gAxis(rd.k),tow=cam.position.clone().sub(gizmo.position).dot(n)>0?1:-1;if(rd.obj)objRot(rd.k,d/D2R*tow);else rotate(rd.k,d/D2R*tow);});
-  cv.addEventListener('pointerup',e=>{if(pd&&pd.lp)clearTimeout(pd.lp);if(pan&&pan.id===e.pointerId){endPan();pd=null;return;}if(rd&&rd.id===e.pointerId){rd=null;pd=null;return;}if(mvd&&mvd.id===e.pointerId){mvd=null;pd=null;return;}if(!pd||pd.id!==e.pointerId)return;const t=!pd.moved;pd=null;if(!t)return;
+  cv.addEventListener('pointerup',e=>{if(pd&&pd.lp)clearTimeout(pd.lp);if(pan&&pan.id===e.pointerId){endPan();pd=null;return;}/* 輪・矢印をつかんでも、ほとんど動かさずに離したときは「タップ」として扱う（v101。輪の上からでもダブルタップできるように）。
+       そのときは、つかんだときの戻すの記録も取り消す */
+    const grab=(rd&&rd.id===e.pointerId)||(mvd&&mvd.id===e.pointerId);
+    if(grab){const tapped=pd&&pd.id===e.pointerId&&!pd.moved;rd=null;mvd=null;pd=null;if(!tapped)return;S.undo.pop();drawUndo();
+      /* 1回目は覚えるだけ（選んでいる関節・物体はそのまま）。2回目ならダブルタップ */
+      const now=Date.now();if(lastTap&&now-lastTap.t<350&&Math.hypot(e.clientX-lastTap.x,e.clientY-lastTap.y)<30){lastTap=null;const tg=pickAt(e)||(O()?{t:'obj',i:S.osel}:{t:'fig',i:S.cur});enterMove({t:tg.t,i:tg.i});}
+      else lastTap={t:now,x:e.clientX,y:e.clientY};return;}
+    if(!pd||pd.id!==e.pointerId)return;const t=!pd.moved;pd=null;if(!t)return;
     /* ダブルタップ（0.35秒以内・30px 以内）：人物・物体に移動の矢印を出す */
     const now=Date.now(),dbl=!!(lastTap&&now-lastTap.t<350&&Math.hypot(e.clientX-lastTap.x,e.clientY-lastTap.y)<30);lastTap=dbl?null:{t:now,x:e.clientX,y:e.clientY};
-    if(dbl){const tg=pickAt(e);if(tg){enterMove({t:tg.t,i:tg.i});return;}}
+    /* 指の下に人物・物体がなくても、物体か関節を選んでいて輪が出ているときは、その物体・人物を動かす */
+    if(dbl){const tg=pickAt(e)||(O()?{t:'obj',i:S.osel}:(S.sel&&F())?{t:'fig',i:S.cur}:null);if(tg){enterMove({t:tg.t,i:tg.i});return;}}
     if(S.mv){S.mv=null;draw();}
     const f=F();if(!f)return;const r=cv.getBoundingClientRect();let best=null,bd=1e9;for(const[b]of JOINTS){const m=f.marks[b];if(!m)continue;const p=m.position.clone().project(cam);const d=Math.hypot(r.left+(p.x+1)/2*r.width-e.clientX,r.top+(1-p.y)/2*r.height-e.clientY);if(d<bd){bd=d;best=b;}}
     if(bd<34)return selJoint(best);
@@ -470,6 +506,23 @@ export async function open3D(o){o=o||{};
   $$('[data-view]').forEach(b=>b.onclick=()=>setView(b.dataset.view));
   $$('[data-zoom]').forEach(b=>b.onclick=()=>{const v=cam.position.clone().sub(ctl.target);v.multiplyScalar(b.dataset.zoom>0?1/1.25:1.25);cam.position.copy(ctl.target).add(v);ctl.update();draw();});
   $$('[data-step]').forEach(b=>b.onclick=()=>{if(!S.sel)return toast3('先に関節を選んでください');snap();rotate(S.ax,+b.dataset.step);});
+  /* 体の伸縮：足もと（いちばん低い所）の高さを変えないように、伸ばしたあと上下の位置を合わせる */
+  const lowY=f=>{pose(f);let lo=1e9;eachV(f,3,v=>{if(v.y<lo)lo=v.y;});return lo;};
+  const setScl=(f,i,v)=>{const lo=lowY(f);f.scl[i]=Math.max(.5,Math.min(2,Math.round(v*100)/100));const lo2=lowY(f);if(lo<1e8&&lo2<1e8)f.pos[1]=r4(f.pos[1]+lo-lo2);draw();};
+  $$('[data-fk]').forEach(b=>b.onclick=()=>{const f=F();if(!f)return;snap();const i=+b.dataset.fk;setScl(f,i,f.scl[i]+(+b.dataset.d)*.05);});
+  $$('[data-fv]').forEach(inp=>inp.onchange=()=>{const f=F();if(!f)return;const v=parseFloat(inp.value);if(!isFinite(v))return drawPos();snap();setScl(f,+inp.dataset.fv,v/100);});
+  /* シークバー（v101）：位置・伸縮の数字の欄の左に付ける。なぞっている間は画面がすぐ変わり、戻すの記録は1回だけ取る。
+     範囲（下の RG）の外の値も、▲▼ と数字では入れられる（シークバーは端で止まる） */
+  {const RG={pv:[[-300,300],[-100,200],[-300,300]],fv:[[50,200],[50,200],[50,200]],'ov-p':[[-500,500],[-100,300],[-500,500]],'ov-s':[[10,400],[10,400],[10,400]]};
+    $$('.p3pr input[type=number]').forEach(num=>{const ds=num.dataset;let key,i;
+      if(ds.pv!=null){key='pv';i=+ds.pv;}else if(ds.fv!=null){key='fv';i=+ds.fv;}else if(ds.ov!=null){key='ov-'+ds.ov;i=+ds.oi;}else return;
+      const r=RG[key]&&RG[key][i];if(!r)return;const rg=document.createElement('input');rg.type='range';rg.min=r[0];rg.max=r[1];rg.step=1;rg.className='p3rg';
+      rg.setAttribute('aria-label',(num.getAttribute('aria-label')||'')+'のシークバー');num.before(rg);num._rg=rg;
+      rg.oninput=()=>{if(!rg._s){snap();rg._s=1;}const v=+rg.value;num.value=v;
+        if(key==='pv'){const f=F();if(f){f.pos[i]=v/100;draw();}}
+        else if(key==='fv'){const f=F();if(f)setScl(f,i,v/100);}
+        else{const o=O(),k=ds.ov;if(o){setOV(o,k,i,OK[k].read(v));draw();}}};
+      rg.onchange=()=>{rg._s=0;draw();};});}
   $$('[data-size]').forEach(b=>b.onclick=()=>{const f=F();if(!f)return;snap();f.scale=Math.max(.6,Math.min(1.4,Math.round((f.scale+(+b.dataset.size)*.05)*100)/100));drawFigs();draw();});
   $$('[data-mv]').forEach(b=>b.onclick=()=>{const f=F();if(!f)return;snap();const i=+b.dataset.mv;f.pos[i]=+(f.pos[i]+(+b.dataset.d)*.05).toFixed(4);draw();});
   $$('[data-pv]').forEach(inp=>inp.onchange=()=>{const f=F();if(!f)return;const v=parseFloat(inp.value);if(!isFinite(v))return drawPos();snap();f.pos[+inp.dataset.pv]=v/100;draw();});
@@ -478,6 +531,7 @@ export async function open3D(o){o=o||{};
     undo:()=>{const d=S.undo.pop();drawUndo();if(d)restore(d);},
     look:()=>{S.depthView=!S.depthView;$('[data-a="look"]').textContent=S.depthView?'人形で見る':'深度で見る';draw();},
     resetJ:()=>{const f=F();if(!f||!S.sel)return;snap();f.ang[S.sel]=[0,0,0];showAng();draw();},
+    sclReset:()=>{const f=F();if(!f)return;snap();const lo=lowY(f);f.scl=[1,1,1];const lo2=lowY(f);if(lo<1e8&&lo2<1e8)f.pos[1]=r4(f.pos[1]+lo-lo2);draw();},
     resetAll:()=>{const f=F();if(!f)return;snap();for(const b in f.ang)f.ang[b]=[0,0,0];showAng();draw();},
     armsDown:()=>{const f=F();if(!f)return;snap();for(const b of['upperarm_l','upperarm_r'])if(f.ang[b])f.ang[b]=[0,0,0];showAng();draw();},
     ground:()=>{const f=F();if(!f)return;snap();toGround(f);draw();toast3('体のいちばん低い所を地面につけました');},
