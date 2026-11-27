@@ -574,10 +574,16 @@ details.nh .nhb .sec{border:0;padding:0;background:none;box-shadow:none}
 .p3ol{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
 .p3ol button{border:1px solid var(--line2);background:var(--card);color:var(--ink);border-radius:999px;padding:5px 10px;font-size:12px;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .p3ol button.on{background:#ff8a00;border-color:#ff8a00;color:#fff}
-.p3oe{margin-top:6px;border-top:1px solid var(--line);padding-top:4px}
+.p3oe{margin:0 0 8px;border:2px solid #ff8a00;border-radius:10px;padding:8px;background:var(--card)}
+.p3oh{display:flex;align-items:center;gap:8px}.p3oh b{flex:1;min-width:0;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.p3oc{border:0;background:#ff8a00;color:#fff;border-radius:999px;padding:6px 12px;font-size:12px;flex:none}
+.p3oax button[data-oa="ax"]{color:var(--c);font-weight:700}.p3oax button[data-oa="ax"].on{background:var(--c);border-color:var(--c);color:#fff}
+#p3d.p3om .p3stage{position:sticky;z-index:1}
 .p3oe[hidden]{display:none}
 .p3og{display:flex;align-items:center;gap:6px;margin-top:8px;font-size:13px;font-weight:700}.p3og small{color:var(--sub);font-weight:400;font-size:11px}.p3og .p3st{margin-left:auto;font-weight:400}
 .p3olist{padding:4px 10px}
+.p3sepl{display:block;margin:10px 0 0;font-size:13px}.p3sepl small{display:block;color:var(--sub);font-size:11px;margin:2px 0 0 22px}
+.p3ltags{padding:2px 10px 8px}.p3tg{display:flex;flex-direction:column;gap:3px;margin-top:6px;font-size:12px;color:var(--sub)}.p3tg input{border:1px solid var(--line2);border-radius:8px;padding:7px 8px;font-size:14px;background:var(--card);color:var(--ink);min-width:0}
 .p3oit{padding:10px 0}.p3oit>div{flex:1;min-width:0}.p3oit b{overflow-wrap:anywhere}
 .dpwho{margin:6px 0 4px}
 .dpstage{margin:10px 0 6px;background:#000;border-radius:10px;overflow:hidden}
@@ -653,7 +659,7 @@ const FMT={
 
 /* ========== データベース（IndexedDB） ========== */
 let db=null;
-const APP_VER='v96';/* sw.js の VERSION と同じにする */
+const APP_VER='v99';/* sw.js の VERSION と同じにする */
 const STORES=['parts','scenes','works','images','meta','fonts','stamps'];
 function openDB(){return new Promise((res,rej)=>{const r=indexedDB.open('manga4koma',3);r.onupgradeneeded=()=>{const d=r.result;for(const s of STORES)if(!d.objectStoreNames.contains(s))d.createObjectStore(s,{keyPath:'id'});};r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error);});}
 function tx(store,mode,fn){return new Promise((res,rej)=>{if(!db)return res(undefined);const t=db.transaction(store,mode);const req=fn(t.objectStore(store));let out;if(req)req.onsuccess=()=>{out=req.result;};t.oncomplete=()=>res(out);t.onerror=()=>rej(t.error);t.onabort=()=>rej(t.error);});}
@@ -4364,13 +4370,18 @@ async function dpImgOf(p){const k=p.id+':'+(p.updated||0);if(!dpImCache[k])dpImC
 const dpSel=p=>{const d=(p&&p.dp)||{};if(Array.isArray(d.cut))return{cut:d.cut,tol:d.tol||1.2,gap:d.gap==null?2:d.gap,shrink:d.shrink||0};return d.seeds&&d.seeds.some(x=>(x[2]||1)===1)?{seeds:d.seeds}:null;};
 async function dpLayer(p,v){const bg=dpBg(p),sl=dpSel(p);const k=p.id+':'+(p.updated||0)+':'+v+':'+bg+':'+(sl?JSON.stringify(sl):'');if(dpLCache[k])return dpLCache[k];return dpLCache[k]=dpProc(await dpImgOf(p),bg,v,sl);}
 const dpBg=p=>{const b=((p&&p.dp)||{}).bg;return typeof b==='number'?b:16;};
-/* プロンプトに入るタグ。per[i] は人物 i、scene は全体 */
+/* 深度ポーズの部品の人数（3Dで作った2人のポーズは 2。v98 より前の部品は pose3d の人数から） */
+const dpN=p=>{const d=(p&&p.dp)||{};return d.n||(d.pose3d&&Array.isArray(d.pose3d.figs)&&d.pose3d.figs.length)||1;};
+/* プロンプトに入るタグ。per[i] は人物 i、scene は全体。
+   2人のポーズ（dpN=2）を人物 i に選ぶと、人物 i に人物1のタグ（p.tags）、人物 i+1 に人物2のタグ（p.dp.tags2）が入る（人物 i+1 に自分の深度ポーズがないとき） */
 function dpTags(sc){const D=sc&&sc.dpose;const n=((sc&&sc.chars)||[]).length;if(!D||!Array.isArray(D.L))return{per:[],scene:[]};
   const per=[],scene=[],used=[];
   for(let i=0;i<n;i++){const e=D.L[i],p=e&&P_(e.id),t=[];
     if(p){t.push(...splitTags(dpCatTag(p)),...splitTags(p.tags));const a=DP_ANGS.find(x=>x[0]===((p.dp||{}).ang));if(a&&a[2])scene.push(a[2]);
       if(e.hand)t.push(DP_HAND[e.hand]);if(e.foot)t.push(DP_FOOT[e.foot]);used.push(i);}
     per.push(t);}
+  for(let i=0;i<n-1;i++){const e=D.L[i],p=e&&P_(e.id),e2=D.L[i+1];
+    if(p&&dpN(p)>1&&(p.dp||{}).tags2&&!(e2&&P_(e2.id)))per[i+1].push(...splitTags(p.dp.tags2));}
   if(used.length>1){const r=i=>(DP_Z[D.L[i].z]||DP_Z.m).r,mn=Math.min(...used.map(r)),mx=Math.max(...used.map(r));
     if(mn!==mx)for(const i of used){if(r(i)===mn)per[i].push('in foreground');else if(r(i)===mx)per[i].push('in background');}}
   return{per:per.map(x=>[...new Set(x)]),scene:[...new Set(scene)]};}
@@ -4510,9 +4521,11 @@ async function dpOpen3D(src){let m;try{m=await import('./pose3d.js');}catch(e){t
   /* 保存したポーズの入れ物（S.meta.p3dPoses。新しい順） */
   const lib={list:()=>S.meta.p3dPoses||[],save:it=>{S.meta.p3dPoses=[it,...(S.meta.p3dPoses||[]).filter(x=>x.id!==it.id)];dbPut('meta',S.meta);},del:id=>{S.meta.p3dPoses=(S.meta.p3dPoses||[]).filter(x=>x.id!==id);dbPut('meta',S.meta);}};
   m.open3D({lib,pose:src&&src.dp&&src.dp.pose3d||null,onSave:async(blob,pose,meta)=>{const r=await dpNorm(blob);
-    if(src){const p=P_(src.id);if(!p)return;p.img=r.blob;p.dp=Object.assign({},p.dp||{},{bg:r.bg,h:r.h,cut:[],pose3d:pose});await saveNow('parts',p);for(const k in dpLCache)if(k.startsWith(p.id+':'))delete dpLCache[k];toast('3Dのポーズで画像を作り直しました');render(true);return;}
+    /* 直したとき：タグは、部品の欄が空のときだけ 3D の画面のタグを入れる（部品の画面で直したタグを消さない） */
+    if(src){const p=P_(src.id);if(!p)return;p.img=r.blob;p.dp=Object.assign({},p.dp||{},{bg:r.bg,h:r.h,cut:[],pose3d:pose,n:(meta&&meta.n)||1});
+      if(meta&&!p.tags&&meta.tags)p.tags=meta.tags;if(meta&&!p.dp.tags2&&meta.tags2)p.dp.tags2=meta.tags2;await saveNow('parts',p);for(const k in dpLCache)if(k.startsWith(p.id+':'))delete dpLCache[k];toast('3Dのポーズで画像を作り直しました');render(true);return;}
     const k=S.parts.filter(x=>x.type==='depth').length+1;
-    const p={id:uid(),type:'depth',name:(meta&&meta.name)||('3Dポーズ '+k),tags:(meta&&meta.tags)||'',subject:'',weight:'',loraName:'',neg:'',memo:'3Dの人形で作成',text:'',img:r.blob,dp:{cat:(meta&&meta.cat)||'',ang:'',bg:r.bg,h:r.h,cut:[],tol:1.2,gap:2,shrink:0,pose3d:pose},created:Date.now()};
+    const p={id:uid(),type:'depth',name:(meta&&meta.name)||('3Dポーズ '+k),tags:(meta&&meta.tags)||'',subject:'',weight:'',loraName:'',neg:'',memo:'3Dの人形で作成',text:'',img:r.blob,dp:{cat:(meta&&meta.cat)||'',ang:'',bg:r.bg,h:r.h,cut:[],tol:1.2,gap:2,shrink:0,pose3d:pose,n:(meta&&meta.n)||1,tags2:(meta&&meta.tags2)||''},created:Date.now()};
     S.parts.push(p);await saveNow('parts',p);render(true);setTimeout(()=>openDepthPart(p.id,()=>render(true)),250);}});}
 /* ===== 深度ポーズの部品を直す =====
    opt.noNext：「保存して次を貼り付け」を出さない（シーンの人物に選ぶときなど） */
@@ -4541,7 +4554,9 @@ function openDepthPart(id,onSave,blob0,opt){opt=opt||{};
     <label class="f"><span>名前</span><input id="dpName" value="${esc(p.name)}" placeholder="例：片手を腰に立つ"></label>
     <div class="two"><label class="f"><span>カテゴリ</span><select id="dpCat">${DP_CATS.map(c=>`<option value="${c[0]}"${c[0]===p.dp.cat?' selected':''}>${c[1]}${c[2]?'（'+c[2]+'）':''}</option>`).join('')}</select></label>
       <label class="f"><span>アングル</span><select id="dpAng">${DP_ANGS.map(a=>`<option value="${a[0]}"${a[0]===p.dp.ang?' selected':''}>${a[1]}${a[2]?'（'+a[2]+'）':''}</option>`).join('')}</select></label></div>
-    <label class="f"><span>足すタグ（なくてもよい）</span><textarea id="dpTags" rows="2" placeholder="hand on hip, looking at viewer">${esc(p.tags||'')}</textarea><span class="hint">シーンで選ぶと、カテゴリ・アングルのタグと一緒にプロンプトに入ります（カテゴリ・手足は人物ごと、アングルは全体）。手・足が地面についているかは、シーンで選びます。</span></label>
+    ${dpN(p)>1?`<label class="f"><span>人物1のタグ（なくてもよい）</span><textarea id="dpTags" rows="2" placeholder="hand on hip, looking at viewer">${esc(p.tags||'')}</textarea></label>
+    <label class="f"><span>人物2のタグ（なくてもよい）</span><textarea id="dpTags2" rows="2" placeholder="arms crossed, looking at another">${esc(p.dp.tags2||'')}</textarea><span class="hint">2人のポーズです。シーンで人物1にこのポーズを選ぶと、人物1・人物2にそれぞれのタグが入ります（人物2にほかの深度ポーズを選んだときは、人物2はそちらのタグ）。</span></label>`
+    :`<label class="f"><span>足すタグ（なくてもよい）</span><textarea id="dpTags" rows="2" placeholder="hand on hip, looking at viewer">${esc(p.tags||'')}</textarea><span class="hint">シーンで選ぶと、カテゴリ・アングルのタグと一緒にプロンプトに入ります（カテゴリ・手足は人物ごと、アングルは全体）。手・足が地面についているかは、シーンで選びます。</span></label>`}
     <label class="f"><span>メモ</span><textarea id="dpMemo" rows="2">${esc(p.memo||'')}</textarea></label>
     ${used?`<div class="banner info">この深度ポーズは ${used} 件のシーンで使っています。</div>`:''}
     ${src&&src.dp&&src.dp.pose3d?'<div class="row" style="margin:0 0 8px"><button type="button" class="btn ghost" id="dp3dEdit">🧍 3Dの人形で直す</button></div>':''}<div class="row"><button class="btn" id="dpSave">保存</button>${!src&&!opt.noNext?'<button class="btn" id="dpNext">保存して次を貼り付け</button>':''}${src?'<button class="btn danger" id="dpDel">削除</button>':''}<button class="btn ghost" id="dpCancel">${opt.n?'終わる':'やめる'}</button></div>
@@ -4609,6 +4624,8 @@ function openDepthPart(id,onSave,blob0,opt){opt=opt||{};
   const doSave=async next=>{if(!p.img)return toast('先に画像を貼り付けてください');
     p.name=$('#dpName',sb).value.trim()||'深度ポーズ';p.tags=$('#dpTags',sb).value.trim();p.memo=$('#dpMemo',sb).value;if(!cut.length&&!confirm('背景をまだ消していません。このまま保存しますか？（重ねたとき、背景の明るい所が残ります）'))return;
     p.dp={cat:$('#dpCat',sb).value,ang:$('#dpAng',sb).value,bg:dpBg(p),h:p.dp.h||(im?dpSig(im):''),cut:cut.map(x=>x.slice()),tol:+tl.value,gap:+gp.value,shrink:+sh.value};if(src&&src.dp&&src.dp.pose3d)p.dp.pose3d=src.dp.pose3d;
+    /* 2人のポーズ（v98）：人数と人物2のタグも残す */
+    if(src&&src.dp&&src.dp.n)p.dp.n=src.dp.n;{const t2=$('#dpTags2',sb);if(t2)p.dp.tags2=t2.value.trim();else if(src&&src.dp&&src.dp.tags2)p.dp.tags2=src.dp.tags2;}
     const i=S.parts.findIndex(x=>x.id===p.id);if(i>=0)S.parts[i]=p;else S.parts.push(p);await saveNow('parts',p);closeSheet();onSave&&onSave(p);toast('「'+p.name+'」を保存しました');
     if(next)setTimeout(()=>openDepthPart(null,onSave,null,{n:(opt.n||1)+1,cat:p.dp.cat}),120);};
   $('#dpSave',sb).onclick=()=>doSave(false);
