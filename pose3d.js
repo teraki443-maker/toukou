@@ -23,6 +23,8 @@
    ・人物ごとのタグ（v98）：figs[i].tags。「📂 ポーズ」で入れて保存する。深度ポーズとして保存すると、onSave の meta に tags（人物1）・tags2（人物2）・n（人数）を渡す。
      保存したポーズの呼び出し：足す（addPose）・入れかえる（loadPose）・形だけ当てる（applyOne、1人のポーズだけ）。
    ・体の伸縮（v100・v102）：figs[i].scl=[横幅,高さ,厚み]（倍、0.5〜2）。腰を中心に、体の向き（左・上・前。腰の回りといっしょに回る）に沿って伸び縮みさせる（f.St の行列）。足もとの高さは変えない。
+   ・v103：最初からあるポーズを4つ足した（タグ付き。呼び出すと選んでいる人物のタグに入る）。ひじの左右を ±45° に。
+     「🔓 角度の制限をなくす」ボタン（S.nolim）。ふつうの範囲を超える角度のポーズを呼び出すと、制限を自動でなくす（overLim）。
    ・v101：人物の並びに物体（📦）も入れて選べる。戻すは5回まで。輪の上からでもダブルタップで移動の矢印。
      3Dの画面はいつも上に止まる。位置・伸縮の欄にシークバー（▲▼・数字と合わせて3通り）。
    ・移動の矢印（v99）：人物・物体をダブルタップすると、X・Y・Z の矢印（mgiz）が出る。矢印をなぞると、その軸の向きに動く（S.mv）。
@@ -47,7 +49,7 @@ const CHILD={pelvis:'spine_01',spine_01:'spine_02',spine_03:'neck_01',neck_01:'H
   clavicle_r:'upperarm_r',upperarm_r:'lowerarm_r',lowerarm_r:'hand_r',hand_r:'middle_01_r',thigh_l:'calf_l',calf_l:'foot_l',foot_l:'ball_l',thigh_r:'calf_r',calf_r:'foot_r',foot_r:'ball_r'};
 /* ふつうに曲がる範囲（度）[前後, 左右, ひねり]。休めの姿勢からの角度（二の腕だけは、腕を下ろした形が 0°。横に広げると 左右 80°）。ここから10度先で止める */
 const LIM={pelvis:[[-180,180],[-180,180],[-180,180]],spine_01:[[-30,50],[-35,35],[-35,35]],spine_03:[[-25,35],[-25,25],[-30,30]],neck_01:[[-45,50],[-35,35],[-70,70]],Head:[[-30,30],[-25,25],[-20,20]],
-  clavicle:[[-20,20],[-15,35],[-10,10]],upperarm:[[-60,180],[-20,180],[-90,90]],lowerarm:[[0,150],[-5,5],[-80,80]],hand:[[-80,80],[-25,35],[-10,10]],
+  clavicle:[[-20,20],[-15,35],[-10,10]],upperarm:[[-60,180],[-20,180],[-90,90]],lowerarm:[[0,150],[-45,45],[-80,80]],hand:[[-80,80],[-25,35],[-10,10]],
   thigh:[[-30,125],[-30,45],[-45,45]],calf:[[-150,0],[-5,5],[-20,20]],foot:[[-80,30],[-30,30],[-20,20]]};
 const limOf=b=>LIM[b]||LIM[b.replace(/_[lr]$/,'')];
 const AXN=['前後','左右','ひねり'],AXC=[0xe03131,0x2f9e44,0x1c7ed6];
@@ -58,7 +60,12 @@ const PRESETS=[
   {name:'しゃがみ・膝に手',tags:'squatting, hands on own knees',cat:'squat',view:'side',pose:{figs:[{a:{spine_01:[30,0,0],spine_03:[15,0,0],neck_01:[-25,0,0],Head:[-10,0,0],upperarm_l:[20,15,0],upperarm_r:[20,15,0],lowerarm_l:[110,0,0],lowerarm_r:[110,0,0],thigh_l:[110,15,0],thigh_r:[110,15,0],calf_l:[-140,0,0],calf_r:[-140,0,0],foot_l:[30,0,0],foot_r:[30,0,0]}}]}},
   {name:'前かがみ・膝に手',tags:'leaning forward, bent over, hands on own knees',cat:'lean',view:'side',pose:{figs:[{a:{pelvis:[60,0,0],thigh_l:[85,5,0],thigh_r:[85,5,0],calf_l:[-45,0,0],calf_r:[-45,0,0],foot_l:[20,0,0],foot_r:[20,0,0],spine_01:[15,0,0],spine_03:[5,0,0],neck_01:[-40,0,0],Head:[-15,0,0],upperarm_l:[45,-10,0],upperarm_r:[45,-10,0],lowerarm_l:[5,0,0],lowerarm_r:[5,0,0]}}]}},
   {name:'女の子座り・両手を腿に',tags:'wariza, sitting, hands on own thighs',cat:'wariza',view:'front',pose:{figs:[{a:{spine_01:[5,0,0],neck_01:[5,0,0],upperarm_l:[25,-10,0],upperarm_r:[25,-10,0],lowerarm_l:[5,0,0],lowerarm_r:[5,0,0],thigh_l:[65,0,45],thigh_r:[65,0,45],calf_l:[-140,0,0],calf_r:[-140,0,0],foot_l:[-80,0,0],foot_r:[-80,0,0]}}]}},
-  {name:'四つん這い',tags:'all fours',cat:'other',view:'side',pose:{figs:[{a:{pelvis:[78,0,0],thigh_l:[78,5,0],thigh_r:[78,5,0],calf_l:[-90,0,0],calf_r:[-90,0,0],foot_l:[-60,0,0],foot_r:[-60,0,0],neck_01:[-40,0,0],Head:[-20,0,0],upperarm_l:[73,-3,0],upperarm_r:[73,-3,0],lowerarm_l:[10,0,0],lowerarm_r:[10,0,0],hand_l:[80,0,0],hand_r:[80,0,0]}}]}}];
+  {name:'四つん這い',tags:'all fours',cat:'other',view:'side',pose:{figs:[{a:{pelvis:[78,0,0],thigh_l:[78,5,0],thigh_r:[78,5,0],calf_l:[-90,0,0],calf_r:[-90,0,0],foot_l:[-60,0,0],foot_r:[-60,0,0],neck_01:[-40,0,0],Head:[-20,0,0],upperarm_l:[73,-3,0],upperarm_r:[73,-3,0],lowerarm_l:[10,0,0],lowerarm_r:[10,0,0],hand_l:[80,0,0],hand_r:[80,0,0]}}]}},
+  /* v103：posewear.art（ポーズ集）を参考に足した4つ。タグは同じサイトの英語プロンプトをもとにした（壁・I字はサイトにないので、こちらで決めた） */
+  {name:'立ち・脚を開いて両手を腰',tags:'standing, legs apart, hands on own hips',cat:'stand',view:'front',pose:{figs:[{a:{thigh_l:[0,15,0],thigh_r:[0,15,0],foot_l:[0,-15,0],foot_r:[0,-15,0],upperarm_l:[-15,45,70],upperarm_r:[-15,45,70],lowerarm_l:[100,0,0],lowerarm_r:[100,0,0]}}]}},
+  {name:'前かがみ・腕をだらりと下げる',tags:'bending forward, bent over, arms hanging loose',cat:'lean',view:'side',pose:{figs:[{a:{pelvis:[70,0,0],thigh_l:[70,4,0],thigh_r:[70,4,0],calf_l:[-5,0,0],calf_r:[-5,0,0],spine_01:[15,0,0],spine_03:[5,0,0],neck_01:[-15,0,0],upperarm_l:[88,0,0],upperarm_r:[88,0,0],lowerarm_l:[10,0,0],lowerarm_r:[10,0,0]}}]}},
+  {name:'壁に手をついて腰を突き出す',tags:'standing, bent over, leaning forward, hands on wall, arched back, hips pushed back',cat:'lean',view:'side',pose:{figs:[{a:{pelvis:[80,0,0],thigh_l:[88,12,0],thigh_r:[88,12,0],calf_l:[-5,0,0],calf_r:[-5,0,0],foot_l:[5,0,0],foot_r:[5,0,0],spine_01:[-20,0,0],spine_03:[-10,0,0],neck_01:[-40,0,0],Head:[-15,0,0],upperarm_l:[125,0,0],upperarm_r:[125,0,0],lowerarm_l:[10,0,0],lowerarm_r:[10,0,0]}}]}},
+  {name:'立ち・片脚を肩まで上げて足首を持つ（I字）',tags:'standing, standing split, standing on one leg, leg up, holding own ankle',cat:'stand',view:'front',pose:{figs:[{a:{spine_01:[0,-12,0],spine_03:[0,-8,0],neck_01:[0,8,0],thigh_l:[0,175,30],foot_l:[30,0,0],upperarm_l:[40,120,0],lowerarm_l:[60,0,0],upperarm_r:[0,80,0],lowerarm_r:[10,0,0]}}]}}];
 const gltfCache={},PRE_IMG={};/* PRE_IMG：最初からあるポーズの絵（作ったら覚えておく） */
 const loadModel=name=>gltfCache[name]||(gltfCache[name]=new Promise((res,rej)=>new GLTFLoader().load(new URL('./models/'+name+'.glb',location.href).href,res,undefined,e=>{delete gltfCache[name];rej(e);})));
 const V=()=>new THREE.Vector3(),Q=()=>new THREE.Quaternion();
@@ -98,7 +105,7 @@ export async function open3D(o){o=o||{};
       <div class="p3figs"></div>
       <div class="p3joint"><span class="p3jn">関節：<b>（体の点をタップ）</b></span> <span class="p3ang"></span>
         <div class="p3leg"><span style="color:${hex(AXC[0])}">● 前後</span><span style="color:${hex(AXC[1])}">● 左右</span><span style="color:${hex(AXC[2])}">● ひねり</span><span>輪を指でなぞると回ります</span></div>
-        <div class="p3row"><button type="button" data-step="-5">－5°</button><button type="button" data-step="5">＋5°</button><button type="button" data-a="resetJ">この関節を戻す</button><button type="button" data-a="armsDown">腕を下ろす</button><button type="button" data-a="resetAll">この人物を戻す</button></div>
+        <div class="p3row"><button type="button" data-step="-5">－5°</button><button type="button" data-step="5">＋5°</button><button type="button" data-a="resetJ">この関節を戻す</button><button type="button" data-a="armsDown">腕を下ろす</button><button type="button" data-a="resetAll">この人物を戻す</button><button type="button" data-a="nolim" class="p3nl">🔓 角度の制限をなくす</button></div>
         <div class="p3sym"><span>左右対称</span><span class="p3sg">上半身<button type="button" data-sym="up" data-from="l">左→右</button><button type="button" data-sym="up" data-from="r">右→左</button></span><span class="p3sg">下半身<button type="button" data-sym="low" data-from="l">左→右</button><button type="button" data-sym="low" data-from="r">右→左</button></span></div></div>
       <div class="p3pos"><div class="p3ph"><b>人物の位置</b><span class="p3u">（cm）</span><span class="p3st">大きさ<button type="button" data-size="-1" aria-label="小さく">－</button><b class="p3sz"></b><button type="button" data-size="1" aria-label="大きく">＋</button></span></div>
         ${[['x','左右'],['y','上下'],['z','奥・手前']].map(([k,l],i)=>`<div class="p3pr"><span>${l}<small>（${k.toUpperCase()}）</small></span><button type="button" data-mv="${i}" data-d="-1" aria-label="${l}を減らす">▼</button><input type="number" inputmode="decimal" step="1" data-pv="${i}" aria-label="${l}（cm）"><button type="button" data-mv="${i}" data-d="1" aria-label="${l}を増やす">▲</button></div>`).join('')}
@@ -351,10 +358,13 @@ export async function open3D(o){o=o||{};
     try{for(const d of figs.slice(0,2))await addFig(d);}catch(e){msg.textContent='人形を読み込めませんでした。はじめはネットにつないで開いてください。';return;}
     /* 物体：ポーズに objs があれば入れかえる（ない古いポーズを呼び出したときは、今の物体をそのまま残す） */
     if(ps&&Array.isArray(ps.objs))await setObjs(ps.objs);
-    msg.hidden=true;selJoint(null);drawFigs();render();
+    msg.hidden=true;selJoint(null);drawFigs();render();for(const f of S.figs)overLim(f);
     if(ps&&ps.cam){cam.position.fromArray(ps.cam.p);ctl.target.fromArray(ps.cam.t);ctl.update();draw();}else setView('front');};
   /* 1人分のポーズ d を、今選んでいる人物だけに当てる（人形・位置の左右と奥行き・大きさはそのまま。地面につけ直す）。ほかの人物はそのまま */
-  const applyOne=d=>{const f=F();if(!f)return;for(const b in f.ang)f.ang[b]=d.a&&d.a[b]?d.a[b].slice(0,3):[0,0,0];toGround(f);selJoint(null);drawFigs();draw();};
+  const applyOne=d=>{const f=F();if(!f)return;for(const b in f.ang)f.ang[b]=d.a&&d.a[b]?d.a[b].slice(0,3):[0,0,0];toGround(f);selJoint(null);drawFigs();draw();overLim(f);};
+  /* ふつうの範囲（＋10°）を超える角度があるときは、角度の制限を自動でなくす（v103。I字など。制限があると、動かしたとたんに範囲へ戻ってしまうため） */
+  const overLim=f=>{if(S.nolim||!f)return;for(const b in f.ang){if(b==='pelvis')continue;const L=f.info[b]&&f.info[b].lim;if(!L)continue;
+      if(f.ang[b].some((v,k)=>v<L[k][0]-MARGIN||v>L[k][1]+MARGIN)){act.nolim();setTimeout(()=>toast3('ふつうの範囲を超える角度があるので、角度の制限をなくしました'),1800);return;}}};
   /* 保存したポーズ ps を、今の人物・物体に足す（v98）。人物は2人まで（入らない人物は飛ばす）。
      保存したときの並び方を保ったまま、全体を今の人物（人物1）の横へずらす。戻り値：飛ばした人物の数 */
   const p3=p=>!p?[0,0,0]:p.length===2?[p[0],0,p[1]]:p.slice(0,3);
@@ -366,7 +376,7 @@ export async function open3D(o){o=o||{};
     catch(e){toast3('人形を読み込めませんでした');}
     let miss=0;for(const d of os){try{const o=await makeObj(Object.assign({},d,{pos:[r4(d.pos[0]+off[0]),d.pos[1],r4(d.pos[2]+off[2])]}));scene.add(o.G);S.objs.push(o);}catch(e){miss++;}}
     if(miss)toast3(miss+'個の物体が見つかりませんでした（この端末に取り込まれていない glb です）');
-    msg.hidden=true;if(first>=0)S.cur=first;S.osel=null;selJoint(null);drawFigs();drawObjs();render();return fs.length-take.length;};
+    msg.hidden=true;if(first>=0)S.cur=first;S.osel=null;selJoint(null);drawFigs();drawObjs();render();for(const f of S.figs)overLim(f);return fs.length-take.length;};
   /* 深度ポーズとして保存するときに渡す情報。tags は人物1、tags2 は人物2 のタグ、n は人数 */
   const metaOut=()=>({name:(S.meta&&S.meta.name)||'',cat:(S.meta&&S.meta.cat)||'',tags:(S.figs[0]&&S.figs[0].tags)||'',tags2:(S.figs[1]&&S.figs[1].tags)||'',n:S.figs.length});
   const poseData=()=>({figs:S.figs.map(f=>{const a={};for(const[b,v]of Object.entries(f.ang))if(v.some(x=>x))a[b]=v.map(x=>Math.round(x*10)/10);return{model:f.model,a,pos:f.pos.map(x=>+x.toFixed(4)),scale:+f.scale.toFixed(3),...(f.scl.some(v=>v!==1)?{scl:f.scl.map(v=>+v.toFixed(3))}:{}),...(f.tags?{tags:f.tags}:{})};}),
@@ -430,12 +440,13 @@ export async function open3D(o){o=o||{};
 
   /* ===== 関節 ===== */
   const showAng=()=>{const f=F(),b=S.sel;if(!f||!b||!f.info[b]){$('.p3ang').textContent='';return;}const k=S.ax,L=f.info[b].lim[k];
-    $('.p3ang').innerHTML=`<span style="color:${hex(AXC[k])}">${AXN[k]}</span> ${Math.round(f.ang[b][k])}°`+(b==='pelvis'?'':`（ふつうは ${L[0]}〜${L[1]}°）`);};
+    $('.p3ang').innerHTML=`<span style="color:${hex(AXC[k])}">${AXN[k]}</span> ${Math.round(f.ang[b][k])}°`+(b==='pelvis'?'':`（ふつうは ${L[0]}〜${L[1]}°${S.nolim?'・制限なし':''}）`);};
   const selJoint=b=>{S.sel=b&&F()&&F().info[b]?b:null;if(S.sel)S.mv=null;if(S.sel&&S.osel!=null){S.osel=null;drawObjs();}/* 関節を選んだら、物体の選択はやめる */const j=JOINTS.find(x=>x[0]===S.sel);$('.p3jn b').textContent=j?j[1]:'（体の点をタップ）';showAng();draw();};
   let limT=0;
   const rotate=(k,deg)=>{const f=F(),b=S.sel;if(!f||!b||!f.info[b])return;S.ax=k;const L=f.info[b].lim[k],a=f.ang[b];
     let v=a[k]+deg;
-    if(b==='pelvis')v=((v+180)%360+360)%360-180;
+    /* 制限なし（v103）のときと腰は、-180〜180° でひと回りする */
+    if(b==='pelvis'||S.nolim)v=((v+180)%360+360)%360-180;
     else{const lo=L[0]-MARGIN,hi=L[1]+MARGIN;if(v<lo||v>hi){v=Math.max(lo,Math.min(hi,v));if(Date.now()-limT>1500){limT=Date.now();toast3('これ以上は曲がりません（ふつうの範囲＋10°で止めています）');}}}
     a[k]=v;showAng();draw();};
 
@@ -531,6 +542,9 @@ export async function open3D(o){o=o||{};
     undo:()=>{const d=S.undo.pop();drawUndo();if(d)restore(d);},
     look:()=>{S.depthView=!S.depthView;$('[data-a="look"]').textContent=S.depthView?'人形で見る':'深度で見る';draw();},
     resetJ:()=>{const f=F();if(!f||!S.sel)return;snap();f.ang[S.sel]=[0,0,0];showAng();draw();},
+    /* 角度の制限をなくす・戻す（v103）。もう一度押すと、ふつうの範囲＋10° で止める形に戻る（今の角度はそのまま） */
+    nolim:()=>{S.nolim=!S.nolim;const b=$('.p3nl');b.classList.toggle('on',S.nolim);b.textContent=S.nolim?'🔒 角度の制限を戻す':'🔓 角度の制限をなくす';showAng();
+      toast3(S.nolim?'角度の制限をなくしました（関節はどこまでも回ります）':'角度の制限を戻しました');},
     sclReset:()=>{const f=F();if(!f)return;snap();const lo=lowY(f);f.scl=[1,1,1];const lo2=lowY(f);if(lo<1e8&&lo2<1e8)f.pos[1]=r4(f.pos[1]+lo-lo2);draw();},
     resetAll:()=>{const f=F();if(!f)return;snap();for(const b in f.ang)f.ang[b]=[0,0,0];showAng();draw();},
     armsDown:()=>{const f=F();if(!f)return;snap();for(const b of['upperarm_l','upperarm_r'])if(f.ang[b])f.ang[b]=[0,0,0];showAng();draw();},

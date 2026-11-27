@@ -583,6 +583,7 @@ details.nh .nhb .sec{border:0;padding:0;background:none;box-shadow:none}
 .p3rg::-webkit-slider-runnable-track{height:6px;border-radius:3px;background:var(--line2)}.p3rg::-webkit-slider-thumb{-webkit-appearance:none;width:28px;height:28px;margin-top:-11px;border-radius:50%;background:#4c5fd5;border:3px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.35)}
 .p3rg::-moz-range-track{height:6px;border-radius:3px;background:var(--line2)}.p3rg::-moz-range-thumb{width:22px;height:22px;border-radius:50%;background:#4c5fd5;border:3px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.35)}
 @media (max-width:480px){.p3pr{gap:4px}.p3pr>span{width:4.4em;font-size:12px}.p3pr>span small{white-space:nowrap;display:inline-block}.p3pr input[type=number]{flex-basis:50px}.p3pr button{width:34px}}.p3pr input[type=number]{flex:0 0 62px;padding:0 4px}.p3pr button{width:38px}
+.p3row button.p3nl.on{background:#ff8a00;border-color:#ff8a00;color:#fff}
 .p3figs .p3fo{border-color:#ff8a00;color:#c25e00}.p3figs .p3fo.on{background:#ff8a00;border-color:#ff8a00;color:#fff}
 .p3oe[hidden]{display:none}
 .p3og{display:flex;align-items:center;gap:6px;margin-top:8px;font-size:13px;font-weight:700}.p3og small{color:var(--sub);font-weight:400;font-size:11px}.p3og .p3st{margin-left:auto;font-weight:400}
@@ -664,7 +665,7 @@ const FMT={
 
 /* ========== データベース（IndexedDB） ========== */
 let db=null;
-const APP_VER='v102';/* sw.js の VERSION と同じにする */
+const APP_VER='v103';/* sw.js の VERSION と同じにする */
 const STORES=['parts','scenes','works','images','meta','fonts','stamps'];
 function openDB(){return new Promise((res,rej)=>{const r=indexedDB.open('manga4koma',3);r.onupgradeneeded=()=>{const d=r.result;for(const s of STORES)if(!d.objectStoreNames.contains(s))d.createObjectStore(s,{keyPath:'id'});};r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error);});}
 function tx(store,mode,fn){return new Promise((res,rej)=>{if(!db)return res(undefined);const t=db.transaction(store,mode);const req=fn(t.objectStore(store));let out;if(req)req.onsuccess=()=>{out=req.result;};t.oncomplete=()=>res(out);t.onerror=()=>rej(t.error);t.onabort=()=>rej(t.error);});}
