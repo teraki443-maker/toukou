@@ -23,6 +23,7 @@
    ・人物ごとのタグ（v98）：figs[i].tags。「📂 ポーズ」で入れて保存する。深度ポーズとして保存すると、onSave の meta に tags（人物1）・tags2（人物2）・n（人数）を渡す。
      保存したポーズの呼び出し：足す（addPose）・入れかえる（loadPose）・形だけ当てる（applyOne、1人のポーズだけ）。
    ・体の伸縮（v100・v102）：figs[i].scl=[横幅,高さ,厚み]（倍、0.5〜2）。腰を中心に、体の向き（左・上・前。腰の回りといっしょに回る）に沿って伸び縮みさせる（f.St の行列）。足もとの高さは変えない。
+   ・v104：最初からあるポーズに「横向き寝・頬杖」を足した（脚をそろえて、体ぜんぶを床に）。
    ・v103：最初からあるポーズを4つ足した（タグ付き。呼び出すと選んでいる人物のタグに入る）。ひじの左右を ±45° に。
      「🔓 角度の制限をなくす」ボタン（S.nolim）。ふつうの範囲を超える角度のポーズを呼び出すと、制限を自動でなくす（overLim）。
    ・v101：人物の並びに物体（📦）も入れて選べる。戻すは5回まで。輪の上からでもダブルタップで移動の矢印。
@@ -61,9 +62,11 @@ const PRESETS=[
   {name:'前かがみ・膝に手',tags:'leaning forward, bent over, hands on own knees',cat:'lean',view:'side',pose:{figs:[{a:{pelvis:[60,0,0],thigh_l:[85,5,0],thigh_r:[85,5,0],calf_l:[-45,0,0],calf_r:[-45,0,0],foot_l:[20,0,0],foot_r:[20,0,0],spine_01:[15,0,0],spine_03:[5,0,0],neck_01:[-40,0,0],Head:[-15,0,0],upperarm_l:[45,-10,0],upperarm_r:[45,-10,0],lowerarm_l:[5,0,0],lowerarm_r:[5,0,0]}}]}},
   {name:'女の子座り・両手を腿に',tags:'wariza, sitting, hands on own thighs',cat:'wariza',view:'front',pose:{figs:[{a:{spine_01:[5,0,0],neck_01:[5,0,0],upperarm_l:[25,-10,0],upperarm_r:[25,-10,0],lowerarm_l:[5,0,0],lowerarm_r:[5,0,0],thigh_l:[65,0,45],thigh_r:[65,0,45],calf_l:[-140,0,0],calf_r:[-140,0,0],foot_l:[-80,0,0],foot_r:[-80,0,0]}}]}},
   {name:'四つん這い',tags:'all fours',cat:'other',view:'side',pose:{figs:[{a:{pelvis:[78,0,0],thigh_l:[78,5,0],thigh_r:[78,5,0],calf_l:[-90,0,0],calf_r:[-90,0,0],foot_l:[-60,0,0],foot_r:[-60,0,0],neck_01:[-40,0,0],Head:[-20,0,0],upperarm_l:[73,-3,0],upperarm_r:[73,-3,0],lowerarm_l:[10,0,0],lowerarm_r:[10,0,0],hand_l:[80,0,0],hand_r:[80,0,0]}}]}},
-  /* v103：posewear.art（ポーズ集）を参考に足した4つ。タグは同じサイトの英語プロンプトをもとにした（壁・I字はサイトにないので、こちらで決めた） */
+  /* v103：posewear.art（ポーズ集）を参考に足した4つ（v104 で横向き寝・頬杖を足して5つ）。タグは同じサイトの英語プロンプトをもとにした（壁・I字はサイトにないので、こちらで決めた） */
   {name:'立ち・脚を開いて両手を腰',tags:'standing, legs apart, hands on own hips',cat:'stand',view:'front',pose:{figs:[{a:{thigh_l:[0,15,0],thigh_r:[0,15,0],foot_l:[0,-15,0],foot_r:[0,-15,0],upperarm_l:[-15,45,70],upperarm_r:[-15,45,70],lowerarm_l:[100,0,0],lowerarm_r:[100,0,0]}}]}},
   {name:'前かがみ・腕をだらりと下げる',tags:'bending forward, bent over, arms hanging loose',cat:'lean',view:'side',pose:{figs:[{a:{pelvis:[70,0,0],thigh_l:[70,4,0],thigh_r:[70,4,0],calf_l:[-5,0,0],calf_r:[-5,0,0],spine_01:[15,0,0],spine_03:[5,0,0],neck_01:[-15,0,0],upperarm_l:[88,0,0],upperarm_r:[88,0,0],lowerarm_l:[10,0,0],lowerarm_r:[10,0,0]}}]}},
+  /* v104：左を下にして体ぜんぶを床につけ、ひざを少し曲げて脚をそろえる。下（左）の手で頬杖、上（右）の手は腰に（ユーザーの参考の絵に合わせ、ユーザーがプレビューで調整した角度） */
+  {name:'横向き寝・頬杖',tags:'lying, on side, head propped on hand, head rest, legs together, hand on own hip',cat:'lie',view:'front',pose:{figs:[{a:{pelvis:[0,83.5,0],spine_01:[0,-12.9,1.2],spine_03:[0,10,0],neck_01:[0,10,0],Head:[0,-35,0],thigh_l:[30,-8,1.2],thigh_r:[30,-8,-2.2],calf_l:[-60,0,0],calf_r:[-60,0,0],foot_l:[-15,0,0],foot_r:[-15,0,0],upperarm_l:[0,120,-75],lowerarm_l:[116.6,0,0],upperarm_r:[-20,10,40],lowerarm_r:[60,0,0]}}]}},
   {name:'壁に手をついて腰を突き出す',tags:'standing, bent over, leaning forward, hands on wall, arched back, hips pushed back',cat:'lean',view:'side',pose:{figs:[{a:{pelvis:[80,0,0],thigh_l:[88,12,0],thigh_r:[88,12,0],calf_l:[-5,0,0],calf_r:[-5,0,0],foot_l:[5,0,0],foot_r:[5,0,0],spine_01:[-20,0,0],spine_03:[-10,0,0],neck_01:[-40,0,0],Head:[-15,0,0],upperarm_l:[125,0,0],upperarm_r:[125,0,0],lowerarm_l:[10,0,0],lowerarm_r:[10,0,0]}}]}},
   {name:'立ち・片脚を肩まで上げて足首を持つ（I字）',tags:'standing, standing split, standing on one leg, leg up, holding own ankle',cat:'stand',view:'front',pose:{figs:[{a:{spine_01:[0,-12,0],spine_03:[0,-8,0],neck_01:[0,8,0],thigh_l:[0,175,30],foot_l:[30,0,0],upperarm_l:[40,120,0],lowerarm_l:[60,0,0],upperarm_r:[0,80,0],lowerarm_r:[10,0,0]}}]}}];
 const gltfCache={},PRE_IMG={};/* PRE_IMG：最初からあるポーズの絵（作ったら覚えておく） */

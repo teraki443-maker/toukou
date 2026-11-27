@@ -665,7 +665,7 @@ const FMT={
 
 /* ========== データベース（IndexedDB） ========== */
 let db=null;
-const APP_VER='v103';/* sw.js の VERSION と同じにする */
+const APP_VER='v104';/* sw.js の VERSION と同じにする */
 const STORES=['parts','scenes','works','images','meta','fonts','stamps'];
 function openDB(){return new Promise((res,rej)=>{const r=indexedDB.open('manga4koma',3);r.onupgradeneeded=()=>{const d=r.result;for(const s of STORES)if(!d.objectStoreNames.contains(s))d.createObjectStore(s,{keyPath:'id'});};r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error);});}
 function tx(store,mode,fn){return new Promise((res,rej)=>{if(!db)return res(undefined);const t=db.transaction(store,mode);const req=fn(t.objectStore(store));let out;if(req)req.onsuccess=()=>{out=req.result;};t.oncomplete=()=>res(out);t.onerror=()=>rej(t.error);t.onabort=()=>rej(t.error);});}
