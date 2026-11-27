@@ -15,9 +15,16 @@
    ・深度の画像は、手前ほど白、奥ほど黒（背景は透明）。800×912 の PNG。
    ・open3D({pose,onSave,lib}) で開く。
        pose={figs:[{model,a:{骨:[前後,左右,ひねり]},pos:[x,y,z],scale}],cam:{p,t}}（v92 の pos:[x,z] も読める）
-       onSave(blob,pose,meta)、meta={name,tags,cat}（最初からあるポーズを使ったとき）。lib は保存したポーズの入れ物（list・save・del）。 */
+       onSave(blob,pose,meta)、meta={name,tags,cat}（最初からあるポーズを使ったとき）。lib は保存したポーズの入れ物（list・save・del）。
+   ・物体（v96）：glb ファイルを取り込んで、人物のほかに置ける（椅子・ベッド・車など）。
+       取り込んだ glb は、この端末の IndexedDB「toukou3d」にしまう（list：名前など、data：ファイルの中身）。次からは「📦 物体」から呼び出せる。
+       物体ごとに 位置（x,y,z、m）・角度（x,y,z、度）・伸縮（x,y,z、倍）。深度の画像にも写る。
+       pose.objs=[{id,name,pos:[x,y,z],rot:[x,y,z],scl:[x,y,z]}]。id は取り込んだ glb の id（別の端末では見つからないので、置かない）。
+       物体の中心が位置の点。大きすぎる・小さすぎる glb（いちばん長い辺が 20m より上、2cm より下）は、1m に合わせて読み込む。 */
 import * as THREE from 'three';
 import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
+import {DRACOLoader} from 'three/addons/loaders/DRACOLoader.js';
+import {MeshoptDecoder} from 'three/addons/libs/meshopt_decoder.module.js';
 import {OrbitControls} from 'three/addons/controls/OrbitControls.js';
 import {clone as cloneSkel} from 'three/addons/utils/SkeletonUtils.js';
 
@@ -49,6 +56,26 @@ const V=()=>new THREE.Vector3(),Q=()=>new THREE.Quaternion();
 const esc=t=>String(t==null?'':t).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const hex=c=>'#'+c.toString(16).padStart(6,'0');
 
+/* ===== 取り込んだ glb（物体）の入れ物：IndexedDB「toukou3d」。list={id,name,size,created}、data={id,buf} ===== */
+const ODB=(()=>{let p=null;
+  const open=()=>p||(p=new Promise((res,rej)=>{const r=indexedDB.open('toukou3d',1);r.onupgradeneeded=()=>{const d=r.result;for(const s of['list','data'])if(!d.objectStoreNames.contains(s))d.createObjectStore(s,{keyPath:'id'});};r.onsuccess=()=>res(r.result);r.onerror=()=>{p=null;rej(r.error);};}));
+  const run=(st,mode,fn)=>open().then(d=>new Promise((res,rej)=>{const t=d.transaction(st,mode);const q=fn(st.map?st.map(s=>t.objectStore(s)):t.objectStore(st));let out;if(q)q.onsuccess=()=>{out=q.result;};t.oncomplete=()=>res(out);t.onerror=t.onabort=()=>rej(t.error);}));
+  return{list:()=>run('list','readonly',s=>s.getAll()).then(r=>(r||[]).sort((a,b)=>b.created-a.created)),
+    data:id=>run('data','readonly',s=>s.get(id)),
+    add:(m,buf)=>run(['list','data'],'readwrite',([l,d])=>{l.put(m);d.put({id:m.id,buf});}),
+    rename:m=>run('list','readwrite',s=>s.put(m)),
+    del:id=>run(['list','data'],'readwrite',([l,d])=>{l.delete(id);d.delete(id);})};})();
+let glLd=null;
+const glLoader=()=>{if(glLd)return glLd;glLd=new GLTFLoader();const d=new DRACOLoader();d.setDecoderPath('https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/libs/draco/gltf/');glLd.setDRACOLoader(d);glLd.setMeshoptDecoder(MeshoptDecoder);return glLd;};
+const parseGlb=buf=>new Promise((res,rej)=>glLoader().parse(buf,'',res,rej));
+const objCache={};
+const loadObj=id=>objCache[id]||(objCache[id]=ODB.data(id).then(r=>{if(!r||!r.buf)throw new Error('none');return parseGlb(r.buf);}).catch(e=>{delete objCache[id];throw e;}));
+const kb=n=>n>=1048576?(n/1048576).toFixed(1)+'MB':Math.max(1,Math.round(n/1024))+'KB';
+/* 物体の数字の欄：p 位置（m、画面は cm）、r 角度（度）、s 伸縮（倍、画面は %） */
+const OK={p:{lab:'位置',u:'cm',st:.05,show:v=>Math.round(v*100),read:v=>v/100},r:{lab:'角度',u:'度',st:15,show:v=>Math.round(v),read:v=>v},s:{lab:'伸縮',u:'%',st:.1,show:v=>Math.round(v*100),read:v=>v/100}};
+const r4=v=>+(+v).toFixed(4);
+const wrapDeg=v=>{v=((v+180)%360+360)%360-180;return v===-180?180:v;};
+
 export async function open3D(o){o=o||{};
   document.querySelectorAll('#p3d').forEach(x=>x.remove());
   const el=document.createElement('div');el.id='p3d';
@@ -68,13 +95,24 @@ export async function open3D(o){o=o||{};
         ${[['x','左右'],['y','上下'],['z','奥・手前']].map(([k,l],i)=>`<div class="p3pr"><span>${l}<small>（${k.toUpperCase()}）</small></span><button type="button" data-mv="${i}" data-d="-1" aria-label="${l}を減らす">▼</button><input type="number" inputmode="decimal" step="1" data-pv="${i}" aria-label="${l}（cm）"><button type="button" data-mv="${i}" data-d="1" aria-label="${l}を増やす">▲</button></div>`).join('')}
         <div class="p3row"><button type="button" class="btn sm" data-a="ground">⬇ 地面につける</button></div>
         <p class="p3hint" style="margin:4px 0 0">▲▼ で 5cm ずつ動きます。数字を入れて動かすこともできます。左右は画面の右が＋（正面から見たとき）、上下は上が＋、奥・手前は手前が＋です。動かしたあと「地面につける」を押すと、体のいちばん低い所が地面につきます。</p></div>
+      <div class="p3obj"><div class="p3ph"><b>物体（glb）</b><button type="button" class="p3lb" data-a="objLib" style="margin-left:auto">📦 物体を呼び出す</button></div>
+        <div class="p3ol"></div>
+        <div class="p3oe" hidden>
+          ${Object.entries(OK).map(([k,K])=>`<div class="p3og">${K.lab}<small>（${K.u}）</small>${k==='s'?`<span class="p3st">全体<button type="button" data-oa="sAll" data-d="-1" aria-label="全体を小さく">－</button><button type="button" data-oa="sAll" data-d="1" aria-label="全体を大きく">＋</button></span>`:''}</div>`
+            +['X','Y','Z'].map((x,i)=>`<div class="p3pr"><span>${x}<small>${k==='p'?['（左右）','（上下）','（奥・手前）'][i]:''}</small></span><button type="button" data-ok="${k}" data-oi="${i}" data-d="-1" aria-label="${K.lab}${x}を減らす">▼</button><input type="number" inputmode="decimal" step="1" data-ov="${k}" data-oi="${i}" aria-label="${K.lab}${x}（${K.u}）"><button type="button" data-ok="${k}" data-oi="${i}" data-d="1" aria-label="${K.lab}${x}を増やす">▲</button></div>`).join('')).join('')}
+          <div class="p3row"><button type="button" class="btn sm" data-oa="ground">⬇ 地面につける</button><button type="button" data-oa="rot0">角度を戻す</button><button type="button" data-oa="scl0">伸縮を戻す</button><button type="button" data-oa="dup">複製</button><button type="button" data-oa="del">この物体を外す</button></div>
+          <p class="p3hint" style="margin:4px 0 0">▲▼ で 位置は 5cm、角度は 15°、伸縮は 10% ずつ変わります。数字を入れることもできます。角度は X（横の軸）・Y（縦の軸）・Z（奥行きの軸）のまわりに回します。伸縮の「全体」は、形を変えずに大きさだけ変えます。画面で物体をタップしても選べます（オレンジの枠）。</p></div></div>
       <p class="p3hint">体の点をタップすると、その関節に輪が出ます。輪を指でなぞると回ります（ふつうに曲がる範囲より10°先で止まります）。左右は人形から見た左右です。何もない所をなぞるとカメラが回り、長押ししてからなぞるとカメラが平行に動きます。2本の指で拡大・移動です。「左右対称」の「左→右」は、人形の左側の形を右側に写します。「↶ 戻す」で、直近3回までの変更を戻せます。</p>
       <div class="p3row p3save"><button type="button" class="btn" data-a="save">深度ポーズとして保存</button><button type="button" class="btn ghost" data-a="png">PNG を保存</button></div>
     </div>
     <div class="p3lib" hidden><div class="p3libin"><div class="p3top"><b>保存したポーズ</b><button type="button" class="p3x" data-a="libClose" aria-label="閉じる">✕</button></div>
       <div class="p3row" style="padding:0 10px"><input class="p3nm" placeholder="ポーズの名前（例：2人で並んで立つ）"><button type="button" class="btn sm" data-a="libSave">今のポーズを保存</button></div>
       <p class="p3hint" style="padding:0 10px">呼び出すと、人物・人形・関節・位置・大きさ・カメラが、保存したときと同じになります。最初からあるポーズは、深度ポーズとして保存するときに、名前・タグ・カテゴリも入ります。</p><div class="p3list"></div>
-      <div class="p3top" style="position:static"><b>最初からあるポーズ</b></div><div class="p3pre"></div></div></div>`;
+      <div class="p3top" style="position:static"><b>最初からあるポーズ</b></div><div class="p3pre"></div></div></div>
+    <div class="p3olib" hidden><div class="p3libin"><div class="p3top"><b>物体（glb）を呼び出す</b><button type="button" class="p3x" data-a="objLibClose" aria-label="閉じる">✕</button></div>
+      <div class="p3row" style="padding:0 10px"><label class="btn sm">＋ glb ファイルを取り込む<input type="file" accept=".glb,model/gltf-binary" multiple hidden class="p3oin"></label></div>
+      <p class="p3hint" style="padding:0 10px">取り込んだ glb は、この端末の中にしまわれ、次からはこの一覧から呼び出せます（ほかの端末には送られません）。.glb の形のファイルだけ使えます（.gltf は、Blender などで .glb に書き出してください）。</p>
+      <div class="p3olist"></div></div></div>`;
   document.body.appendChild(el);history.pushState({p3d:1},'');
   const $=s=>el.querySelector(s),$$=s=>[...el.querySelectorAll(s)];
   const cv=$('.p3cv'),stage=$('.p3stage'),msg=$('.p3msg');
@@ -91,7 +129,9 @@ export async function open3D(o){o=o||{};
   const gizmo=new THREE.Group();gizmo.visible=false;scene.add(gizmo);const rings=[],hits=[];
   for(let k=0;k<3;k++){const r=new THREE.Mesh(new THREE.TorusGeometry(1,.035,8,64),new THREE.MeshBasicMaterial({color:AXC[k],depthTest:false,transparent:true,opacity:.95}));r.renderOrder=1000;gizmo.add(r);rings.push(r);
     const h=new THREE.Mesh(new THREE.TorusGeometry(1,.2,6,40),new THREE.MeshBasicMaterial({visible:false}));h.userData.k=k;r.add(h);hits.push(h);}
-  const S={figs:[],cur:0,sel:null,ax:0,depthView:false,undo:[],meta:null};el.__p3=S;/* 確かめるとき用 */
+  /* 選んだ物体のオレンジの枠 */
+  const obox=new THREE.BoxHelper(undefined,0xff8a00);obox.visible=false;obox.material.depthTest=false;obox.renderOrder=998;scene.add(obox);
+  const S={figs:[],cur:0,sel:null,ax:0,depthView:false,undo:[],meta:null,objs:[],osel:null};el.__p3=S;/* 確かめるとき用 */
   const F=()=>S.figs[S.cur];
   let raf=0;const draw=()=>{if(!raf)raf=requestAnimationFrame(()=>{raf=0;render();});};
   const size=()=>{const w=stage.clientWidth,h=Math.round(w*OH/OW);const mh=Math.max(240,Math.round(window.innerHeight*.5));const ww=h>mh?Math.round(mh*OW/OH):w,hh=Math.min(h,mh);
@@ -121,10 +161,33 @@ export async function open3D(o){o=o||{};
     bone.quaternion.copy(qp).multiply(qr);if(I.dn)bone.quaternion.multiply(Q().setFromAxisAngle(I.rL,I.dn*D2R));bone.quaternion.multiply(f.rest[b]).multiply(qt);};
   /* 姿勢・位置・大きさを当てる（骨の行列も今の姿勢にする。しないと体の形の計算が1回遅れる） */
   const pose=f=>{for(const b in f.info)applyBone(f,b);f.G.position.set(f.pos[0],f.pos[1],f.pos[2]);f.G.scale.setScalar(f.scale);f.G.updateMatrixWorld(true);for(const m of f.meshes)m.skeleton.update();};
+  /* ===== 物体（glb）を1つ作る。d={id,name,pos,rot,scl}。中心を位置の点にする（inner の中で中心を原点へ） ===== */
+  async function makeObj(d){const g=await loadObj(d.id);const raw=cloneSkel(g.scene);
+    raw.traverse(n=>{if(n.isMesh)n.frustumCulled=false;});raw.updateMatrixWorld(true);
+    const bb=new THREE.Box3().setFromObject(raw),sz=bb.isEmpty()?new THREE.Vector3(1,1,1):bb.getSize(V()),c=bb.isEmpty()?V():bb.getCenter(V());
+    const mx=Math.max(sz.x,sz.y,sz.z)||1,k=(mx>20||mx<.02)?1/mx:1;
+    raw.position.sub(c);const inner=new THREE.Group();inner.add(raw);inner.scale.setScalar(k);const G=new THREE.Group();G.add(inner);
+    const v3=(a,z)=>Array.isArray(a)&&a.length===3?a.map(Number):[z,z,z];
+    return{id:d.id,name:d.name||'物体',G,size:sz.clone().multiplyScalar(k),fit:k!==1,pos:v3(d.pos,0),rot:v3(d.rot,0),scl:v3(d.scl,1)};}
+  const poseObj=o=>{o.G.position.fromArray(o.pos);o.G.rotation.set(o.rot[0]*D2R,o.rot[1]*D2R,o.rot[2]*D2R);o.G.scale.fromArray(o.scl.map(v=>v||.001));o.G.updateMatrixWorld(true);};
+  const objGround=o=>{poseObj(o);const b=new THREE.Box3().setFromObject(o.G);if(!b.isEmpty())o.pos[1]=r4(o.pos[1]-b.min.y);};
+  const O=()=>S.osel==null?null:S.objs[S.osel]||null;
+  const removeObj=o=>scene.remove(o.G);
+  /* 物体を丸ごと入れかえる（見つからない glb は飛ばす） */
+  const setObjs=async list=>{for(const o of S.objs)removeObj(o);S.objs=[];S.osel=null;let miss=0;
+    for(const d of list||[]){try{const o=await makeObj(d);scene.add(o.G);S.objs.push(o);}catch(e){miss++;}}
+    if(miss)toast3(miss+'個の物体が見つかりませんでした（この端末に取り込まれていない glb です）');drawObjs();};
+  /* 戻すとき：同じ物体の並びなら数字だけ写す */
+  const syncObjs=async(list,osel)=>{list=list||[];const same=list.length===S.objs.length&&list.every((d,i)=>d.id===S.objs[i].id);
+    if(!same)await setObjs(list);else list.forEach((d,i)=>{const o=S.objs[i];o.pos=d.pos.slice();o.rot=d.rot.slice();o.scl=d.scl.slice();});
+    S.osel=osel!=null&&S.objs[osel]?osel:null;drawObjs();};
+  const objData=o=>({id:o.id,name:o.name,pos:o.pos.map(r4),rot:o.rot.map(v=>Math.round(v*10)/10),scl:o.scl.map(v=>+v.toFixed(3))});
   const eachV=(f,step,fn)=>{const v=V();for(const m of f.meshes){const n=m.geometry.attributes.position.count;for(let i=0;i<n;i+=step){m.getVertexPosition(i,v);v.applyMatrix4(m.matrixWorld);fn(v);}}};
   /* 地面につける：体のいちばん低い所を床（高さ0）に */
   const toGround=f=>{pose(f);let lo=1e9;eachV(f,3,v=>{if(v.y<lo)lo=v.y;});if(lo<1e8)f.pos[1]=+(f.pos[1]-lo).toFixed(4);};
-  const figBox=(figs=S.figs)=>{const box=new THREE.Box3();for(const f of figs){pose(f);eachV(f,6,v=>box.expandByPoint(v));}return box;};
+  /* figs を渡さないときは、人物ぜんぶと物体ぜんぶ（深度の範囲）。渡したときは、その人物だけ（カメラの向け先・最初からあるポーズの絵） */
+  const figBox=figs=>{const all=!figs;figs=figs||S.figs;const box=new THREE.Box3();for(const f of figs){pose(f);eachV(f,6,v=>box.expandByPoint(v));}
+    if(all)for(const o of S.objs)if(o.G.visible){poseObj(o);box.expandByObject(o.G);}return box;};
   /* 輪の向き（今の姿勢での、前後・左右・ひねりの回る軸） */
   const axisW=(f,b,k)=>{const I=f.info[b],bone=f.bones[b],pq=bone.parent.getWorldQuaternion(Q());
     if(k===0)return I.pL.clone().applyQuaternion(pq).normalize();
@@ -134,10 +197,11 @@ export async function open3D(o){o=o||{};
     gizmo.visible=!!(f&&S.sel&&f.info[S.sel]&&!S.depthView);if(!gizmo.visible)return;
     f.bones[S.sel].getWorldPosition(gizmo.position);gizmo.scale.setScalar(f.height*f.scale*(S.sel==='pelvis'?.16:.09));
     const z=new THREE.Vector3(0,0,1);for(let k=0;k<3;k++)rings[k].quaternion.setFromUnitVectors(z,axisW(f,S.sel,k));gizmo.updateMatrixWorld(true);};
-  const render=()=>{if(!S.figs.length)return;for(const f of S.figs)pose(f);scene.updateMatrixWorld(true);placeMarkers();
+  const render=()=>{if(!S.figs.length)return;for(const f of S.figs)pose(f);for(const o of S.objs)poseObj(o);scene.updateMatrixWorld(true);placeMarkers();
+    const so=O();obox.visible=!!(so&&!S.depthView);if(obox.visible){obox.setFromObject(so.G);}
     grid.visible=!S.depthView;
     if(S.depthView){fitDepth(cam);scene.overrideMaterial=depthMat;renderer.setClearColor(0x000000,1);}else{cam.near=.05;cam.far=50;cam.updateProjectionMatrix();scene.overrideMaterial=null;renderer.setClearColor(0x000000,0);}
-    renderer.render(scene,cam);drawPos();};
+    renderer.render(scene,cam);drawPos();drawObjVals();};
   /* 深度の範囲を人形にぴったり合わせる（手前が白、奥が黒） */
   const fitDepth=(c,figs)=>{const box=figBox(figs);
     const pts=[];for(const x of[box.min.x,box.max.x])for(const y of[box.min.y,box.max.y])for(const z of[box.min.z,box.max.z])pts.push(new THREE.Vector3(x,y,z));
@@ -150,12 +214,14 @@ export async function open3D(o){o=o||{};
   const setView=k=>{if(!S.figs.length)return;const t=frameCam(cam,S.figs,k);ctl.target.copy(t);ctl.update();draw();};
 
   /* ===== 戻す（直近3回まで） ===== */
-  const snapData=()=>({figs:S.figs.map(f=>({model:f.model,ang:JSON.parse(JSON.stringify(f.ang)),pos:f.pos.slice(),scale:f.scale})),cur:S.cur});
+  const snapData=()=>({figs:S.figs.map(f=>({model:f.model,ang:JSON.parse(JSON.stringify(f.ang)),pos:f.pos.slice(),scale:f.scale})),cur:S.cur,
+    objs:S.objs.map(o=>({id:o.id,name:o.name,pos:o.pos.slice(),rot:o.rot.slice(),scl:o.scl.slice()})),osel:S.osel});
   const snap=()=>{S.undo.push(snapData());if(S.undo.length>UNDO)S.undo.shift();drawUndo();};
   const drawUndo=()=>{const n=S.undo.length;$('.p3un').textContent=n?`（${n}）`:'';$('[data-a="undo"]').disabled=!n;};
   const restore=async d=>{const same=d.figs.length===S.figs.length&&d.figs.every((x,i)=>x.model===S.figs[i].model);
     if(!same){const c={p:cam.position.toArray(),t:ctl.target.toArray()};await loadPose({figs:d.figs.map(x=>({model:x.model,a:x.ang,pos:x.pos,scale:x.scale})),cam:c},true);}
     else d.figs.forEach((x,i)=>{const f=S.figs[i];for(const b in f.ang)f.ang[b]=(x.ang[b]||[0,0,0]).slice();f.pos=x.pos.slice();f.scale=x.scale;});
+    await syncObjs(d.objs,d.osel);
     S.cur=Math.min(d.cur||0,S.figs.length-1);selJoint(S.sel);drawFigs();draw();};
 
   /* ===== 人物の切りかえ・足す・外す ===== */
@@ -179,12 +245,60 @@ export async function open3D(o){o=o||{};
     for(const f of S.figs)removeFig(f);S.figs=[];S.cur=0;if(!keep){S.undo=[];drawUndo();}
     const figs=ps&&ps.figs&&ps.figs.length?ps.figs:[{model:'female'}];
     try{for(const d of figs.slice(0,2))await addFig(d);}catch(e){msg.textContent='人形を読み込めませんでした。はじめはネットにつないで開いてください。';return;}
+    /* 物体：ポーズに objs があれば入れかえる（ない古いポーズを呼び出したときは、今の物体をそのまま残す） */
+    if(ps&&Array.isArray(ps.objs))await setObjs(ps.objs);
     msg.hidden=true;selJoint(null);drawFigs();render();
     if(ps&&ps.cam){cam.position.fromArray(ps.cam.p);ctl.target.fromArray(ps.cam.t);ctl.update();draw();}else setView('front');};
   /* 1人分のポーズ d を、今選んでいる人物だけに当てる（人形・位置の左右と奥行き・大きさはそのまま。地面につけ直す）。ほかの人物はそのまま */
   const applyOne=d=>{const f=F();if(!f)return;for(const b in f.ang)f.ang[b]=d.a&&d.a[b]?d.a[b].slice(0,3):[0,0,0];toGround(f);selJoint(null);drawFigs();draw();};
   const poseData=()=>({figs:S.figs.map(f=>{const a={};for(const[b,v]of Object.entries(f.ang))if(v.some(x=>x))a[b]=v.map(x=>Math.round(x*10)/10);return{model:f.model,a,pos:f.pos.map(x=>+x.toFixed(4)),scale:+f.scale.toFixed(3)};}),
-    cam:{p:cam.position.toArray().map(v=>+v.toFixed(4)),t:ctl.target.toArray().map(v=>+v.toFixed(4))}});
+    cam:{p:cam.position.toArray().map(v=>+v.toFixed(4)),t:ctl.target.toArray().map(v=>+v.toFixed(4))},...(S.objs.length?{objs:S.objs.map(objData)}:{})});
+
+  /* ===== 物体の画面 ===== */
+  const drawObjs=()=>{const so=O();
+    $('.p3ol').innerHTML=S.objs.length?S.objs.map((o,i)=>`<button type="button" data-osel="${i}" class="${i===S.osel?'on':''}">${esc(o.name)}</button>`).join('')
+      :'<p class="p3hint" style="margin:6px 0 0">まだ置いていません。「📦 物体を呼び出す」から glb ファイルを取り込むと、椅子・ベッドなどの物を置けます。</p>';
+    $('.p3oe').hidden=!so;drawObjVals();draw();};
+  const drawObjVals=()=>{const o=O();if(!o)return;$$('[data-ov]').forEach(i=>{if(document.activeElement===i)return;const k=i.dataset.ov,v=o[{p:'pos',r:'rot',s:'scl'}[k]][+i.dataset.oi];i.value=OK[k].show(v);});};
+  const KEY={p:'pos',r:'rot',s:'scl'};
+  const setOV=(o,k,i,v)=>{if(k==='r')v=wrapDeg(v);if(k==='s')v=Math.max(.01,Math.min(100,v));o[KEY[k]][i]=k==='p'?r4(v):+(+v).toFixed(4);};
+  const objAdd=async(d,quiet)=>{msg.hidden=false;msg.textContent='物体を読み込んでいます…';let o;
+    try{o=await makeObj(d);}catch(e){msg.hidden=true;toast3('物体を読み込めませんでした');return null;}
+    snap();if(!d.pos){const f=F(),gap=f?f.height*f.scale*.25+Math.max(o.size.x,o.size.z)/2+.1:0,off=f?f.frame.lf.clone().multiplyScalar(-gap):V();
+      o.pos=[r4((f?f.pos[0]:0)+off.x),0,r4((f?f.pos[2]:0)+off.z)];objGround(o);}
+    scene.add(o.G);S.objs.push(o);S.osel=S.objs.length-1;msg.hidden=true;drawObjs();
+    if(!quiet)toast3('「'+o.name+'」を置きました'+(o.fit?'（大きさを 1m に合わせました）':''));return o;};
+  $('.p3obj').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;const ds=b.dataset;
+    if(ds.osel!=null){const i=+ds.osel;S.osel=S.osel===i?null:i;drawObjs();return;}
+    const o=O();if(!o)return;
+    if(ds.ok){snap();const k=ds.ok,i=+ds.oi;setOV(o,k,i,o[KEY[k]][i]+(+ds.d)*OK[k].st);draw();return;}
+    if(!ds.oa)return;
+    if(ds.oa==='sAll'){snap();const m=+ds.d>0?1.1:1/1.1;for(let i=0;i<3;i++)setOV(o,'s',i,o.scl[i]*m);draw();}
+    else if(ds.oa==='ground'){snap();objGround(o);draw();toast3('物体のいちばん低い所を地面につけました');}
+    else if(ds.oa==='rot0'){snap();o.rot=[0,0,0];draw();}
+    else if(ds.oa==='scl0'){snap();o.scl=[1,1,1];draw();}
+    else if(ds.oa==='dup'){const d=objData(o);d.pos=[r4(d.pos[0]+.2),d.pos[1],d.pos[2]];objAdd(d,true);}
+    else if(ds.oa==='del'){snap();removeObj(o);S.objs.splice(S.osel,1);S.osel=null;drawObjs();}});
+  $('.p3obj').addEventListener('change',e=>{const inp=e.target.closest('[data-ov]');const o=O();if(!inp||!o)return;const v=parseFloat(inp.value);if(!isFinite(v))return drawObjVals();
+    snap();const k=inp.dataset.ov;setOV(o,k,+inp.dataset.oi,OK[k].read(v));draw();});
+  /* 取り込んだ glb の一覧 */
+  const drawOLib=async()=>{const box=$('.p3olist');let L=[];try{L=await ODB.list();}catch(e){box.innerHTML='<p class="p3hint" style="padding:0 10px">この端末の入れ物を開けませんでした。</p>';return;}
+    box.innerHTML=L.length?L.map(it=>`<div class="p3it p3oit"><div><b>${esc(it.name)}</b><small>${kb(it.size||0)}</small>
+      <div class="p3row"><button type="button" class="btn sm" data-oput="${it.id}">呼び出す</button><button type="button" class="btn ghost sm" data-oren="${it.id}">名前を変える</button><button type="button" class="btn ghost sm" data-odel="${it.id}">消す</button></div></div></div>`).join('')
+      :'<p class="p3hint" style="padding:0 10px">まだありません。上の「＋ glb ファイルを取り込む」から取り込めます。</p>';
+    const find=id=>L.find(x=>x.id===id);
+    box.querySelectorAll('[data-oput]').forEach(b=>b.onclick=async()=>{const it=find(b.dataset.oput);if(!it)return;$('.p3olib').hidden=true;await objAdd({id:it.id,name:it.name});});
+    box.querySelectorAll('[data-oren]').forEach(b=>b.onclick=async()=>{const it=find(b.dataset.oren);if(!it)return;const nm=prompt('物体の名前',it.name);if(!nm||!nm.trim())return;
+      it.name=nm.trim();await ODB.rename(it);for(const o of S.objs)if(o.id===it.id)o.name=it.name;drawObjs();drawOLib();});
+    box.querySelectorAll('[data-odel]').forEach(b=>b.onclick=async()=>{const it=find(b.dataset.odel);if(!it||!confirm('「'+it.name+'」をこの端末から消しますか？\n（今置いている物体はそのまま残りますが、保存したポーズで呼び出せなくなります）'))return;
+      await ODB.del(it.id);drawOLib();});};
+  $('.p3oin').onchange=async e=>{const fs=[...e.target.files];e.target.value='';let n=0,last=null;
+    for(const f of fs){try{const buf=await f.arrayBuffer();const head=new TextDecoder().decode(new Uint8Array(buf,0,Math.min(4,buf.byteLength)));if(head!=='glTF'){toast3('「'+f.name+'」は glb ではありません');continue;}
+        await parseGlb(buf.slice(0));const m={id:'g'+Date.now().toString(36)+Math.random().toString(36).slice(2,6),name:f.name.replace(/\.glb$/i,''),size:buf.byteLength,created:Date.now()};
+        await ODB.add(m,buf);n++;last=m;}catch(err){toast3('「'+f.name+'」を読み込めませんでした');}}
+    await drawOLib();
+    /* 1つだけ取り込んだときは、そのまま置く */
+    if(n===1&&fs.length===1){$('.p3olib').hidden=true;await objAdd({id:last.id,name:last.name});}else if(n)toast3(n+'個の glb を取り込みました');};
 
   /* ===== 関節 ===== */
   const showAng=()=>{const f=F(),b=S.sel;if(!f||!b||!f.info[b]){$('.p3ang').textContent='';return;}const k=S.ax,L=f.info[b].lim[k];
@@ -223,7 +337,12 @@ export async function open3D(o){o=o||{};
     const n=axisW(F(),S.sel,rd.k),tow=cam.position.clone().sub(gizmo.position).dot(n)>0?1:-1;rotate(rd.k,d/D2R*tow);});
   cv.addEventListener('pointerup',e=>{if(pd&&pd.lp)clearTimeout(pd.lp);if(pan&&pan.id===e.pointerId){endPan();pd=null;return;}if(rd&&rd.id===e.pointerId){rd=null;pd=null;return;}if(!pd||pd.id!==e.pointerId)return;const t=!pd.moved;pd=null;if(!t)return;
     const f=F();if(!f)return;const r=cv.getBoundingClientRect();let best=null,bd=1e9;for(const[b]of JOINTS){const m=f.marks[b];if(!m)continue;const p=m.position.clone().project(cam);const d=Math.hypot(r.left+(p.x+1)/2*r.width-e.clientX,r.top+(1-p.y)/2*r.height-e.clientY);if(d<bd){bd=d;best=b;}}
-    selJoint(bd<34?best:null);});
+    if(bd<34)return selJoint(best);
+    /* 関節の点から遠いときは、物体をタップしたか見る */
+    if(S.objs.length){ndc.set((e.clientX-r.left)/r.width*2-1,-(e.clientY-r.top)/r.height*2+1);ray.setFromCamera(ndc,cam);
+      const h=ray.intersectObjects(S.objs.map(o=>o.G),true)[0];
+      if(h){const i=S.objs.findIndex(o=>{let n=h.object;while(n){if(n===o.G)return true;n=n.parent;}return false;});if(i>=0){S.osel=i;selJoint(null);drawObjs();return;}}}
+    selJoint(null);});
   const SYM={up:['clavicle','upperarm','lowerarm','hand'],low:['thigh','calf','foot']};
   $$('[data-sym]').forEach(b=>b.onclick=()=>{const f=F();if(!f)return;snap();const fr=b.dataset.from,to=fr==='l'?'r':'l';
     for(const n of SYM[b.dataset.sym]){const A=f.ang[n+'_'+fr],B=f.ang[n+'_'+to];if(A&&B)f.ang[n+'_'+to]=A.slice();}showAng();draw();
@@ -249,6 +368,8 @@ export async function open3D(o){o=o||{};
     delFig:()=>{if(S.figs.length<2)return;snap();removeFig(F());S.figs.splice(S.cur,1);S.cur=0;selJoint(null);drawFigs();draw();},
     lib:()=>{$('.p3lib').hidden=false;drawLib();},
     libClose:()=>{$('.p3lib').hidden=true;},
+    objLib:()=>{$('.p3olib').hidden=false;drawOLib();},
+    objLibClose:()=>{$('.p3olib').hidden=true;},
     libSave:()=>{if(!o.lib)return;const nm=$('.p3nm').value.trim()||('ポーズ '+((o.lib.list()||[]).length+1));const th=thumb();o.lib.save({id:Date.now().toString(36)+Math.random().toString(36).slice(2,6),name:nm,pose:poseData(),thumb:th,meta:S.meta||null,created:Date.now()});$('.p3nm').value='';drawLib();toast3('「'+nm+'」を保存しました');},
     save:async()=>{const b=await depthBlob(OW,OH);if(!b)return;o.onSave&&o.onSave(b,poseData(),S.meta);history.back();},
     png:async()=>{const b=await depthBlob(OW,OH);if(!b)return;const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='depth3d_'+Date.now()+'.png';document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},4000);}};
@@ -271,15 +392,15 @@ export async function open3D(o){o=o||{};
   const makePreImgs=async()=>{if(preBusy)return;preBusy=true;
     try{for(let i=0;i<PRESETS.length;i++){if(PRE_IMG[i])continue;const it=PRESETS[i];const t=await makeFig(F()?F().model:'female');
         for(const m of Object.values(t.marks))markers.remove(m);for(const b in t.ang)t.ang[b]=it.pose.figs[0].a[b]?it.pose.figs[0].a[b].slice():[0,0,0];
-        scene.add(t.G);toGround(t);const vis=S.figs.map(f=>f.G.visible);S.figs.forEach(f=>f.G.visible=false);
+        scene.add(t.G);toGround(t);const hide=[...S.figs,...S.objs],vis=hide.map(f=>f.G.visible);hide.forEach(f=>f.G.visible=false);
         const c2=cam.clone();c2.aspect=OW/OH;c2.updateProjectionMatrix();frameCam(c2,[t],it.view);PRE_IMG[i]=thumb([t],c2);
-        S.figs.forEach((f,j)=>f.G.visible=vis[j]);scene.remove(t.G);
+        hide.forEach((f,j)=>f.G.visible=vis[j]);scene.remove(t.G);
         const im=el.querySelector(`.p3pre [data-pimg="${i}"]`);if(im&&PRE_IMG[i])im.outerHTML=`<img src="${PRE_IMG[i]}" alt="" data-pimg="${i}">`;}}
     finally{preBusy=false;draw();}};
   /* 深度の画像：手前ほど白、背景は透明。人形の中の明るさを 30〜255 に広げる */
   /* figs と c2 を渡すと、その人物だけを、そのカメラで描く（最初からあるポーズの絵に使う） */
   const depthCanvas=(W,H,figs,c2)=>{if(!S.figs.length&&!figs)return null;render();const r2=new THREE.WebGLRenderer({antialias:true,alpha:true,preserveDrawingBuffer:true});r2.setPixelRatio(1);r2.setSize(W,H,false);
-    if(!c2){c2=cam.clone();c2.aspect=OW/OH;c2.updateProjectionMatrix();}fitDepth(c2,figs);markers.visible=false;gizmo.visible=false;grid.visible=false;scene.overrideMaterial=depthMat;r2.setClearColor(0x000000,0);r2.render(scene,c2);
+    if(!c2){c2=cam.clone();c2.aspect=OW/OH;c2.updateProjectionMatrix();}fitDepth(c2,figs);markers.visible=false;gizmo.visible=false;grid.visible=false;obox.visible=false;scene.overrideMaterial=depthMat;r2.setClearColor(0x000000,0);r2.render(scene,c2);
     const k=document.createElement('canvas');k.width=W;k.height=H;const g=k.getContext('2d');g.drawImage(r2.domElement,0,0);r2.dispose();scene.overrideMaterial=null;markers.visible=true;draw();
     const d=g.getImageData(0,0,W,H),a=d.data;let lo=255,hi=0;for(let i=0;i<a.length;i+=4)if(a[i+3]>200){lo=Math.min(lo,a[i]);hi=Math.max(hi,a[i]);}
     const sp=Math.max(1,hi-lo);for(let i=0;i<a.length;i+=4){if(!a[i+3])continue;const v=Math.round(30+225*Math.max(0,Math.min(1,(a[i]-lo)/sp)));a[i]=a[i+1]=a[i+2]=v;}
@@ -288,6 +409,6 @@ export async function open3D(o){o=o||{};
   const thumb=(figs,c2)=>{const k=depthCanvas(120,137,figs,c2);if(!k)return null;const t=document.createElement('canvas');t.width=120;t.height=137;const g=t.getContext('2d');g.fillStyle='#000';g.fillRect(0,0,120,137);g.drawImage(k,0,0);return t.toDataURL('image/jpeg',.8);};
   window.__p3dClose=()=>{window.__p3dClose=null;cancelAnimationFrame(raf);ctl.dispose();renderer.dispose();window.removeEventListener('resize',size);el.remove();};
   el.__api={draw,setView,loadPose,thumb:()=>thumb(),toGround:()=>{for(const f of S.figs)toGround(f);draw();}};/* 確かめるとき用 */
-  window.addEventListener('resize',size);size();drawUndo();
+  window.addEventListener('resize',size);size();drawUndo();drawObjs();
   await loadPose(o.pose||null);size();
 }

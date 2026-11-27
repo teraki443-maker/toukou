@@ -548,8 +548,8 @@ details.nh .nhb .sec{border:0;padding:0;background:none;box-shadow:none}
 .p3st b{min-width:3em;text-align:center;color:var(--ink)}
 .p3gr{display:flex;align-items:center;gap:6px;font-size:13px}
 .p3ang{font-size:12px;color:var(--sub)}
-.p3lib{position:fixed;inset:0;z-index:61;background:rgba(0,0,0,.45);display:flex;align-items:flex-end}
-.p3lib[hidden]{display:none}
+.p3lib,.p3olib{position:fixed;inset:0;z-index:61;background:rgba(0,0,0,.45);display:flex;align-items:flex-end}
+.p3lib[hidden],.p3olib[hidden]{display:none}
 .p3libin{background:var(--bg);width:100%;max-height:85vh;overflow:auto;border-radius:14px 14px 0 0;padding:0 0 20px}
 .p3nm{flex:1;min-width:0;border:1px solid var(--line2);border-radius:8px;padding:7px 8px;font-size:14px;background:var(--card);color:var(--ink)}
 .p3list{padding:4px 10px}
@@ -570,6 +570,15 @@ details.nh .nhb .sec{border:0;padding:0;background:none;box-shadow:none}
 .p3pr>span{width:5.4em;font-size:13px}.p3pr>span small{color:var(--sub);font-size:11px}
 .p3pr button{width:44px;height:34px;border:1px solid var(--line2);border-radius:8px;background:var(--card);color:var(--ink);font-size:14px;padding:0}
 .p3pr input{flex:1;min-width:0;height:34px;border:1px solid var(--line2);border-radius:8px;padding:0 8px;font-size:15px;text-align:center;background:var(--card);color:var(--ink)}
+.p3obj{margin-top:8px;border:1px solid var(--line);border-radius:10px;padding:8px;background:var(--card)}
+.p3ol{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
+.p3ol button{border:1px solid var(--line2);background:var(--card);color:var(--ink);border-radius:999px;padding:5px 10px;font-size:12px;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.p3ol button.on{background:#ff8a00;border-color:#ff8a00;color:#fff}
+.p3oe{margin-top:6px;border-top:1px solid var(--line);padding-top:4px}
+.p3oe[hidden]{display:none}
+.p3og{display:flex;align-items:center;gap:6px;margin-top:8px;font-size:13px;font-weight:700}.p3og small{color:var(--sub);font-weight:400;font-size:11px}.p3og .p3st{margin-left:auto;font-weight:400}
+.p3olist{padding:4px 10px}
+.p3oit{padding:10px 0}.p3oit>div{flex:1;min-width:0}.p3oit b{overflow-wrap:anywhere}
 .dpwho{margin:6px 0 4px}
 .dpstage{margin:10px 0 6px;background:#000;border-radius:10px;overflow:hidden}
 .dpstage canvas{display:block;width:100%;height:auto;touch-action:none}
@@ -644,7 +653,7 @@ const FMT={
 
 /* ========== データベース（IndexedDB） ========== */
 let db=null;
-const APP_VER='v95';/* sw.js の VERSION と同じにする */
+const APP_VER='v96';/* sw.js の VERSION と同じにする */
 const STORES=['parts','scenes','works','images','meta','fonts','stamps'];
 function openDB(){return new Promise((res,rej)=>{const r=indexedDB.open('manga4koma',3);r.onupgradeneeded=()=>{const d=r.result;for(const s of STORES)if(!d.objectStoreNames.contains(s))d.createObjectStore(s,{keyPath:'id'});};r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error);});}
 function tx(store,mode,fn){return new Promise((res,rej)=>{if(!db)return res(undefined);const t=db.transaction(store,mode);const req=fn(t.objectStore(store));let out;if(req)req.onsuccess=()=>{out=req.result;};t.oncomplete=()=>res(out);t.onerror=()=>rej(t.error);t.onabort=()=>rej(t.error);});}
@@ -2539,6 +2548,12 @@ function openFontHelp(){
 }
 const b64=blob=>new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result);r.onerror=()=>rej(r.error);r.readAsDataURL(blob);});
 const unb64=d=>fetch(d).then(r=>r.blob());
+/* 3Dの物体（glb）の入れ物。pose3d.js と同じ IndexedDB「toukou3d」（list：名前など、data：ファイルの中身 buf）。バックアップの書き出し・読み込みで使う */
+function g3run(stores,mode,fn){return new Promise((res,rej)=>{const r=indexedDB.open('toukou3d',1);
+  r.onupgradeneeded=()=>{const d=r.result;for(const s of['list','data'])if(!d.objectStoreNames.contains(s))d.createObjectStore(s,{keyPath:'id'});};
+  r.onerror=()=>rej(r.error);
+  r.onsuccess=()=>{const d=r.result,t=d.transaction(stores,mode);const q=fn(...stores.map(s=>t.objectStore(s)));let out;if(q)q.onsuccess=()=>{out=q.result;};
+    t.oncomplete=()=>{d.close();res(out);};t.onerror=t.onabort=()=>{d.close();rej(t.error);};};});}
 /* ===== 書き出し =====
    ・スマホは「共有」で Googleドライブなどへ送る。PCは「この端末に保存」でダウンロードのフォルダへ
    ・スマホの共有は .json のファイルを送れないので、中身は同じ JSON のまま .txt の名前にする（読み込みはどちらも使える）
@@ -2546,13 +2561,16 @@ const unb64=d=>fetch(d).then(r=>r.blob());
 function ymdhm(){const d=new Date(),z=n=>String(n).padStart(2,'0');return `${ymd()}-${z(d.getHours())}${z(d.getMinutes())}`;}
 async function buildExport(withImg){
   flush();
-  const images=[],fonts=[],stamps=[];
+  const images=[],fonts=[],stamps=[],glbs=[];
   if(withImg){
+    /* 3Dの物体（glb）：1つずつ読んで入れる */
+    for(const m of await g3run(['list'],'readonly',l=>l.getAll()).catch(()=>[])||[]){const r=await g3run(['data'],'readonly',d=>d.get(m.id)).catch(()=>null);
+      if(r&&r.buf)glbs.push({id:m.id,name:m.name,size:m.size,created:m.created,data:await b64(new Blob([r.buf],{type:'model/gltf-binary'}))});}
     for(const r of await dbAll('stamps'))stamps.push({id:r.id,name:r.name,w:r.w,h:r.h,created:r.created,data:await b64(r.blob)});
     for(const r of await dbAll('images'))images.push({id:r.id,name:r.name,type:r.type,data:await b64(r.blob),thumb:r.thumb?await b64(r.thumb):null});
     for(const f of await dbAll('fonts'))fonts.push({id:f.id,name:f.name,file:f.file,size:f.size,created:f.created,data:await b64(f.blob)});
   }
-  const data={app:'4koma-kobo',version:1,exported:new Date().toISOString(),textOnly:!withImg,meta:S.meta,parts:await Promise.all(S.parts.map(async p=>p.img?Object.assign({},p,{img:await b64(p.img)}):p)),scenes:S.scenes,works:S.works,images,fonts,stamps};
+  const data={app:'4koma-kobo',version:1,exported:new Date().toISOString(),textOnly:!withImg,meta:S.meta,parts:await Promise.all(S.parts.map(async p=>p.img?Object.assign({},p,{img:await b64(p.img)}):p)),scenes:S.scenes,works:S.works,images,fonts,stamps,...(withImg?{glbs}:{})};
   return JSON.stringify(data);
 }
 function openExport(){
@@ -2626,7 +2644,7 @@ async function importAll(file,replace){
   if(!data||data.app!=='4koma-kobo')return toast('このアプリのバックアップではありません');
   if(replace&&!confirm('今のデータをすべて消して、ファイルの内容に置き換えます。よろしいですか？'))return;
   toast('読み込んでいます…');
-  const cnt={add:0,upd:0,keep:0,del:0,img:0};
+  const cnt={add:0,upd:0,keep:0,del:0,img:0,glb:0};
   try{
     flush();
     const inDel=(data.meta&&data.meta.deleted)||{};
@@ -2638,6 +2656,12 @@ async function importAll(file,replace){
     for(const r of data.images||[]){if(haveImg.has(r.id))continue;await dbPut('images',{id:r.id,name:r.name,type:r.type,blob:await unb64(r.data),thumb:r.thumb?await unb64(r.thumb):null});cnt.img++;}
     const haveSt=new Set(replace?[]:(await tx('stamps','readonly',x=>x.getAllKeys())||[]));
     for(const r of data.stamps||[]){if(haveSt.has(r.id)||(!replace&&tomb[r.id]))continue;await dbPut('stamps',{id:r.id,name:r.name,w:r.w,h:r.h,created:r.created,blob:await unb64(r.data)});}
+    /* 3Dの物体（glb）：合わせる → まだない id だけ足す。置き換え → ファイルに glb の欄があれば（画像入りの書き出し）、今の glb を消して入れかえる */
+    if(Array.isArray(data.glbs)){
+      if(replace)await g3run(['list','data'],'readwrite',(l,d)=>{l.clear();d.clear();});
+      const haveG=new Set(replace?[]:(await g3run(['list'],'readonly',l=>l.getAllKeys())||[]));
+      for(const r of data.glbs){if(!r||!r.id||!r.data||haveG.has(r.id))continue;const buf=await (await unb64(r.data)).arrayBuffer();
+        await g3run(['list','data'],'readwrite',(l,d)=>{l.put({id:r.id,name:r.name||'物体',size:r.size||buf.byteLength,created:r.created||Date.now()});d.put({id:r.id,buf});});cnt.glb++;}}
     for(const r of data.fonts||[]){if(haveFont.has(r.id)||(!replace&&tomb[r.id]))continue;await dbPut('fonts',{id:r.id,name:r.name,file:r.file,size:r.size,created:r.created,blob:await unb64(r.data)});}
     if(data.meta&&Array.isArray(data.meta.bsets)){const have=new Set((S.meta.bsets||[]).map(s=>s.id));S.meta.bsets=replace?data.meta.bsets:[...(S.meta.bsets||[]),...data.meta.bsets.filter(s=>!have.has(s.id))];}
     if(data.meta){for(const k of['jpFont','expSize','expType','fmt','loraInPrompt'])if(data.meta[k]!==undefined&&(replace||S.meta[k]===undefined))S.meta[k]=data.meta[k];}
@@ -2668,7 +2692,7 @@ async function importAll(file,replace){
     openSheet(`<h2>読み込みました</h2>
     <p class="hint" style="margin:-6px 0 12px">ファイル：${esc(file.name)}${data.exported?`（${fmtDate(Date.parse(data.exported))} に書き出したもの${data.textOnly?'・文字だけ':''}）`:''}</p>
     <div class="stat"><div><b>${cnt.add}</b><small>新しく足した</small></div><div><b>${cnt.upd}</b><small>新しい方に更新</small></div><div><b>${cnt.keep}</b><small>こちらが新しいので残した</small></div><div><b>${cnt.del}</b><small>相手で消したので消した</small></div></div>
-    <p class="hint">画像：${cnt.img} 枚を足しました。数はシーン・作品・部品を合わせたものです。</p>
+    <p class="hint">画像：${cnt.img} 枚を足しました。${cnt.glb?`3Dの物体（glb）：${cnt.glb} 個を足しました。`:''}数はシーン・作品・部品を合わせたものです。</p>
     <div class="row"><button class="btn wide" id="imClose">閉じる</button></div>`);
     $('#imClose').onclick=closeSheet;
   }catch(e){toast('読み込みの途中で失敗しました');}
