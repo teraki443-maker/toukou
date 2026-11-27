@@ -556,6 +556,20 @@ details.nh .nhb .sec{border:0;padding:0;background:none;box-shadow:none}
 .p3it{display:flex;gap:10px;align-items:flex-start;padding:8px 0;border-top:1px solid var(--line)}
 .p3it img,.p3noimg{width:70px;height:80px;object-fit:contain;background:#000;border-radius:8px;flex:none;display:block}
 .p3it b{display:block;font-size:14px}.p3it small{color:var(--sub);font-size:12px}
+.p3lb:disabled{opacity:.45}
+.p3sym{display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center;margin-top:8px;font-size:12px;color:var(--sub)}
+.p3sg{display:flex;align-items:center;gap:4px}
+.p3sg button{border:1px solid var(--line2);background:var(--card);color:var(--ink);border-radius:999px;padding:4px 9px;font-size:12px}
+.p3cv.p3pan{outline:3px solid #ff8a00;outline-offset:-3px}
+.p3pre{padding:4px 10px}
+.p3leg{display:flex;flex-wrap:wrap;gap:4px 10px;font-size:12px;margin-top:6px;color:var(--sub)}
+.p3pos{margin-top:8px;border:1px solid var(--line);border-radius:10px;padding:8px;background:var(--card)}
+.p3ph{display:flex;align-items:center;gap:6px}.p3ph b{font-size:13px}.p3ph .p3st{margin-left:auto}
+.p3u{font-size:12px;color:var(--sub)}
+.p3pr{display:flex;align-items:center;gap:6px;margin-top:6px}
+.p3pr>span{width:5.4em;font-size:13px}.p3pr>span small{color:var(--sub);font-size:11px}
+.p3pr button{width:44px;height:34px;border:1px solid var(--line2);border-radius:8px;background:var(--card);color:var(--ink);font-size:14px;padding:0}
+.p3pr input{flex:1;min-width:0;height:34px;border:1px solid var(--line2);border-radius:8px;padding:0 8px;font-size:15px;text-align:center;background:var(--card);color:var(--ink)}
 .dpwho{margin:6px 0 4px}
 .dpstage{margin:10px 0 6px;background:#000;border-radius:10px;overflow:hidden}
 .dpstage canvas{display:block;width:100%;height:auto;touch-action:none}
@@ -630,7 +644,7 @@ const FMT={
 
 /* ========== データベース（IndexedDB） ========== */
 let db=null;
-const APP_VER='v92';/* sw.js の VERSION と同じにする */
+const APP_VER='v95';/* sw.js の VERSION と同じにする */
 const STORES=['parts','scenes','works','images','meta','fonts','stamps'];
 function openDB(){return new Promise((res,rej)=>{const r=indexedDB.open('manga4koma',3);r.onupgradeneeded=()=>{const d=r.result;for(const s of STORES)if(!d.objectStoreNames.contains(s))d.createObjectStore(s,{keyPath:'id'});};r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error);});}
 function tx(store,mode,fn){return new Promise((res,rej)=>{if(!db)return res(undefined);const t=db.transaction(store,mode);const req=fn(t.objectStore(store));let out;if(req)req.onsuccess=()=>{out=req.result;};t.oncomplete=()=>res(out);t.onerror=()=>rej(t.error);t.onabort=()=>rej(t.error);});}
@@ -4471,10 +4485,10 @@ function dpListWire(){
 async function dpOpen3D(src){let m;try{m=await import('./pose3d.js');}catch(e){toast('3Dの画面を開けませんでした（はじめはネットにつないで開いてください）');return;}
   /* 保存したポーズの入れ物（S.meta.p3dPoses。新しい順） */
   const lib={list:()=>S.meta.p3dPoses||[],save:it=>{S.meta.p3dPoses=[it,...(S.meta.p3dPoses||[]).filter(x=>x.id!==it.id)];dbPut('meta',S.meta);},del:id=>{S.meta.p3dPoses=(S.meta.p3dPoses||[]).filter(x=>x.id!==id);dbPut('meta',S.meta);}};
-  m.open3D({lib,pose:src&&src.dp&&src.dp.pose3d||null,onSave:async(blob,pose)=>{const r=await dpNorm(blob);
+  m.open3D({lib,pose:src&&src.dp&&src.dp.pose3d||null,onSave:async(blob,pose,meta)=>{const r=await dpNorm(blob);
     if(src){const p=P_(src.id);if(!p)return;p.img=r.blob;p.dp=Object.assign({},p.dp||{},{bg:r.bg,h:r.h,cut:[],pose3d:pose});await saveNow('parts',p);for(const k in dpLCache)if(k.startsWith(p.id+':'))delete dpLCache[k];toast('3Dのポーズで画像を作り直しました');render(true);return;}
     const k=S.parts.filter(x=>x.type==='depth').length+1;
-    const p={id:uid(),type:'depth',name:'3Dポーズ '+k,tags:'',subject:'',weight:'',loraName:'',neg:'',memo:'3Dの人形で作成',text:'',img:r.blob,dp:{cat:'',ang:'',bg:r.bg,h:r.h,cut:[],tol:1.2,gap:2,shrink:0,pose3d:pose},created:Date.now()};
+    const p={id:uid(),type:'depth',name:(meta&&meta.name)||('3Dポーズ '+k),tags:(meta&&meta.tags)||'',subject:'',weight:'',loraName:'',neg:'',memo:'3Dの人形で作成',text:'',img:r.blob,dp:{cat:(meta&&meta.cat)||'',ang:'',bg:r.bg,h:r.h,cut:[],tol:1.2,gap:2,shrink:0,pose3d:pose},created:Date.now()};
     S.parts.push(p);await saveNow('parts',p);render(true);setTimeout(()=>openDepthPart(p.id,()=>render(true)),250);}});}
 /* ===== 深度ポーズの部品を直す =====
    opt.noNext：「保存して次を貼り付け」を出さない（シーンの人物に選ぶときなど） */
